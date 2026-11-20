@@ -2430,6 +2430,8 @@ fn attempt_mode(
         interface: interface.to_vec(),
         geometric_error: 0.,
         published_error: 0.,
+        surface_error: 0.,
+        decoded_override: Vec::new(),
         texture: Default::default(),
         lease: None,
     };
@@ -2834,6 +2836,8 @@ mod tests {
             ],
             geometric_error: 0.,
             published_error: 0.,
+            surface_error: 0.,
+            decoded_override: Vec::new(),
             texture: Default::default(),
             lease: None,
         };

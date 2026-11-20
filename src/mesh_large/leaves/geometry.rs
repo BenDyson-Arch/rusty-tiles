@@ -69,6 +69,23 @@ fn up(x: f64) -> f64 {
         f64::from_bits(x.to_bits() - 1)
     }
 }
+
+/// Outward Euclidean distance between two captured or decoded binary32 corners.
+pub(super) fn corner_distance(source: [f32; 3], decoded: [f32; 3]) -> f64 {
+    let mut squared = 0.;
+    for (a, b) in source.into_iter().zip(decoded) {
+        let difference = (f64::from(a) - f64::from(b)).abs();
+        if difference != 0. {
+            let delta = up(difference);
+            squared = up(squared + up(delta * delta));
+        }
+    }
+    if squared == 0. {
+        0.
+    } else {
+        up(squared.sqrt())
+    }
+}
 fn canonical_zero(x: f32) -> f32 {
     if x == 0.0 {
         0.0
@@ -275,17 +292,7 @@ impl LatticePlan {
         let mut error = 0.0_f64;
         for (source, final_point) in points.iter().zip(&decoded) {
             bounds.include(*final_point);
-            let mut squared = 0.0;
-            for a in 0..3 {
-                let difference = (f64::from(source[a]) - f64::from(final_point[a])).abs();
-                if difference != 0.0 {
-                    let delta = up(difference);
-                    squared = up(squared + up(delta * delta));
-                }
-            }
-            if squared != 0.0 {
-                error = error.max(up(squared.sqrt()));
-            }
+            error = error.max(corner_distance(*source, *final_point));
         }
         Ok(EncodedPositions {
             storage,

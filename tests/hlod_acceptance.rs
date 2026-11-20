@@ -88,7 +88,7 @@ fn family_lines(work: &Path, family: &str) -> Vec<String> {
 }
 
 #[test]
-fn sampled_hlod_archives_and_named_mutants() {
+fn hlod_archives_and_named_mutants() {
     let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let oracle = repo.join("bench/architecture_audit/mesh_hlod/s5");
     let work = tempfile::tempdir().unwrap();
@@ -110,6 +110,7 @@ fn sampled_hlod_archives_and_named_mutants() {
         "exact_controls.py",
         "omission_controls.py",
         "seam_diagnostic_controls.py",
+        "surface_error_controls.py",
         "border_controls.py",
         "last_resort_controls.py",
         "recovery_controls.py",
@@ -118,11 +119,16 @@ fn sampled_hlod_archives_and_named_mutants() {
         let probes = work.path().join(name.trim_end_matches("_controls.py"));
         let result = Command::new("python3")
             .arg(oracle.join(name))
-            .args(if name == "seam_diagnostic_controls.py" {
-                vec![]
-            } else {
-                vec![probes.as_os_str()]
-            })
+            .args(
+                if matches!(
+                    name,
+                    "seam_diagnostic_controls.py" | "surface_error_controls.py"
+                ) {
+                    vec![]
+                } else {
+                    vec![probes.as_os_str()]
+                },
+            )
             .args(
                 if matches!(
                     name,
@@ -205,6 +211,21 @@ fn sampled_hlod_archives_and_named_mutants() {
             );
         } else if case["oracleCheck"].is_null() && case["archiveCheck"].is_null() {
             if name == "valid" {
+                let exact = Command::new("python3")
+                    .arg(oracle.join("oracle.py"))
+                    .arg(&archive)
+                    .arg(work.path().join("source.json"))
+                    .arg("--certify-source-error")
+                    .output()
+                    .unwrap();
+                assert!(
+                    exact.status.success(),
+                    "{}{}",
+                    String::from_utf8_lossy(&exact.stdout),
+                    String::from_utf8_lossy(&exact.stderr)
+                );
+                let checked: Value = serde_json::from_slice(&exact.stdout).unwrap();
+                assert_eq!(checked["sourceSurfaceError"]["completeTwoSidedTiles"], 4);
                 let error = inspect(
                     ValidationRequest::new(&archive)
                         .expect_profile(ExpectedProfile::Hlod)

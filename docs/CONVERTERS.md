@@ -27,7 +27,7 @@ Mesh `--source-crs` and point-cloud placement share one horizontal CRS resolver,
 
 ## Preserve or generate content
 
-Choose `mesh` when the source is a static glTF/GLB inside its [admitted domain](MESH.md#source-and-placement) and you need LOD. It keeps core PBR textures, UV0/UV1, authored tangents and colours. Leaves are exact, with per-triangle source identity for picking. Coarse levels carry a sampled, measured geometric error and a representative source identity, and the whole run stays within a declared `--memory-budget`. Unsupported attributes, materials and extensions are refused rather than silently dropped.
+Choose `mesh` when the source is a static glTF/GLB inside its [admitted domain](MESH.md#source-and-placement) and you need LOD. It keeps core PBR textures, UV0/UV1, authored tangents and colours. Leaves are exact, with per-triangle source identity for picking. Coarse levels carry a certified two-sided surface error and a representative source identity, and the whole run stays within a declared `--memory-budget`. Unsupported attributes, materials and extensions are refused rather than silently dropped.
 
 Choose `glb-to-3tz` to preserve source bytes within the bounded static local metre/Y-up model profile. It shares the core PBR resource profile with `mesh` and creates no coarser geometry. Animation, skins, morph targets, imported extensions/extras, embedded data URIs and larger models are outside this profile. `convert` can package caller-authored content as opaque bytes, without checking those semantics. Gaussian splats are not supported; see [#91](https://github.com/BenDyson-Arch/rusty-tiles/issues/91).
 

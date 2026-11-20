@@ -204,6 +204,7 @@ pub(crate) struct FullCaptureReport {
 pub(crate) struct FullCaptured {
     pub tree: RetainedTree,
     pub triangles: Sequence<FullTriangle>,
+    pub original_positions: Option<weld::OriginalPositions>,
     pub corner_depths: Sequence<CornerDepth>,
     /// Each leaf's occupancy mask and least welded depth, for the incidence pass.
     pub leaf_index: super::corners::LeafIndex,
@@ -238,6 +239,7 @@ impl FullCaptured {
         let Self {
             tree,
             triangles,
+            original_positions,
             corner_depths,
             leaf_plans,
             images,
@@ -246,6 +248,7 @@ impl FullCaptured {
         } = self;
         drop(tree);
         drop(triangles);
+        drop(original_positions);
         drop(corner_depths);
         drop(leaf_plans);
         drop(images);
@@ -463,9 +466,10 @@ fn scratch_need(
             assembly.weld_audit_bytes,
         )?);
     // The retained sequence, written by the assembly.
-    let projection_stage = t;
-    let images = add(t, image_bytes)?;
-    let retained = add(t, image_bytes)?;
+    let capture = add(capture, assembly.weld_original_bytes)?;
+    let projection_stage = add(t, assembly.weld_original_bytes)?;
+    let retained = add(projection_stage, image_bytes)?;
+    let images = retained;
     let tree = add(
         retained,
         max(&[
@@ -685,7 +689,7 @@ fn memory_bound(
     image_count: u64,
     jobs: usize,
     spill_bytes: u64,
-    (preflight_bytes, subset_bytes, weld_bytes): (u64, u64, u64),
+    (preflight_bytes, subset_bytes, weld_bytes, original_bytes): (u64, u64, u64, u64),
     assembly_bytes: u64,
 ) -> Result<FullMemoryBound, JobError> {
     let mut geometry = MemoryBound::new(config, json_bytes, jobs);
@@ -735,6 +739,8 @@ fn memory_bound(
             )?,
         )?,
     )?;
+    // The original-position directory stays live through leaf, HLOD and archive planning.
+    let owned_metadata_bytes = add(owned_metadata_bytes, original_bytes)?;
     // Chunk descriptors of every live spill file (runs are 8 MiB chunk files), on top of the
     // run descriptor inventories already in `geometry.descriptor_bytes`.
     let chunk_descriptor_bytes = ExternalSorter::<FullTriangle>::inventory_memory_bound(
@@ -923,7 +929,7 @@ pub(crate) fn capture_admitted(
         .scene_primitives()
         .map(|p| p.position.count as u64)
         .sum();
-    if config.weld.is_some() {
+    let original_bytes = if config.weld.is_some() {
         let used = selection.as_ref().map_or(expanded_vertices, |selection| {
             selection.primitives.iter().map(|p| p.vertices).sum()
         });
@@ -931,12 +937,21 @@ pub(crate) fn capture_admitted(
             .zip(weld::moves_bytes(used))
             .ok_or_else(|| super::failure(exhausted("weld scratch arithmetic overflow")))?;
         (shape.weld_bytes, shape.weld_moves_bytes) = weld_scratch;
+        shape.weld_original_bytes = weld::OriginalPositions::scratch_bytes(used)
+            .ok_or_else(|| super::failure(exhausted("original weld positions overflow")))?;
         shape.weld_audit_bytes = weld::audit_scratch_bytes(scan.triangles)
             .ok_or_else(|| super::failure(exhausted("weld scratch arithmetic overflow")))?;
         // The column sort's runs are counted with every sort's; the positions and the
         // move lists are files of their own.
-        shape.files += 3;
-    }
+        shape.files += 4;
+        weld::OriginalPositions::memory_bytes(
+            expanded_vertices,
+            source.document.scene_primitives().count(),
+        )
+        .ok_or_else(|| super::failure(exhausted("original weld directory overflow")))?
+    } else {
+        0
+    };
     let weld_bytes = |workers: usize| match &config.weld {
         None => 0,
         Some(_) => weld::MeshWeld::memory_bytes(expanded_vertices, workers, config.sorter(workers))
@@ -975,7 +990,12 @@ pub(crate) fn capture_admitted(
             image_count,
             workers,
             spill,
-            (preflight_bytes, subset_bytes, weld_bytes(workers)),
+            (
+                preflight_bytes,
+                subset_bytes,
+                weld_bytes(workers),
+                original_bytes,
+            ),
             assembly,
         )
     };
@@ -1206,8 +1226,8 @@ pub(crate) fn capture_admitted(
         // The kept-triangle ranks end with the assembly; the weld's moves with its audit of
         // the captured faces.
         drop(selection);
-        let weld_report = match welded {
-            None => None,
+        let (weld_report, original_positions) = match welded {
+            None => (None, None),
             Some(mut welded) => {
                 weld::audit(
                     &mut welded,
@@ -1216,7 +1236,8 @@ pub(crate) fn capture_admitted(
                     config.sorter(workers),
                     progress,
                 )?;
-                Some(welded.report)
+                let (report, originals) = welded.finish();
+                (Some(report), originals)
             }
         };
         peaks.capture = end_stage(&scratch, stages.capture, "assembly")?;
@@ -1472,6 +1493,7 @@ pub(crate) fn capture_admitted(
         Ok((
             tree,
             triangles,
+            original_positions,
             (corner_depths, leaf_index),
             leaf_plans,
             images,
@@ -1488,6 +1510,7 @@ pub(crate) fn capture_admitted(
         Ok((
             tree,
             triangles,
+            original_positions,
             (corner_depths, leaf_index),
             leaf_plans,
             images,
@@ -1501,6 +1524,7 @@ pub(crate) fn capture_admitted(
         )) => Ok(FullCaptured {
             tree,
             triangles,
+            original_positions,
             corner_depths,
             leaf_index,
             leaf_plans,
@@ -3235,8 +3259,8 @@ pub(super) mod tests {
             .kind(),
             JobErrorKind::ResourceLimit
         );
-        let memory = memory_bound(&cfg, 1000, 2, 1, 0, (0, 0, 0), 0).unwrap();
-        let large = memory_bound(&cfg, 1000, 2, 1, 150 << 30, (0, 0, 0), 0).unwrap();
+        let memory = memory_bound(&cfg, 1000, 2, 1, 0, (0, 0, 0, 0), 0).unwrap();
+        let large = memory_bound(&cfg, 1000, 2, 1, 150 << 30, (0, 0, 0, 0), 0).unwrap();
         // 150 GiB of live spill is about 19k chunk descriptors.
         assert!(large.chunk_descriptor_bytes > memory.chunk_descriptor_bytes + 19_000 * 64);
         assert_eq!(memory.decoder_allowance_bytes, 192 << 20);

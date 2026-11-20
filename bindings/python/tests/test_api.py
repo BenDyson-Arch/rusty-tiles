@@ -820,7 +820,7 @@ class WheelAPI(unittest.TestCase):
                                  capture_output=True, check=True, timeout=300)
         self.assertTrue(json.loads(checked.stdout)["ok"])
 
-    def test_tiler_weld_merges_near_repeats_and_charges_published_error(self):
+    def test_tiler_weld_merges_near_repeats_and_uses_original_source_error(self):
         # Two triangles meeting along an edge whose second copy sits 1 mm away.
         source = self.root / "weld.glb"
         points = [(0, 0, 0), (1, 0, 0), (0, 0, -1), (1.001, 0, 0), (1, 0, -1), (0.001, 0, -1)]
@@ -850,7 +850,7 @@ class WheelAPI(unittest.TestCase):
                          (6, 2, 2))
         self.assertEqual((weld["classes"], weld["largest_class"]), (2, 2))
         self.assertTrue(0.0009 < weld["max_displacement_m"] < 0.0011, weld)
-        self.assertGreater(weld["geometric_error_term_m"], weld["max_displacement_m"])
+        self.assertEqual(weld["geometric_error_term_m"], 0.)
         self.assertGreater(result.diagnostics["memory"]["capture_weld_bytes"], 0)
         self.assertIn("capture_weld", {event.get("phase") for event in events})
         # Exact repeats only at 0: nothing within a millimetre is merged.

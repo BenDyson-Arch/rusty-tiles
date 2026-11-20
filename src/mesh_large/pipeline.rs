@@ -209,7 +209,7 @@ impl TilerRequest {
         self
     }
     /// Weld source vertex positions before capture (opt-in, reported): see [`MeshWeld`]. The
-    /// largest displacement is added to every published geometric error.
+    /// original positions are retained for geometric-error certification.
     pub fn with_weld(mut self, weld: MeshWeld) -> Self {
         self.weld = Some(weld);
         self
@@ -786,8 +786,7 @@ fn run(
     };
     let capture_path = captured.scratch.path().to_owned();
     let result = (|| {
-        // A collapsed triangle with no corner on a surviving face has no bounded error
-        // against the original source, so no honest geometric error can be published.
+        // Preserve the source weld’s topology rule for isolated collapses.
         if let Some(weld) = captured
             .report
             .weld
@@ -797,8 +796,7 @@ fn run(
             return Err(JobError::new(
                 JobErrorKind::InvalidRequest,
                 format!(
-                    "the weld collapses {} triangles onto no surviving face, so their error \
-                     cannot be bounded; use a smaller --weld-epsilon (mesh-inspect reports \
+                    "the weld collapses {} triangles onto no surviving face; use a smaller --weld-epsilon (mesh-inspect reports \
                      them as isolated_collapses)",
                     weld.isolated_collapses
                 ),
@@ -869,13 +867,19 @@ fn run(
         let mut config = config.clone();
         config.memory_budget = Some(budget);
         let config = &config;
-        let plan = producer::stage_plan(config, &captured)?;
-        // HLOD admits its own stage against the declared budget before any leaf is built.
+        // Every leaf's source crops, planned before the stage's memory plan, which holds
+        // the crop store's index when the store is used.
+        let crop_check = || attempt.check();
+        let crop_progress = super::phases::StepProgress::new(&crop_check, phases.emitter());
+        let crops = producer::crop_plan(config, &captured, &crop_progress)?;
+        // HLOD admits its own stage against the declared budget before any leaf is built,
+        // with the sparse chains the crop store cuts for it when they fit.
         #[cfg(test)]
         let settings = &request.hlod;
         #[cfg(not(test))]
         let settings = &super::hlod::Settings::default();
-        let hlod = super::hlod::plan(&captured, config, &budget, settings)?;
+        let hlod_plan = |coarse| super::hlod::plan(&captured, config, &budget, settings, coarse);
+        let (plan, crops, hlod) = producer::settle(config, &captured, crops, &hlod_plan)?;
         let c = &captured.report;
         let capture_minimum = c
             .jobs
@@ -948,6 +952,7 @@ fn run(
                 settings,
             },
             &phases,
+            crops,
             &|| attempt.check(),
         )
         .map_err(refused)?;
@@ -958,14 +963,7 @@ fn run(
         })?;
         // HLOD built the coarse tiles inside the producer, while the capture was live;
         // delivery publishes them with the leaves.
-        // A weld charges its largest displacement into every published geometric error.
-        let delivery_request = MeshTilesetRequest::new(work.path(), &output).with_weld_error(
-            captured
-                .report
-                .weld
-                .as_ref()
-                .map_or(0., |weld| weld.geometric_error_term_m),
-        );
+        let delivery_request = MeshTilesetRequest::new(work.path(), &output);
         // A source CRS derives the root placement from the captured origin.
         let placement = captured.placement.clone().unwrap_or(placement);
         let archive_started = std::time::Instant::now();

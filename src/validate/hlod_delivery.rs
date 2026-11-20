@@ -44,6 +44,7 @@ mod replay;
 #[cfg(test)]
 pub(super) use replay::JOB_DECODE_BYTES;
 pub(super) use replay::{Fetch, Payloads};
+mod surface_error;
 pub(super) mod texture;
 mod ticks;
 mod vfs;
@@ -690,6 +691,7 @@ impl Incidence {
 }
 #[derive(Default, Debug)]
 struct Surface {
+    extent: Option<surface_error::Extent>,
     points: BTreeSet<CanonicalPoint>,
     edges: BTreeMap<CanonicalEdge, Incidence>,
     /// Nondegenerate faces by key (at most the capped payload's triangles), read
@@ -722,6 +724,9 @@ impl Surface {
     }
     /// Another placement of the same tile: union of points, summed incidences.
     fn merge(&mut self, other: Surface, cap: usize) -> Result<(), Error> {
+        if let Some(bounds) = other.extent {
+            surface_error::Extent::include(&mut self.extent, bounds);
+        }
         for p in other.points {
             if self.points.insert(p) {
                 self.reserve(64, cap)?;
@@ -751,6 +756,13 @@ impl Surface {
         work.charge(12)?;
         add_count(&mut self.triangles, 1)?;
         let p = [canonical(xyz[0])?, canonical(xyz[1])?, canonical(xyz[2])?];
+        // Include repeated-corner and collinear faces in the geometric support.
+        for k in p {
+            surface_error::Extent::include(
+                &mut self.extent,
+                surface_error::Extent::point(k.map(|v| f64::from(f32::from_bits(v)))),
+            );
+        }
         // Three distinct collinear keys ARE a surface under the published
         // combinatorial contract. Only repeated canonical corners are excluded.
         if p[0] == p[1] || p[1] == p[2] || p[2] == p[0] {
@@ -810,6 +822,7 @@ pub(super) struct DecodedInterfaceCensus {
     /// D5 amendment A3: refinable content tiles, and those whose G is within 1% of the
     /// texture-implied error (0 without a declaration).
     pub(super) texture_refinable_tiles: u64,
+    pub(super) surface_error_extent_tiles: u64,
     pub(super) texture_bound_tiles: u64,
     /// Coarse NORMAL census (a warning, never a failure).
     pub(super) coarse_normals: CoarseNormals,
@@ -1217,6 +1230,7 @@ pub(super) struct Store {
     profile_exclusion: Option<&'static str>,
     /// The declared texture-error rule (D5 amendment A3).
     texture: texture::Declaration,
+    certified_surface: bool,
     decoded_limit: usize,
     census: Option<DecodedInterfaceCensus>,
     /// Original vertex rows, appended per payload at ingest; the alias pass consumes them.
@@ -1274,6 +1288,7 @@ impl Store {
             common_root: None,
             profile_exclusion: None,
             texture: texture::Declaration::Absent,
+            certified_surface: false,
             decoded_limit: 0,
             census: None,
             originals: None,
@@ -1318,6 +1333,7 @@ impl Store {
             .map_err(sql)?;
         connection.execute_batch("PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF;
             CREATE TABLE tiles(id INTEGER PRIMARY KEY,parent INTEGER,world BLOB NOT NULL,refine INTEGER,placeholder INTEGER NOT NULL DEFAULT 0,last INTEGER,leaf INTEGER,error REAL,diagonal REAL,cell INTEGER,rank_first INTEGER,ownership_depth INTEGER,ownership_invalid INTEGER NOT NULL DEFAULT 0,implicit_root INTEGER NOT NULL DEFAULT 0,recovery TEXT);
+            CREATE TABLE surface_extents(tile INTEGER PRIMARY KEY,x REAL,y REAL,z REAL,xx REAL,yy REAL,zz REAL);
             CREATE TABLE recovery_cells(id INTEGER PRIMARY KEY,first INTEGER NOT NULL,last INTEGER NOT NULL);
             CREATE TABLE refs(tile INTEGER NOT NULL,rank INTEGER NOT NULL);
             CREATE TABLE payloads(rank INTEGER PRIMARY KEY,identity_present INTEGER NOT NULL,triangle_present INTEGER NOT NULL,primitive_rows INTEGER NOT NULL DEFAULT 0,triangles INTEGER NOT NULL DEFAULT 0,digest BLOB NOT NULL,dropped INTEGER NOT NULL DEFAULT 0,last_stage INTEGER NOT NULL DEFAULT 0,fold_faces INTEGER NOT NULL DEFAULT 0,recovery INTEGER NOT NULL DEFAULT 0,texture_area REAL NOT NULL DEFAULT 0,texture_texels REAL NOT NULL DEFAULT 0);
@@ -2033,6 +2049,7 @@ impl Store {
         self.coarse_drops(&mut census.dropped_by_depth, effort)?;
         effort.ticks.pass()?;
         self.border_pairs(images, effort)?;
+        census.surface_error_extent_tiles = self.surface_error_extents(effort)?;
         Ok(Some(census))
     }
     fn hierarchy(&self, effort: &Effort) -> Result<(), Error> {
@@ -2603,6 +2620,7 @@ impl Store {
                 read,
             )?;
             let tile: i64 = row.get(0).map_err(sql)?;
+            self.record_extent(tile, surface.extent, effort)?;
             self.record_leaf(tile, &surface, &mut leaves, effort)?;
             // Every leaf face by corner set, so coincident source groups are found
             // across leaves too (they license coincident coarse faces above).
@@ -3052,6 +3070,7 @@ impl Store {
             let tile: Option<i64> = row.map(|r| r.get(0)).transpose().map_err(sql)?;
             if current.as_ref().map(|c| c.0) != tile {
                 if let Some((tile, surface)) = current.take() {
+                    self.record_extent(tile, surface.extent, effort)?;
                     // The merged coarse faces, for the coarse-drop recount (drops.rs).
                     let mut face = self
                         .connection

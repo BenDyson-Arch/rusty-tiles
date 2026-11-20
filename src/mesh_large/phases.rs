@@ -65,7 +65,7 @@ impl PhaseSeconds {
     }
 }
 
-type Emit<'a> = dyn Fn(&RunEvent<'_>) -> Result<(), JobError> + Sync + 'a;
+pub(super) type Emit<'a> = dyn Fn(&RunEvent<'_>) -> Result<(), JobError> + Sync + 'a;
 
 /// The run's phase reporter. Calls may come from worker threads; events are emitted
 /// under one lock, so a phase's `done` counts arrive in order.
@@ -265,6 +265,10 @@ pub(crate) enum Step {
     InspectLoops,
     /// `mesh-inspect`: an intermediate merge pass of one of its sorts.
     InspectMerge,
+    /// Leaf delivery: every leaf's source crops planned (one unit per leaf).
+    LeafCrops,
+    /// Leaf delivery: source images decoded and their crops stored (one unit per image).
+    LeafCropStore,
 }
 impl Step {
     pub(crate) fn name(self) -> &'static str {
@@ -291,6 +295,8 @@ impl Step {
             Self::InspectEdges => "inspect_edges",
             Self::InspectLoops => "inspect_loops",
             Self::InspectMerge => "inspect_merge",
+            Self::LeafCrops => "leaf_crop_plan",
+            Self::LeafCropStore => "leaf_crop_store",
         }
     }
 }

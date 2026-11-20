@@ -23,13 +23,6 @@ pub(super) struct EncodedLeaf {
     pub glb: Vec<u8>,
     pub bounds: Bounds,
     pub geometry_error: f64,
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
-        )
-    )]
     /// Decoded published POSITION per PREPARED (source) primitive, in atlas order and
     /// corner order (the lattice decode the writer proves client-order exact, unchanged by
     /// H28 merging).
@@ -45,6 +38,37 @@ pub(super) struct EncodedLeaf {
     pub primitives: usize,
     /// Set by the producer for the accepted attempt (texel ownership, H28).
     pub shared_triangles: u64,
+}
+
+impl EncodedLeaf {
+    /// Convex pairing at equal barycentric coordinates covers both continuous
+    /// directions, including a source sliver paired with a decoded segment.
+    pub(super) fn original_error(
+        &self,
+        atlas: &PreparedAtlas,
+        original: &super::super::weld::OriginalPositions,
+        check: &dyn Fn() -> Result<(), JobError>,
+    ) -> Result<f64, JobError> {
+        if self.positions.len() != atlas.primitives.len() {
+            return Err(invalid("leaf certificate primitive correspondence"));
+        }
+        let mut error = 0.0_f64;
+        for (primitive, positions) in atlas.primitives.iter().zip(&self.positions) {
+            let (faces, tail) = positions.as_chunks::<3>();
+            if !tail.is_empty() || faces.len() != primitive.triangles.len() {
+                return Err(invalid("leaf certificate corner correspondence"));
+            }
+            for (i, (row, face)) in primitive.triangles.iter().zip(faces).enumerate() {
+                if i.is_multiple_of(256) {
+                    check()?;
+                }
+                for (p, q) in original.face(row)?.into_iter().zip(face) {
+                    error = error.max(super::geometry::corner_distance(p, *q));
+                }
+            }
+        }
+        Ok(error)
+    }
 }
 /// Only a measured/necessary member-size overrun may request density change.
 #[derive(Debug)]

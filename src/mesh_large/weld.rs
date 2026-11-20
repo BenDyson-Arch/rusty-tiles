@@ -45,16 +45,11 @@
 //! merged vertex) stays until the assembly has decoded every vertex. Progress is capture's
 //! `capture_weld` step; cancellation is checked throughout.
 //!
-//! **Honest error.** Every welded vertex moves by at most the largest displacement `d`, and
-//! a point of a welded triangle at barycentric coordinates λ lies within `d` of the source
-//! triangle's point at λ (and the reverse). The bake keeps no degenerate face, so a
-//! triangle the weld collapses keeps none of its area: [`audit`] bounds each one by a
-//! corner on a surviving face (refusing none-bounded, isolated collapses in `mesh`).
-//! Every point of the surviving welded faces is then within `d` of the original source,
-//! and every source point within `e = max(d, collapse bound)` of them, so a tile within
-//! `G` of the welded faces is within `G + e` of the original, in both directions (triangle
-//! inequality). Delivery adds `e` (rounded up) to every published geometric error, leaves'
-//! and coarse tiles' alike.
+//! **Honest error.** Store each moved vertex's original mapped XYZ in expanded vertex
+//! order. Its bit rank gives a positioned read into this sparse file. The leaf writer
+//! pairs originals with final decoded corners. The direct coarse certificate reads
+//! original faces for the welded tree's rank range, including collapsed slivers.
+//! The weld audit independently describes the topology change and its reach.
 use super::{
     assembly::decode_chunks,
     capture::{canonical, source_position, vertices},
@@ -67,7 +62,8 @@ use super::{
 use crate::{
     gltf_source::source::ScenePrimitive,
     spill::{
-        ExternalSorter, Record, Scratch, Sequence, SequenceReader, SequenceWriter, SortConfig,
+        ByteFile, ByteWriter, ExternalSorter, Record, Scratch, Sequence, SequenceReader,
+        SequenceWriter, SortConfig,
     },
     JobError, JobErrorKind,
 };
@@ -191,7 +187,7 @@ impl MeshWeld {
         let sort = [
             sorter.memory_bound::<Point>(),
             sorter.memory_bound::<Class>(),
-            sorter.memory_bound::<Located>(),
+            sorter.memory_bound::<Move>(),
             sorter.memory_bound::<Face>(),
         ]
         .into_iter()
@@ -201,7 +197,9 @@ impl MeshWeld {
         let wave = (2 * w)
             .checked_mul(WELD_VERTICES as u64 * COPIES)?
             .checked_mul(size_of::<Point>() as u64)?;
-        let readers = w.checked_mul(MOVE_BUFFER as u64 + 4096)?;
+        let readers = w
+            .checked_mul(MOVE_BUFFER as u64 + 4096)?
+            .checked_add(sorter.buffer_bytes as u64)?;
         vertices
             .checked_mul(4)?
             .checked_add(bitmap.checked_mul(2)?)?
@@ -221,10 +219,12 @@ pub(crate) fn scratch_bytes(vertices: u64) -> Option<u64> {
         .checked_mul(2 * Point::SIZE as u64)?;
     let located = vertices.checked_mul(Located::SIZE as u64)?;
     let classes = vertices.checked_mul(2 * Class::SIZE as u64)?;
+    let moves = vertices.checked_mul(Move::SIZE as u64)?;
     let later = located
         .checked_add(classes)?
-        .max(classes.checked_add(located)?)
-        .max(located.checked_mul(4)?);
+        .max(classes.checked_add(moves)?)
+        .max(moves.checked_mul(3)?)
+        .max(moves.checked_mul(2)?.checked_add(located)?);
     points.checked_add(located)?.max(later).checked_add(located)
 }
 
@@ -258,7 +258,7 @@ pub struct MeshWeldReport {
     pub degenerate_triangles: u64,
     pub collapsed_triangles: u64,
     /// Collapsed triangles no corner of which lies on a surviving (non-degenerate) face:
-    /// their source area has no bounded error, so `mesh` refuses the weld.
+    /// `mesh` refuses this topology change.
     pub isolated_collapses: u64,
     /// The largest bound on a collapsed triangle's source points' distance to a surviving
     /// face (see the module notes); 0 without collapses.
@@ -266,8 +266,7 @@ pub struct MeshWeldReport {
     /// Non-degenerate triangles in a group of coincident ones (the same three corner
     /// positions, either orientation) that holds a triangle with a moved corner.
     pub coincident_triangles: u64,
-    /// What delivery adds to every published geometric error: the larger of the largest
-    /// displacement and the collapse bound, rounded up; 0 when nothing moved.
+    /// Additive weld charge in delivery. Zero with original-source certification.
     pub geometric_error_term_m: f64,
 }
 
@@ -282,14 +281,13 @@ impl MeshWeldReport {
         };
         let mut lines = vec![format!(
             "weld: merged {} of {} source vertices within {} m {scope} ({} moved, {} classes); \
-             largest displacement {} m; {} m added to every published geometric error",
+             largest displacement {} m; geometric error uses the original source",
             self.merged_vertices,
             self.vertices,
             self.epsilon_m,
             self.moved_vertices,
             self.classes,
             self.max_displacement_m,
-            self.geometric_error_term_m,
         )];
         if self.collapsed_triangles + self.coincident_triangles + self.isolated_collapses > 0 {
             lines.push(format!(
@@ -397,6 +395,28 @@ impl Record for Located {
         Self {
             id: get_u32(bytes, 0),
             position: std::array::from_fn(|a| get_u32(bytes, 4 + 4 * a)),
+        }
+    }
+}
+
+/// Both sides of a move, sorted by the vertex ID before the two logs are written.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct Move {
+    target: Located,
+    original: [u32; 3],
+}
+impl Record for Move {
+    const SIZE: usize = Located::SIZE + 12;
+    fn encode(&self, out: &mut [u8]) {
+        self.target.encode(&mut out[..Located::SIZE]);
+        for (i, bits) in self.original.iter().enumerate() {
+            put_u32(out, Located::SIZE + i * 4, *bits);
+        }
+    }
+    fn decode(bytes: &[u8]) -> Self {
+        Self {
+            target: Located::decode(&bytes[..Located::SIZE]),
+            original: std::array::from_fn(|i| get_u32(bytes, Located::SIZE + i * 4)),
         }
     }
 }
@@ -690,15 +710,69 @@ fn sweep(
 /// The weld's result: the merged vertices' new positions, read by the assembly's decoding.
 pub(crate) struct Welded {
     moves: Sequence<Located>,
-    /// Global index of each primitive instance's first vertex.
-    offsets: Vec<u64>,
+    original: OriginalPositions,
     /// Per primitive instance, the first move at or after each decoding chunk of `chunk`
     /// vertices, then the end of its moves.
     starts: Vec<Vec<u64>>,
     chunk: usize,
-    /// One bit per expanded source vertex: set when it moved.
-    moved: Vec<u64>,
     pub report: MeshWeldReport,
+}
+
+/// A triangle retains its expanded primitive and authored vertex IDs through Morton
+/// sorting. Positions differing from the capture are exactly the set bits in `moved`.
+pub(crate) struct OriginalPositions {
+    /// Expanded vertex offsets, including the end sentinel.
+    offsets: Vec<u64>,
+    moved: Ranks,
+    xyz: ByteFile,
+}
+
+impl OriginalPositions {
+    const POSITION_BYTES: u64 = 12;
+
+    pub(crate) fn scratch_bytes(used: u64) -> Option<u64> {
+        used.checked_mul(Self::POSITION_BYTES)
+    }
+
+    /// Rank bitmap and prefix counts, primitive offsets with sentinel, and file metadata.
+    pub(crate) fn memory_bytes(vertices: u64, primitives: usize) -> Option<u64> {
+        let vertices = usize::try_from(vertices).ok()?;
+        (primitives as u64)
+            .checked_add(1)?
+            .checked_mul(8)?
+            .checked_add(Ranks::bytes(vertices))?
+            .checked_add(4096)
+    }
+
+    fn vertex(&self, expanded: u64, vertex: u64) -> Result<usize> {
+        let i = usize::try_from(expanded).map_err(|_| invariant("weld primitive index"))?;
+        let &[first, end] = self
+            .offsets
+            .get(i..)
+            .and_then(|r| r.first_chunk())
+            .ok_or_else(|| invariant("weld primitive outside the captured instances"))?;
+        first
+            .checked_add(vertex)
+            .filter(|id| *id < end)
+            .and_then(|id| usize::try_from(id).ok())
+            .ok_or_else(|| invariant("weld vertex outside the captured primitive"))
+    }
+
+    pub(crate) fn face(&self, row: &super::attributes::FullTriangle) -> Result<[[f32; 3]; 3]> {
+        let mut positions = row.triangle.positions;
+        for (p, vertex) in positions.iter_mut().zip(row.triangle.vertices) {
+            let id = self.vertex(row.expanded_ordinal, vertex)?;
+            if self.moved.contains(id) {
+                let mut bytes = [0; 12];
+                self.xyz.read_at(
+                    self.moved.rank(id) as u64 * Self::POSITION_BYTES,
+                    &mut bytes,
+                )?;
+                *p = std::array::from_fn(|a| f32::from_bits(get_u32(&bytes, a * 4)));
+            }
+        }
+        Ok(positions)
+    }
 }
 
 /// The moves of one decoding range, read in vertex order.
@@ -727,6 +801,11 @@ impl Moves<'_> {
 }
 
 impl Welded {
+    pub(crate) fn finish(self) -> (MeshWeldReport, Option<OriginalPositions>) {
+        let original = (self.report.moved_vertices > 0).then_some(self.original);
+        (self.report, original)
+    }
+
     /// The moves of vertices `range` of primitive instance `primitive`; `range` starts at a
     /// decoding chunk and ends at the next or at the primitive's end.
     pub(crate) fn moves(
@@ -747,7 +826,7 @@ impl Welded {
         Ok(Moves {
             reader,
             next,
-            offset: self.offsets[primitive],
+            offset: self.original.offsets[primitive],
         })
     }
 }
@@ -766,12 +845,13 @@ pub(crate) fn weld(
     let chunk = super::assembly::CHUNK_VERTICES;
     let buffer_bytes = sorter.buffer_bytes;
     let primitives: Vec<ScenePrimitive<'_>> = source.document.scene_primitives().collect();
-    let mut offsets = Vec::with_capacity(primitives.len());
+    let mut offsets = Vec::with_capacity(primitives.len() + 1);
     let mut total = 0u64;
     for p in &primitives {
         offsets.push(total);
         total += p.position.count as u64;
     }
+    offsets.push(total);
     if total >= u64::from(HOME) {
         return Err(resource(
             "the weld supports at most 2^31 - 1 source vertices",
@@ -916,8 +996,7 @@ pub(crate) fn weld(
         coincident_triangles: 0,
         geometric_error_term_m: 0.,
     };
-    let mut unsorted =
-        SequenceWriter::<Located>::new(scratch, "weld-moves-unsorted", buffer_bytes)?;
+    let mut unsorted = SequenceWriter::<Move>::new(scratch, "weld-moves-unsorted", buffer_bytes)?;
     let (mut root, mut rep, mut size) = (u32::MAX, [0u32; 3], 0u64);
     for (k, c) in by_class.finish()?.enumerate() {
         let c = c?;
@@ -945,16 +1024,17 @@ pub(crate) fn weld(
                 .sum::<f64>()
                 .sqrt();
             report.max_displacement_m = report.max_displacement_m.max(d);
-            unsorted.push(&Located {
-                id: c.id,
-                position: rep,
+            unsorted.push(&Move {
+                target: Located {
+                    id: c.id,
+                    position: rep,
+                },
+                original: c.position,
             })?;
         }
     }
     let unsorted = unsorted.finish()?;
-    // Set by the audit, once the captured faces are known.
-    report.geometric_error_term_m = 0.;
-    let mut by_vertex = ExternalSorter::<Located>::new(scratch, sorter)?.observed(progress);
+    let mut by_vertex = ExternalSorter::<Move>::new(scratch, sorter)?.observed(progress);
     for (k, m) in unsorted.reader()?.enumerate() {
         if k.is_multiple_of(4096) {
             progress.check()?;
@@ -964,6 +1044,7 @@ pub(crate) fn weld(
     drop(unsorted);
     // 4. The sorted moves and their index by decoding chunk.
     let mut moves = SequenceWriter::<Located>::new(scratch, "weld-moves", buffer_bytes)?;
+    let mut xyz = ByteWriter::new(scratch, "weld-original-xyz", buffer_bytes)?;
     let mut starts: Vec<Vec<u64>> = primitives
         .iter()
         .map(|p| Vec::with_capacity(p.position.count.div_ceil(chunk) + 1))
@@ -989,12 +1070,17 @@ pub(crate) fn weld(
         if k.is_multiple_of(4096) {
             progress.check()?;
         }
-        while let Some((_, i)) = pending.filter(|(at, _)| *at <= u64::from(m.id)) {
+        while let Some((_, i)) = pending.filter(|(at, _)| *at <= u64::from(m.target.id)) {
             starts[i].push(written);
             pending = boundaries.next();
         }
-        moves.push(&m)?;
-        moved[(m.id / 64) as usize] |= 1 << (m.id % 64);
+        moves.push(&m.target)?;
+        let mut bytes = [0; 12];
+        for (a, p) in m.original.iter().enumerate() {
+            put_u32(&mut bytes, 4 * a, *p);
+        }
+        xyz.append(&bytes)?;
+        moved[(m.target.id / 64) as usize] |= 1 << (m.target.id % 64);
         written += 1;
     }
     while let Some((_, i)) = pending {
@@ -1002,16 +1088,24 @@ pub(crate) fn weld(
         pending = boundaries.next();
     }
     let moves = moves.finish()?;
-    if moves.len() != report.moved_vertices {
+    let moved = Ranks::new(moved);
+    let xyz = xyz.finish()?;
+    if moves.len() != report.moved_vertices
+        || moved.ones() as u64 != moves.len()
+        || xyz.len() != moves.len() * OriginalPositions::POSITION_BYTES
+    {
         return Err(invariant("weld moves disagree with the classes"));
     }
     progress.end()?;
     Ok(Welded {
         moves,
-        offsets,
+        original: OriginalPositions {
+            offsets,
+            moved,
+            xyz,
+        },
         starts,
         chunk,
-        moved,
         report,
     })
 }
@@ -1091,9 +1185,9 @@ fn distance(a: [u32; 3], b: [u32; 3]) -> f64 {
 ///   collapsed triangle is a corner of a surviving (non-degenerate) captured face, every
 ///   point of the collapsed set is within `max_j |v′_j − s|` of `s`, so every source point
 ///   of the triangle is within `d + max_j |v′_j − s|` of a surviving face. The best such
-///   corner bounds the triangle; the largest bound is charged into the published error.
-///   A collapsed triangle with no such corner is **isolated**: nothing bounds it, and
-///   `mesh` refuses the weld.
+///   corner supplies the reported collapse diagnostic. Direct certification retains the
+///   pre-weld triangle in its owner's reference. A collapsed triangle with no such
+///   shared corner is **isolated**. The topology policy refuses that weld.
 /// - **Coincident triangles** are non-degenerate faces sharing their three corner
 ///   positions with another, in groups holding a face with a moved corner.
 pub(crate) fn audit(
@@ -1105,18 +1199,6 @@ pub(crate) fn audit(
 ) -> Result<()> {
     let n = triangles.len();
     progress.begin(Step::WeldCheck, n.saturating_mul(2))?;
-    let moved = |expanded: u64, vertex: u64| -> Result<bool> {
-        let base = usize::try_from(expanded)
-            .ok()
-            .and_then(|i| welded.offsets.get(i))
-            .ok_or_else(|| invariant("captured triangle outside the welded primitives"))?;
-        let id = base + vertex;
-        let word = usize::try_from(id / 64).map_err(|_| invariant("weld vertex index"))?;
-        Ok(welded
-            .moved
-            .get(word)
-            .is_some_and(|w| w >> (id % 64) & 1 == 1))
-    };
     let mut faces = ExternalSorter::<Face>::new(scratch, sorter)?.observed(progress);
     let mut collapsed: Vec<[[u32; 3]; 3]> = Vec::new();
     let (mut degenerate, mut seen) = (0u64, 0u64);
@@ -1128,7 +1210,10 @@ pub(crate) fn audit(
         }
         let mut any = false;
         for v in t.triangle.vertices {
-            any |= moved(t.expanded_ordinal, v)?;
+            any |= welded
+                .original
+                .moved
+                .contains(welded.original.vertex(t.expanded_ordinal, v)?);
         }
         let corners = t.triangle.positions.map(bits);
         if t.triangle.degenerate {
@@ -1238,9 +1323,6 @@ pub(crate) fn audit(
     report.isolated_collapses = isolated;
     report.collapse_bound_m = bound;
     report.coincident_triangles = coincident;
-    // The square roots round to nearest; the published term never understates them.
-    let term = report.max_displacement_m.max(bound);
-    report.geometric_error_term_m = if term > 0. { term.next_up() } else { 0. };
     progress.end()
 }
 

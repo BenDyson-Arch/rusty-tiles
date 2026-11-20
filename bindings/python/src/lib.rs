@@ -414,7 +414,7 @@ fn tiler_memory_budget(py: Python<'_>, budget: Option<Bound<'_, PyAny>>) -> PyRe
 /// capture, within each primitive, or each material with join_primitives="same-material"
 /// (alone, it welds exact repeats): a merged vertex takes its class's lowest-index position
 /// and keeps its own normal, UVs and colour. report["weld"] gives the merged count and
-/// largest displacement, which is added to every published geometric error.
+/// largest displacement. Geometric error is certified against the original source.
 #[pyfunction]
 #[pyo3(signature = (input, output, *, profile="balanced", jobs=None, scratch_dir=None, memory_budget_bytes=None, report_path=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None, height_offset=None, bbox=None, polygon=None, weld_epsilon=None, join_primitives=None, force=false, callback=None))]
 #[expect(

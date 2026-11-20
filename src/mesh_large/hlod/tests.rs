@@ -1802,6 +1802,8 @@ fn parent_jobs_allocate_within_their_charge() {
             interface: Vec::new(),
             geometric_error: 0.,
             published_error: 0.,
+            surface_error: 0.,
+            decoded_override: Vec::new(),
             texture: Default::default(),
             lease: None,
         };
@@ -1996,6 +1998,8 @@ fn border_midpoint_keeps_its_canonical_decode_regression() {
         interface: vec![row(a), row(b)],
         geometric_error: 0.,
         published_error: 0.,
+        surface_error: 0.,
+        decoded_override: Vec::new(),
         texture: Default::default(),
         lease: None,
     };
@@ -2073,6 +2077,8 @@ fn coarse_weld_keeps_uv_and_normal_seams() {
         interface: Vec::new(),
         geometric_error: 0.,
         published_error: 0.,
+        surface_error: 0.,
+        decoded_override: Vec::new(),
         texture: Default::default(),
         lease: None,
     };
@@ -2615,6 +2621,8 @@ fn adversarial_held_tile_fits_its_admitted_charge() {
         interface: Vec::with_capacity(6 * n),
         geometric_error: 0.,
         published_error: 0.,
+        surface_error: 0.,
+        decoded_override: Vec::new(),
         texture: Default::default(),
         lease: None,
     };
@@ -3488,16 +3496,23 @@ fn default_public_path_publishes_hlod_coarse_tiles_without_h17_records() {
         let name = member.name().to_owned();
         let mut bytes = Vec::new();
         member.read_to_end(&mut bytes).unwrap();
-        for retired in [
-            &b"proxy_source"[..],
-            b"lod_vanished",
-            b"lod_filled",
-            b"certif",
-        ] {
+        for retired in [&b"proxy_source"[..], b"lod_vanished", b"lod_filled"] {
             assert!(
                 !bytes.windows(retired.len()).any(|w| w == retired),
                 "{name} holds {}",
                 String::from_utf8_lossy(retired)
+            );
+        }
+        if name == "tileset.json" {
+            let root: Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(
+                root["asset"]["extras"]["rustyTiles"]["surfaceErrorPolicy"],
+                super::certify::POLICY
+            );
+        } else {
+            assert!(
+                !bytes.windows(6).any(|w| w == b"certif"),
+                "{name} carries a certificate record"
             );
         }
         if !name.ends_with(".glb") {
@@ -3710,7 +3725,10 @@ fn with_source_index<R>(
     let lease = ledger
         .admit(source_index::SourceIndex::COMPONENT, need)
         .unwrap();
+    let before = captured.scratch.live_bytes();
     let index = source_index::SourceIndex::build(captured, &lease, &|| Ok(())).unwrap();
+    assert_eq!(index.stored_bytes(), captured.scratch.live_bytes() - before);
+    assert!(index.stored_bytes() <= need);
     ledger.check().unwrap();
     f(&index)
 }
@@ -3755,7 +3773,7 @@ fn measured_positions_must_match_decoded_glb_bits() {
 fn source_index_matches_exhaustive_with_range_clipping_and_ties() {
     use super::{
         error::Nearest,
-        source_index::{bary, closest, distance2, Hit, Triangle},
+        source_index::{bary, closest, distance2, mark_controls, Hit, Surface, Triangle, BLOCK},
     };
     let work = tempfile::tempdir().unwrap();
     let input = write_gltf(&work.path().join("src"), &thin_islands());
@@ -3766,10 +3784,29 @@ fn source_index_matches_exhaustive_with_range_clipping_and_ties() {
         .unwrap()
         .map(Result::unwrap)
         .collect();
+    let mut ordered = Vec::new();
+    for (block, rows) in source.chunks(BLOCK).enumerate() {
+        let mut triangles: Vec<_> = rows
+            .iter()
+            .enumerate()
+            .map(|(i, row)| {
+                let mut t = Triangle::new(row.triangle.positions, (block * BLOCK + i) as u64);
+                t.order = (row.triangle.source, row.expanded_ordinal);
+                t.material = row.material;
+                t
+            })
+            .collect();
+        mark_controls(&mut triangles);
+        ordered.extend(Surface::new(triangles).unwrap().triangles);
+    }
     with_source_index(&captured, |index| {
+        // This repetitive source also exercises actual compressed storage.
+        let n = captured.triangles.len();
+        assert!(index.stored_bytes() < (88 * n) / 2);
         let mut random = 0x7159ac23u32;
         for (first, end) in [
             (0, source.len()),
+            (0, BLOCK),
             (17, 300),
             (250, 520),
             (source.len() - 13, source.len()),
@@ -3785,13 +3822,27 @@ fn source_index_matches_exhaustive_with_range_clipping_and_ties() {
             let mut paged = index.paged_query(&captured, key).unwrap();
             let mut budgeted = index.query(&captured, key).unwrap();
             let mut nearest = Nearest::new();
-            let streamed: Vec<_> = query.surface().unwrap().map(|t| t.unwrap().rank).collect();
-            let mut streamed_sorted = streamed.clone();
-            streamed_sorted.sort_unstable();
-            assert_eq!(
-                streamed_sorted,
-                (first as u64..end as u64).collect::<Vec<_>>()
-            );
+            let streamed: Vec<_> = query.surface().unwrap().map(Result::unwrap).collect();
+            let expected: Vec<_> = ordered
+                .iter()
+                .copied()
+                .filter(|t| (first as u64..end as u64).contains(&t.rank))
+                .map(|mut t| {
+                    let block = t.rank / BLOCK as u64 * BLOCK as u64;
+                    if key.first > block || key.end < block + BLOCK as u64 {
+                        t.controls = 7;
+                    }
+                    t
+                })
+                .collect();
+            assert_eq!(streamed, expected);
+            if first == 0 && end == BLOCK {
+                let area = source[..BLOCK]
+                    .iter()
+                    .map(|row| Triangle::new(row.triangle.positions, 0).area())
+                    .sum::<f64>();
+                assert_eq!(query.area().unwrap().to_bits(), area.to_bits());
+            }
             for _ in 0..40 {
                 let mut unit = || {
                     random ^= random << 13;
@@ -4094,7 +4145,7 @@ fn omitted_cells_are_not_measured_and_errors_stay_monotone() {
 }
 
 #[test]
-fn delivery_refuses_understated_and_incomplete_sampled_error() {
+fn delivery_refuses_understated_or_incomplete_surface_certificates_and_sampling() {
     let work = tempfile::tempdir().unwrap();
     let input = write_gltf(&work.path().join("src"), &sheet());
     let dir = stage(
@@ -4108,7 +4159,7 @@ fn delivery_refuses_understated_and_incomplete_sampled_error() {
     )
     .unwrap();
     let original = rows(&dir.join("proxies.jsonl"));
-    for mutation in 0..12 {
+    for mutation in 0..16 {
         let mut damaged = original.clone();
         let row = damaged.last_mut().unwrap();
         match mutation {
@@ -4138,6 +4189,14 @@ fn delivery_refuses_understated_and_incomplete_sampled_error() {
             // not silently become a frontier when the producer reported no omissions.
             10 => damaged.retain(|r| r["depth"].as_u64().unwrap() != 0),
             11 => damaged.clear(),
+            12 => {
+                row.as_object_mut().unwrap().remove("certificate");
+            }
+            13 => row["certificate"]["referenceTriangles"] = json!(1),
+            14 => {
+                row["certificate"]["toProxy"] = json!(row["geometricError"].as_f64().unwrap() + 1.)
+            }
+            15 => row["certificate"]["inherited"] = json!(1.),
             _ => {
                 for row in damaged
                     .iter_mut()
@@ -4178,6 +4237,7 @@ fn delivery_refuses_understated_and_incomplete_sampled_error() {
             5 => assert!(message.contains("invalid S2 sample counts"), "{message}"),
             9 => assert!(message.contains("source triangles scheduled"), "{message}"),
             10 | 11 => assert!(message.contains("omission counts differ"), "{message}"),
+            12..=15 => assert!(message.contains("decoded-surface certificate"), "{message}"),
             _ => {}
         }
         assert!(!output.exists());
@@ -4554,7 +4614,7 @@ fn tmpfs_exhaustion_is_admitted_before_border_or_frontier_writes() {
     config.jobs = Jobs::Fixed(NonZeroUsize::new(1).unwrap());
     let settings = test_settings(300);
     let generous = MemoryBudget::resolve(Some(8 << 30)).unwrap();
-    let disk_min = super::plan(&captured, &config, &generous, &settings)
+    let disk_min = super::plan(&captured, &config, &generous, &settings, None)
         .unwrap()
         .minimum_bytes;
     let need = super::memory_backed_need(&captured, &config, settings.cap, false).unwrap();
@@ -4588,6 +4648,7 @@ fn tmpfs_exhaustion_is_admitted_before_border_or_frontier_writes() {
         &config,
         &MemoryBudget::resolve(Some(exact - 1)).unwrap(),
         &settings,
+        None,
     )
     .unwrap_err();
     assert_eq!(denied.kind(), JobErrorKind::ResourceLimit);
@@ -4597,6 +4658,7 @@ fn tmpfs_exhaustion_is_admitted_before_border_or_frontier_writes() {
         &config,
         &MemoryBudget::resolve(Some(exact)).unwrap(),
         &settings,
+        None,
     )
     .unwrap();
     assert_eq!(allowed.minimum_bytes, exact);
@@ -5194,8 +5256,8 @@ fn city(n: usize) -> Vec<Mesh> {
 /// and each costs about ten triangles under the guards, so at the test cap the coarse
 /// cells, and the root, could not fit (all omitted before D11 coarse drops). Now border-free
 /// buildings go smallest first, each payload declares its drops, published G covers
-/// every dropped key, and the archive validates. Understated G or an undeclared drop is
-/// refused by the validator.
+/// every dropped key, and the archive validates. Removing construction drop controls
+/// still leaves a certified surface. An undeclared drop is refused.
 #[test]
 fn a_city_too_dense_for_the_cap_keeps_its_root_through_coarse_drops() {
     let work = tempfile::tempdir().unwrap();
@@ -5227,10 +5289,14 @@ fn a_city_too_dense_for_the_cap_keeps_its_root_through_coarse_drops() {
                 ..test_settings(300)
             });
         crate::mesh_large::mesh_to_tileset(request, &RunControl::default()).unwrap();
-        let e = inspect(ValidationRequest::new(&output))
-            .unwrap_err()
-            .to_string();
-        assert!(e.contains("coarseDrops"), "{mutation:?}: {e}");
+        let result = inspect(ValidationRequest::new(&output));
+        if mutation == Mutation::UnderstateDropError {
+            let census = result.unwrap().interface_census.unwrap();
+            assert!(census.dropped_components > 0 && census.surface_error_extent_tiles > 0);
+        } else {
+            let message = result.unwrap_err().to_string();
+            assert!(message.contains("coarseDrops"), "{message}");
+        }
     }
 }
 
@@ -5299,6 +5365,8 @@ fn ordinary_drops_under_pressure_go_smallest_first() {
         interface: vec![],
         geometric_error: 0.,
         published_error: 0.,
+        surface_error: 0.,
+        decoded_override: Vec::new(),
         texture: Default::default(),
         lease: None,
     };
@@ -5439,6 +5507,8 @@ fn a_drop_order_that_would_empty_the_tile_fails_the_attempt() {
         interface: vec![],
         geometric_error: 0.,
         published_error: 0.,
+        surface_error: 0.,
+        decoded_override: Vec::new(),
         texture: Default::default(),
         lease: None,
     };
@@ -6466,7 +6536,7 @@ fn coarse_mask_charge_restores_five_automatic_workers_at_four_gib() {
 }
 
 /// Paired production-construction control: all leaves and non-root payloads stay
-/// byte-identical, while roots may only improve G or replace an own-build omission.
+/// byte-identical, while the root decision may improve construction G or replace an own-build omission.
 fn root_pair(layout: u64, jobs: usize, evidence: Option<&Path>) {
     let work = tempfile::tempdir().unwrap();
     let input = write_gltf(&work.path().join("src"), &city_block(layout));
@@ -6492,14 +6562,15 @@ fn root_pair(layout: u64, jobs: usize, evidence: Option<&Path>) {
             .expect("no lost root");
         if new.get("rootCompetition").is_some() {
             assert!(
-                new["geometricError"].as_f64().unwrap() <= old["geometricError"].as_f64().unwrap()
+                new["constructionError"].as_f64().unwrap()
+                    <= old["constructionError"].as_f64().unwrap()
             );
             let r = &new["rootCompetition"];
-            assert_eq!(r["baselineG"], old["geometricError"]);
+            assert_eq!(r["baselineG"], old["constructionError"]);
             if r["accepted"] == true {
                 assert!(
-                    new["geometricError"].as_f64().unwrap()
-                        <= 0.99 * old["geometricError"].as_f64().unwrap()
+                    new["constructionError"].as_f64().unwrap()
+                        <= 0.99 * old["constructionError"].as_f64().unwrap()
                 );
             }
             if r["accepted"] != true {
@@ -6585,7 +6656,10 @@ fn root_competition_preserves_natural_guard_and_descendant_refusals() {
                 .unwrap();
             assert_eq!(root["rootCompetition"]["reason"], "prepare_refused");
             assert_eq!(root["rootCompetition"]["accepted"], false);
-            assert_eq!(root["geometricError"], root["rootCompetition"]["baselineG"]);
+            assert_eq!(
+                root["constructionError"],
+                root["rootCompetition"]["baselineG"]
+            );
         } else {
             assert!(rr.iter().all(|r| r["depth"] != 0));
             let manifest: Value =
@@ -7061,4 +7135,90 @@ fn incidence_reports_the_first_failing_leaf_in_order() {
             "{workers} workers: {error}"
         );
     }
+}
+
+/// Tile-592 class: a real simplification leaves the nearest delivered surface
+/// too far from an interior point of an original edge. Price that point against
+/// every triangle of the packaged root, separately from the producer.
+#[test]
+fn published_root_covers_an_original_edge_in_the_delivered_glb() {
+    let work = tempfile::tempdir().unwrap();
+    let mut mesh = grid((12, 12), (0., 12.), (0., 12.), &|_, _| 0., [1.; 4]);
+    for (i, p) in mesh.positions.iter_mut().enumerate() {
+        let (x, z) = (i / 13, i % 13);
+        let height = ((79 * x + 53 * z + 19 * x * z + 333) % 61) as f32;
+        let horizontal = |k: usize| {
+            if k < 7 {
+                k as f32 / 128.
+            } else {
+                1. + (k - 7) as f32 * 2.
+            }
+        };
+        *p = [
+            horizontal(x),
+            height / if x < 8 && z < 8 { 64. } else { 1024. },
+            horizontal(z),
+        ];
+    }
+    // The diagonal joins (1,7) and (2,6). All input coordinates are dyadic.
+    let (a, b) = (20, 32);
+    assert!(mesh
+        .indices
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .any(|face| face.contains(&a) && face.contains(&b)));
+    let edge = [mesh.positions[a as usize], mesh.positions[b as usize]];
+    let input = write_gltf(&work.path().join("input"), &[mesh]);
+    let dir = stage(
+        &input,
+        &work.path().join("stage"),
+        &Run {
+            cap: 44,
+            leaf_triangles: 32,
+            jobs: 2,
+            profile: LeafProfile::Quality,
+            ..production_nearest_run()
+        },
+    )
+    .unwrap();
+    let output = work.path().join("out.3tz");
+    mesh_leaves_to_3tz(
+        MeshTilesetRequest::new(&dir, &output),
+        &RunControl::default(),
+    )
+    .unwrap();
+    let row = rows(&dir.join("proxies.jsonl"))
+        .into_iter()
+        .find(|r| r["depth"] == 0)
+        .unwrap();
+    assert_eq!(
+        (row["first"].as_u64(), row["end"].as_u64()),
+        (Some(0), Some(288))
+    );
+    let faces = decode(&fs::read(dir.join(row["uri"].as_str().unwrap())).unwrap()).faces;
+    let record = work.path().join("witness.json");
+    fs::write(
+        &record,
+        serde_json::to_vec(&json!({
+            "sha256":row["sha256"], "edge":edge, "fraction":[7,16], "decoded":faces,
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    let result = std::process::Command::new("python3")
+        .arg(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("bench/architecture_audit/mesh_hlod/s5/published_edge_witness.py"),
+        )
+        .arg(output)
+        .arg(record)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
+    );
 }

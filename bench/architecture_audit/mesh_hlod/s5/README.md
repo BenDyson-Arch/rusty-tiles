@@ -7,8 +7,21 @@ boundaries. Final stack acceptance and cost require the final integrated campaig
 Sampled G is finite, nonnegative and ordered; it is not a certified maximum.
 C1 still owns resources, hashes, codecs and accessor admission, C2 owns decoded
 bounds, and I1 owns implicit availability. No H17 certificate is required for
-HLOD. `geometricErrorAccuracy` remains explicitly uninspected. Source-distance
-sampling is the separately invoked `../s2/audit.py`, never an archive certificate.
+HLOD. The archive-only validator retains `geometricErrorAccuracy` as uninspected.
+For certified archives the source-aware oracle checks all six coarse/source
+support extrema. Add `--certify-source-error` to `oracle.py ARCHIVE SOURCE`
+to require exact closed-panel covers of the two directions on every coarse
+tile. The oracle joins captured f32 source faces through checked leaf identity.
+The full certificate requires an original source GLB or independent analytic
+manifest, including the pre-weld coordinates on a moving weld. Leaf-derived
+manifests identify only a decoded reference. The separate canonical-seam checks
+retain their own admission domain.
+It refuses unsupported frames, more than 131,072 source or proxy faces per
+tile, unresolved depth 32, or exhaustion of `--work-limit`. A proved distance
+violation is `sourceSurfaceError`. An incomplete cover is `oracleWorkLimit`.
+`surface_error_controls.py` exercises a dyadic edge gap, both directions,
+point/segment supports and refusal. The older independent S2 sampling remains
+a construction diagnostic.
 
 Retain the bounded validator/facts/replay owners. Add source-identity admission
 and a disk-backed decoded delivery relation; replace ad-hoc seam probes with
@@ -407,7 +420,7 @@ running exact maximum, so it cannot raise it; floats never decide (review 4).
 Losses must fit E where cycles changed and G where a boundary was only simplified;
 a change without a witness is refused. Distances come from a complete
 box-hierarchy nearest search with certified lower bounds and exact
-Fractions. All topology losses are sampled witnesses under D2, like G itself: S1b's
+Fractions. The early-stage topology checks use sampled D2 witnesses: S1b's
 quarter-grid controls plus this checker's own deterministic barycentric level-8
 grid on every affected face. They bound a continuous maximum from below only.
 `contractedVertices` (input vertices on contracted arcs) and the complete omission
