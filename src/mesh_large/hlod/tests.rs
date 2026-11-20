@@ -4554,7 +4554,7 @@ fn tmpfs_exhaustion_is_admitted_before_border_or_frontier_writes() {
     config.jobs = Jobs::Fixed(NonZeroUsize::new(1).unwrap());
     let settings = test_settings(300);
     let generous = MemoryBudget::resolve(Some(8 << 30)).unwrap();
-    let disk_min = super::plan(&captured, &config, &generous, &settings)
+    let disk_min = super::plan(&captured, &config, &generous, &settings, None)
         .unwrap()
         .minimum_bytes;
     let need = super::memory_backed_need(&captured, &config, settings.cap, false).unwrap();
@@ -4588,6 +4588,7 @@ fn tmpfs_exhaustion_is_admitted_before_border_or_frontier_writes() {
         &config,
         &MemoryBudget::resolve(Some(exact - 1)).unwrap(),
         &settings,
+        None,
     )
     .unwrap_err();
     assert_eq!(denied.kind(), JobErrorKind::ResourceLimit);
@@ -4597,6 +4598,7 @@ fn tmpfs_exhaustion_is_admitted_before_border_or_frontier_writes() {
         &config,
         &MemoryBudget::resolve(Some(exact)).unwrap(),
         &settings,
+        None,
     )
     .unwrap();
     assert_eq!(allowed.minimum_bytes, exact);

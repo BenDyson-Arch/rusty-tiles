@@ -874,14 +874,14 @@ fn run(
         let crop_check = || attempt.check();
         let crop_progress = super::phases::StepProgress::new(&crop_check, phases.emitter());
         let crops = producer::crop_plan(config, &captured, &crop_progress)?;
-        // The stage's plan with the store where it fits; reported as the plan it runs.
-        let (plan, crops) = producer::settle(config, &captured, crops)?;
-        // HLOD admits its own stage against the declared budget before any leaf is built.
+        // HLOD admits its own stage against the declared budget before any leaf is built,
+        // with the sparse chains the crop store cuts for it when they fit.
         #[cfg(test)]
         let settings = &request.hlod;
         #[cfg(not(test))]
         let settings = &super::hlod::Settings::default();
-        let hlod = super::hlod::plan(&captured, config, &budget, settings)?;
+        let hlod_plan = |coarse| super::hlod::plan(&captured, config, &budget, settings, coarse);
+        let (plan, crops, hlod) = producer::settle(config, &captured, crops, &hlod_plan)?;
         let c = &captured.report;
         let capture_minimum = c
             .jobs

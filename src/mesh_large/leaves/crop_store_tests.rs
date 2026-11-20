@@ -116,9 +116,23 @@ fn an_image_charge_covers_its_decode_chains_and_crops() {
         encoded_bytes: 15_000_000,
     };
     let texels = 8192u64 * 8192;
-    assert_eq!(image_charge(&info, 0, 0, 0), texels * 16 + 15_000_000);
+    let decode = texels * 16 + 15_000_000;
+    assert_eq!(image_charge(&info, 0, 0, 0, None), decode);
+    let leaf = texels * 16 * 2 + 8_000_000;
     assert_eq!(
-        image_charge(&info, 2, 300_000_000, 4_000_000),
-        texels * 16 * 3 + 15_000_000 + 300_000_000 + 8_000_000
+        image_charge(&info, 2, 300_000_000, 4_000_000, None),
+        decode + leaf + 300_000_000
+    );
+    // The coarse phase follows the leaf phase: the larger is held, beside every block.
+    let chain = crate::mesh_large::hlod::bake::chain_bytes(8192, 8192);
+    let coarse = texels * 4 + chain + 2 * 64 * 64 * 4;
+    assert!(coarse < leaf);
+    assert_eq!(
+        image_charge(&info, 2, 300_000_000, 4_000_000, Some(200_000_000)),
+        decode + leaf + 300_000_000 + 200_000_000
+    );
+    assert_eq!(
+        image_charge(&info, 0, 0, 0, Some(200_000_000)),
+        decode + coarse + 200_000_000
     );
 }

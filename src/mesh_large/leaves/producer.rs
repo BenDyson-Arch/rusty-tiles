@@ -398,42 +398,61 @@ pub(crate) fn crop_plan(
     for plan in captured.leaf_plans.reader()? {
         leaf_owned = leaf_owned.max(plan?.owned_bytes);
     }
+    // The coarse stage samples sparse chains cut beside the crops when it bakes any tile.
+    let coarse = captured.tree.stats.internal > 0;
     super::crop_store::plan(
         captured,
         config.profile,
         index_memory,
         leaf_owned.saturating_mul(2),
+        coarse,
         progress,
     )
 }
-/// Settles the leaf stage's plan and whether it cuts the crop store. The store is dropped
-/// where it does not fit: its memory ([`stage_plan`] then plans without it), or its raw
-/// crops beside the image store's spill on the scratch volume (a space refusal only; other
-/// errors propagate). The plan returned is the one the stage runs and reports.
+/// Settles the stages' plans and whether the leaf stage cuts the crop store (and, in it,
+/// the coarse stage's sparse chains). Each is optional and dropped where it does not fit,
+/// the sparse chains first: when the store's memory, or its scratch beside the image
+/// store's, does not fit (a free-space refusal only; other errors propagate), or when the
+/// coarse stage's plan with the sparse chains is refused. Without them the stages plan as
+/// before; output never depends on the choice. The plans returned are the ones the stages
+/// run and report.
 pub(crate) fn settle(
     config: &TreeConfig,
     captured: &full::FullCaptured,
-    crops: Option<super::crop_store::CropPlan>,
-) -> Result<(StagePlan, Option<super::crop_store::CropPlan>), JobError> {
-    let stage = stage_plan(config, captured, crops.as_ref())?;
-    let crops = crops.filter(|_| stage.crop_store);
-    let Some(plan) = crops else {
-        return Ok((stage, None));
-    };
-    let bound = image_scratch_bound(captured, &stage, Some(&plan))?;
-    #[cfg(test)]
-    if super::crop_store::STORE_SCRATCH_FREE
-        .with(std::cell::Cell::get)
-        .is_some_and(|free| crop_scratch(captured, Some(&plan)) > free)
-    {
-        return Ok((stage_plan(config, captured, None)?, None));
-    }
-    match preflight_image_scratch(captured, bound) {
-        Ok(()) => Ok((stage, Some(plan))),
-        Err(crate::spill::SpillError::InsufficientSpace(_)) => {
-            Ok((stage_plan(config, captured, None)?, None))
+    mut crops: Option<super::crop_store::CropPlan>,
+    hlod: &dyn Fn(Option<u64>) -> Result<super::super::hlod::HlodMemoryPlan, JobError>,
+) -> Result<
+    (
+        StagePlan,
+        Option<super::crop_store::CropPlan>,
+        super::super::hlod::HlodMemoryPlan,
+    ),
+    JobError,
+> {
+    loop {
+        let stage = stage_plan(config, captured, crops.as_ref())?;
+        if let Some(plan) = &crops {
+            if !stage.crop_store || !store_scratch_fits(captured, &stage, plan)? {
+                // The sparse chains go first: the crops alone may still fit.
+                crops = match plan.coarse {
+                    Some(_) => crops.map(super::crop_store::CropPlan::without_coarse),
+                    None => None,
+                };
+                continue;
+            }
         }
-        Err(error) => Err(error.into()),
+        let coarse = crops
+            .as_ref()
+            .and_then(|c| c.coarse.as_ref())
+            .map(|c| c.index_bytes);
+        match hlod(coarse) {
+            Ok(hlod) => return Ok((stage, crops, hlod)),
+            // Only a memory refusal drops the sparse chains; any other error is the run's own.
+            Err(error) if coarse.is_some() && error.kind() == JobErrorKind::ResourceLimit => {
+                crops = crops.map(super::crop_store::CropPlan::without_coarse);
+            }
+            Err(error) => return Err(error),
+        }
     }
 }
 pub(crate) fn stage_plan(
@@ -473,7 +492,7 @@ pub(crate) fn stage_plan(
     // cache cannot hold them all (density chains never spill there).
     let plan_with = |image_tiles: bool, store: bool| -> Result<StagePlan, JobError> {
         let index = match (store, crops) {
-            (true, Some(c)) => c.index_bytes,
+            (true, Some(c)) => c.total_index_bytes(),
             _ => 0,
         };
         let tmpfs = if captured.scratch.memory_backed() {
@@ -602,7 +621,11 @@ pub(crate) fn stage_plan(
             .and_then(|n| n.checked_add(leaves))
             .ok_or_else(|| resource("leaf declared memory overflow"))?;
         // The store's cuts run before any leaf, inside the page gate's memory.
-        if store && crops.is_some_and(|c| c.largest_image_bytes > gate_bytes) {
+        let largest = match (store, crops) {
+            (true, Some(c)) => c.largest_image_bytes(captured)?,
+            _ => 0,
+        };
+        if largest > gate_bytes {
             return Err(resource(
                 "one source image's crop cut exceeds the page gate",
             ));
@@ -648,15 +671,18 @@ fn source_cache(captured: &full::FullCaptured, stage: &StagePlan) -> Result<Sour
         !captured.scratch.memory_backed(),
     ))
 }
-/// The store's raw crops on scratch, each log rounded to an allocation unit.
+/// Preflights the stage's image scratch (the cache's spill, file rounding and the crop
+/// store's raw crops) and returns that bound.
+/// The store's raw crops and coarse tiles on scratch, each log rounded to an allocation
+/// unit.
 fn crop_scratch(captured: &full::FullCaptured, crops: Option<&super::crop_store::CropPlan>) -> u64 {
     crops.map_or(0, |c| {
-        c.scratch_bytes
-            .saturating_add(captured.scratch.allocation_unit_bytes())
+        c.total_scratch_bytes()
+            .saturating_add(2 * captured.scratch.allocation_unit_bytes())
     })
 }
 /// The stage's image scratch bound: the cache's spill, file rounding and the crop store's
-/// raw crops.
+/// logs.
 fn image_scratch_bound(
     captured: &full::FullCaptured,
     stage: &StagePlan,
@@ -678,6 +704,27 @@ fn preflight_image_scratch(
         crate::spill::PreflightStage::Texture,
     )
     .map(drop)
+}
+/// Whether the stage's image scratch with the store fits the scratch volume: `false` on a
+/// free-space refusal; any other error propagates.
+fn store_scratch_fits(
+    captured: &full::FullCaptured,
+    stage: &StagePlan,
+    plan: &super::crop_store::CropPlan,
+) -> Result<bool, JobError> {
+    #[cfg(test)]
+    if super::crop_store::STORE_SCRATCH_FREE
+        .with(std::cell::Cell::get)
+        .is_some_and(|free| crop_scratch(captured, Some(plan)) > free)
+    {
+        return Ok(false);
+    }
+    let bound = image_scratch_bound(captured, stage, Some(plan))?;
+    match preflight_image_scratch(captured, bound) {
+        Ok(()) => Ok(true),
+        Err(crate::spill::SpillError::InsufficientSpace(_)) => Ok(false),
+        Err(error) => Err(error.into()),
+    }
 }
 /// Memory the leaf image store keeps outside its cached texels: image records and
 /// each worker's two tile readers. Carved out of the cache budget; an image-free
@@ -981,7 +1028,8 @@ pub(crate) fn produce(
     // Every leaf's crops, cut image by image before any leaf runs, within the page gate's
     // memory (idle until then).
     let crop_progress = crate::mesh_large::phases::StepProgress::new(&check, phases.emitter());
-    let crop_store = crops
+    // The coarse stage's sparse chains are cut in the same pass and outlive the crops.
+    let (crop_store, sparse) = match crops
         .map(|plan| {
             super::crop_store::build(
                 captured,
@@ -993,7 +1041,11 @@ pub(crate) fn produce(
                 check,
             )
         })
-        .transpose()?;
+        .transpose()?
+    {
+        Some((store, sparse)) => (Some(store), sparse),
+        None => (None, None),
+    };
     // Set when the ordered writer stops: queued leaves then end promptly.
     let stopped = AtomicBool::new(false);
     let leaf_check = || {
@@ -1145,10 +1197,12 @@ pub(crate) fn produce(
                 plan,
                 settings,
                 phases,
+                sparse: sparse.as_ref(),
             },
             check,
         )
     })?;
+    drop(sparse);
     report.proxies = hlod.tiles;
     report.texel_ownership.unique_proxies = hlod.tiles;
     report.proxy_bytes = hlod.bytes;
@@ -1401,16 +1455,10 @@ pub fn mesh_to_leaf_payloads(
             return Err(failed);
         }
     };
-    let (stage_plan, crops) = match settle(&config, &captured, crops) {
+    let hlod =
+        |coarse| super::super::hlod::plan(&captured, &config, &budget, &request.hlod, coarse);
+    let (stage_plan, crops, hlod_plan) = match settle(&config, &captured, crops, &hlod) {
         Ok(plans) => plans,
-        Err(error) => {
-            let mut failed = attempt.fail(error);
-            close_failed_capture(captured, &mut failed);
-            return Err(failed);
-        }
-    };
-    let hlod_plan = match super::super::hlod::plan(&captured, &config, &budget, &request.hlod) {
-        Ok(plan) => plan,
         Err(error) => {
             let mut failed = attempt.fail(error);
             close_failed_capture(captured, &mut failed);
@@ -2667,7 +2715,9 @@ mod tests {
             .with_hlod_settings(crate::mesh_large::hlod::test_settings(
                 crate::mesh_large::hlod::TRIANGLE_CAP,
             ))
-            .with_jobs(NonZeroUsize::new(jobs).unwrap());
+            .with_jobs(NonZeroUsize::new(jobs).unwrap())
+            // Several leaves, so the coarse stage bakes tiles from them.
+            .with_leaf_triangles(512);
         if let Some(budget) = budget {
             request = request.with_memory_budget(budget);
         }
@@ -2738,13 +2788,14 @@ mod tests {
         let lossless = scattered_fixture(&dir.join("lossless"), 640, 9987);
         let (clamped, _) = repeat_fixture(&dir.join("clamped"), [33071; 2], [0.5; 2], 256, true);
         let (repeated, _) = repeat_fixture(&dir.join("repeated"), [10497; 2], [2.; 2], 256, true);
-        for (name, input, profile, jobs, decodes) in [
+        for (name, input, profile, jobs, decodes, coarse) in [
             (
                 "scattered-fast-1",
                 &scattered,
                 LeafProfile::Fast,
                 1,
                 Some(0),
+                true,
             ),
             (
                 "scattered-balanced-3",
@@ -2752,6 +2803,7 @@ mod tests {
                 LeafProfile::Balanced,
                 3,
                 Some(0),
+                true,
             ),
             (
                 "mipped-balanced-2",
@@ -2759,12 +2811,27 @@ mod tests {
                 LeafProfile::Balanced,
                 2,
                 Some(0),
+                true,
             ),
-            ("lossless-2", &lossless, LeafProfile::Lossless, 2, Some(0)),
-            ("clamped-2", &clamped, LeafProfile::Balanced, 2, None),
-            ("repeated-1", &repeated, LeafProfile::Balanced, 1, None),
+            (
+                "lossless-2",
+                &lossless,
+                LeafProfile::Lossless,
+                2,
+                Some(0),
+                true,
+            ),
+            ("clamped-2", &clamped, LeafProfile::Balanced, 2, None, false),
+            (
+                "repeated-1",
+                &repeated,
+                LeafProfile::Balanced,
+                1,
+                None,
+                false,
+            ),
         ] {
-            let (store, plain, _) =
+            let (store, plain, report) =
                 store_matches(input, dir, name, profile, jobs, None).expect(name);
             let stats = &store["cropStore"];
             assert_eq!(stats["misses"], 0, "{name}: {stats}");
@@ -2773,6 +2840,39 @@ mod tests {
                 stats["written_bytes"].as_u64().unwrap() <= stats["raw_bytes"].as_u64().unwrap()
             );
             assert!(source_decodes(&store) <= source_decodes(&plain), "{name}");
+            // The coarse stage sampled the sparse chains cut beside the crops: no decode
+            // slot or image cache, and its tiles came from the coarse log.
+            if report.proxies == 0 {
+                assert!(!coarse, "{name} bakes coarse tiles");
+                continue;
+            }
+            let hlod = &store["hlod"];
+            assert_eq!(
+                hlod["plan"]["decode_bytes"], 0,
+                "{name}: {stats} {}",
+                hlod["plan"]
+            );
+            assert_eq!(hlod["plan"]["image_cache_bytes"], 0, "{name}");
+            assert_eq!(
+                hlod["plan"]["sparse_index_bytes"], stats["coarse_index_bytes"],
+                "{name}"
+            );
+            assert!(
+                stats["coarse_tiles"].as_u64().unwrap() > 0,
+                "{name}: {stats}"
+            );
+            assert!(
+                hlod["diagnostics"]["sparse_tile_decodes"].as_u64().unwrap() > 0,
+                "{name}"
+            );
+            assert_eq!(hlod["diagnostics"]["image_cache"]["misses"], 0, "{name}");
+            assert!(plain["hlod"]["plan"]["decode_bytes"].as_u64().unwrap() > 0);
+            assert!(
+                plain["hlod"]["diagnostics"]["image_cache"]["misses"]
+                    .as_u64()
+                    .unwrap()
+                    > 0
+            );
             if let Some(decodes) = decodes {
                 assert_eq!(source_decodes(&store), decodes, "{name}");
                 assert!(source_decodes(&plain) > 0, "{name}");
@@ -2836,16 +2936,33 @@ mod tests {
         let profile = LeafProfile::Balanced;
         let (plain, ..) = crop_bake(&input, &dir.join("plain"), profile, 2, None, false).unwrap();
         let (_, stored, _) = crop_bake(&input, &dir.join("store"), profile, 2, None, true).unwrap();
-        let raw = stored["cropStore"]["raw_bytes"].as_u64().unwrap();
-        for (free, used) in [(raw / 2, false), (raw * 2, true)] {
+        let stats = &stored["cropStore"];
+        let crops = stats["raw_bytes"].as_u64().unwrap();
+        let coarse = stats["coarse_raw_bytes"].as_u64().unwrap();
+        assert!(coarse > 0);
+        // Each log is admitted with one allocation unit of rounding.
+        let unit = 64 << 10;
+        for (free, store, sparse) in [
+            (crops / 2, false, false),
+            (crops + 2 * unit, true, false),
+            (crops + coarse + 2 * unit, true, true),
+        ] {
             let output = dir.join(format!("free{free}"));
             super::super::crop_store::STORE_SCRATCH_FREE.with(|f| f.set(Some(free)));
             let result = crop_bake(&input, &output, profile, 2, None, true);
             super::super::crop_store::STORE_SCRATCH_FREE.with(|f| f.set(None));
             let (files, resources, _) = result.unwrap();
             assert!(files == plain, "free {free}");
-            assert_eq!(!resources["cropStore"].is_null(), used, "free {free}");
-            assert_eq!(resources["delivery"]["crop_store"], used, "free {free}");
+            assert_eq!(!resources["cropStore"].is_null(), store, "free {free}");
+            assert_eq!(resources["delivery"]["crop_store"], store, "free {free}");
+            assert_eq!(
+                resources["hlod"]["plan"]["sparse_index_bytes"]
+                    .as_u64()
+                    .unwrap()
+                    > 0,
+                sparse,
+                "free {free}"
+            );
         }
     }
 
@@ -2871,8 +2988,9 @@ mod tests {
             .num_threads(2)
             .build()
             .unwrap();
-        let plan =
-            |memory| crop_store::plan(&captured, Profile::Balanced, memory, 0, silent).unwrap();
+        let plan = |memory| {
+            crop_store::plan(&captured, Profile::Balanced, memory, 0, false, silent).unwrap()
+        };
         let full_plan = plan(u64::MAX).unwrap();
         assert!(full_plan.requests.len() > 1);
         assert!(full_plan.requests.windows(2).all(|w| w[0] < w[1]));
@@ -2881,17 +2999,19 @@ mod tests {
         assert!(plan(0).is_none());
         // The pass's own leaf working set is admitted beside the index: with the whole
         // memory taken by it there is no room for the index, nor for more than the memory.
-        let pass = |leaf| crop_store::plan(&captured, Profile::Balanced, 1 << 30, leaf, silent);
+        let pass =
+            |leaf| crop_store::plan(&captured, Profile::Balanced, 1 << 30, leaf, false, silent);
         assert!(pass(1 << 29).unwrap().is_some());
         assert!(pass(1 << 30).unwrap().is_none());
         assert!(pass((1 << 30) + 1).unwrap().is_none());
-        // The largest cut includes the log's write buffer.
-        let largest = full_plan.largest_image_bytes;
+        // The largest cut includes the logs' write buffers.
+        let largest = full_plan.largest_image_bytes(&captured).unwrap();
         let ok = || Ok(());
         let build = |plan: crop_store::CropPlan,
                      memory,
                      check: &(dyn Fn() -> Result<(), JobError> + Sync)| {
             crop_store::build(&captured, plan, memory, u64::MAX, &pool, silent, check)
+                .map(|(store, _)| store)
         };
         let error = build(plan(u64::MAX).unwrap(), largest - 1, &ok)
             .err()
@@ -2902,7 +3022,7 @@ mod tests {
         assert_eq!(stats.crops, full_plan.requests.len() as u64);
         assert_eq!(
             stats.memory_peak_bytes,
-            largest - crop_store::LOG_BUFFER_BYTES
+            largest - 2 * crop_store::LOG_BUFFER_BYTES
         );
         assert!(stats.written_bytes <= full_plan.scratch_bytes);
         for key in &full_plan.requests {
@@ -2926,7 +3046,7 @@ mod tests {
             ))
         };
         let progress = StepProgress::new(&cancelled, None);
-        let error = crop_store::plan(&captured, Profile::Balanced, u64::MAX, 0, &progress)
+        let error = crop_store::plan(&captured, Profile::Balanced, u64::MAX, 0, true, &progress)
             .err()
             .unwrap();
         assert_eq!(error.kind(), JobErrorKind::Cancelled);
@@ -2942,6 +3062,107 @@ mod tests {
             .err()
             .unwrap();
         assert_eq!(error.kind(), JobErrorKind::Cancelled);
+    }
+
+    fn captured_fixture(
+        dir: &Path,
+        edge: u32,
+    ) -> (crate::mesh_large::config::TreeConfig, full::FullCaptured) {
+        use crate::mesh_large::config::{Jobs, TreeConfig};
+        let input = textured_fixture(&dir.join("source"), 4_000, 9987, Texture::Smooth, edge);
+        let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(500);
+        config.jobs = Jobs::Fixed(NonZeroUsize::new(1).unwrap());
+        config.memory_budget =
+            Some(crate::mesh_large::resources::MemoryBudget::resolve(Some(8 << 30)).unwrap());
+        let captured = full::capture(&input, &config, &mut || Ok(())).unwrap();
+        (config, captured)
+    }
+
+    /// With the sparse chains the coarse plan holds their index instead of a decode slot
+    /// and an image cache, so its minimum falls; at that minimum the stage is admitted only
+    /// with them (sensitive control).
+    #[test]
+    fn sparse_chains_free_the_coarse_stages_decode_and_cache() {
+        use crate::mesh_large::{hlod, resources::MemoryBudget};
+        let work = tempfile::tempdir().unwrap();
+        let (config, captured) = captured_fixture(work.path(), 2048);
+        let silent = crate::mesh_large::phases::StepProgress::silent();
+        let plan =
+            super::super::crop_store::plan(&captured, Profile::Balanced, u64::MAX, 0, true, silent)
+                .unwrap()
+                .unwrap();
+        let coarse = plan.coarse.as_ref().unwrap();
+        assert!(coarse.scratch_bytes > 0 && coarse.index_bytes > 0);
+        let marked: u64 = coarse.needs.chains.values().map(|m| m.marked().0).sum();
+        let all: u64 = coarse.needs.chains.values().map(|m| m.tiles()).sum();
+        assert!(marked > 0 && marked < all, "{marked} of {all} tiles");
+        let settings = hlod::test_settings(hlod::TRIANGLE_CAP);
+        let budget = MemoryBudget::resolve(Some(8 << 30)).unwrap();
+        let chains = hlod::plan(&captured, &config, &budget, &settings, None).unwrap();
+        let sparse = hlod::plan(
+            &captured,
+            &config,
+            &budget,
+            &settings,
+            Some(coarse.index_bytes),
+        )
+        .unwrap();
+        assert!(chains.decode_bytes > 0 && chains.image_cache_bytes > 0);
+        assert_eq!(
+            (
+                sparse.decode_bytes,
+                sparse.image_cache_bytes,
+                sparse.sparse_index_bytes
+            ),
+            (0, 0, coarse.index_bytes)
+        );
+        assert!(sparse.minimum_bytes < chains.minimum_bytes);
+        let tight = MemoryBudget::resolve(Some(sparse.minimum_bytes)).unwrap();
+        hlod::plan(
+            &captured,
+            &config,
+            &tight,
+            &settings,
+            Some(coarse.index_bytes),
+        )
+        .unwrap();
+        let refused = hlod::plan(&captured, &config, &tight, &settings, None).unwrap_err();
+        assert_eq!(refused.kind(), JobErrorKind::ResourceLimit, "{refused}");
+    }
+
+    /// [`settle`] plans the coarse stage with the sparse chains when it admits them; when
+    /// it refuses them, the chains are dropped, the crop store kept, and the coarse stage
+    /// planned without them.
+    #[test]
+    fn settle_drops_refused_sparse_chains_and_keeps_the_store() {
+        use crate::mesh_large::hlod;
+        let work = tempfile::tempdir().unwrap();
+        let (config, captured) = captured_fixture(work.path(), 1024);
+        let silent = crate::mesh_large::phases::StepProgress::silent();
+        let budget = config.memory_budget.unwrap();
+        let settings = hlod::test_settings(hlod::TRIANGLE_CAP);
+        let plan = |coarse| hlod::plan(&captured, &config, &budget, &settings, coarse);
+        let crops = crop_plan(&config, &captured, silent).unwrap().unwrap();
+        let index = crops.coarse.as_ref().unwrap().index_bytes;
+        let (stage, crops, hlod) = settle(&config, &captured, Some(crops), &plan).unwrap();
+        assert!(stage.crop_store);
+        assert!(crops.unwrap().coarse.is_some());
+        assert_eq!(hlod.sparse_index_bytes, index);
+        let asked = std::cell::RefCell::new(Vec::new());
+        let refuse_sparse = |coarse: Option<u64>| {
+            asked.borrow_mut().push(coarse);
+            match coarse {
+                Some(_) => Err(JobError::new(JobErrorKind::ResourceLimit, "test refusal")),
+                None => plan(None),
+            }
+        };
+        let crops = crop_plan(&config, &captured, silent).unwrap();
+        let (stage, crops, hlod) = settle(&config, &captured, crops, &refuse_sparse).unwrap();
+        assert!(stage.crop_store);
+        assert!(crops.unwrap().coarse.is_none());
+        assert_eq!(hlod.sparse_index_bytes, 0);
+        assert!(hlod.decode_bytes > 0);
+        assert_eq!(*asked.borrow(), [Some(index), None]);
     }
 
     /// While a batch's images are cut, the caller keeps the `leaf_crop_store` step's
@@ -2966,6 +3187,7 @@ mod tests {
             Profile::Balanced,
             u64::MAX,
             0,
+            false,
             StepProgress::silent(),
         )
         .unwrap()
@@ -3017,7 +3239,7 @@ mod tests {
         config.jobs = Jobs::Fixed(NonZeroUsize::new(1).unwrap());
         let captured = full::capture(&input, &config, &mut || Ok(())).unwrap();
         let silent = StepProgress::silent();
-        let mut plan = crop_store::plan(&captured, Profile::Balanced, u64::MAX, 0, silent)
+        let mut plan = crop_store::plan(&captured, Profile::Balanced, u64::MAX, 0, false, silent)
             .unwrap()
             .unwrap();
         let images: std::collections::BTreeSet<u32> =

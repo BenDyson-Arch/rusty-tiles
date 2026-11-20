@@ -24,6 +24,7 @@
 use super::crops::{self, Crop, SourceSampler};
 use super::mips::{self, Class};
 use crate::mesh_large::full::FullCaptured;
+use crate::mesh_large::hlod::sparse;
 use crate::spill::codec;
 use crate::{JobError, JobErrorKind};
 use std::collections::BTreeMap;
@@ -120,23 +121,39 @@ fn state(message: &str) -> JobError {
 pub(crate) const INDEX_BYTES_PER_CROP: u64 = 160;
 
 /// Bytes one image's cut holds until its blocks are written: the encoded image and its
-/// decode (16 bytes per texel, beyond the decoded-source cache's 12), every class chain its
-/// density levels need (16 bytes per texel each, beyond the leaf chain builder's input copy
-/// and levels), every encoded crop (at most its raw bytes) and the crop being cut twice
-/// (cut and predicted).
+/// decode (16 bytes per texel, beyond the decoded-source cache's 12), then the larger of
+/// its two phases: every class chain the leaf density levels need (16 bytes per texel
+/// each, beyond the leaf chain builder's input copy and levels) and the crop being cut
+/// twice (cut and predicted); or, with `coarse` tiles, a copy of the image and the coarse
+/// chain built from it with one tile being cut twice. Every encoded crop and tile is held
+/// (at most its raw bytes) until the batch is written.
 pub(crate) fn image_charge(
     info: &crate::gltf_source::source::ImageInfo,
     chains: u64,
     crop_bytes: u64,
     largest_crop: u64,
+    coarse: Option<u64>,
 ) -> u64 {
     let texels = u64::from(info.width) * u64::from(info.height);
+    let leaf = texels
+        .saturating_mul(16)
+        .saturating_mul(chains)
+        .saturating_add(largest_crop.saturating_mul(2));
+    let coarse_phase = coarse.map_or(0, |_| {
+        texels
+            .saturating_mul(4)
+            .saturating_add(crate::mesh_large::hlod::bake::chain_bytes(
+                info.width,
+                info.height,
+            ))
+            .saturating_add(2 * u64::from(sparse::EDGE) * u64::from(sparse::EDGE) * 4)
+    });
     texels
         .saturating_mul(16)
         .saturating_add(info.encoded_bytes)
-        .saturating_add(texels.saturating_mul(16).saturating_mul(chains))
+        .saturating_add(leaf.max(coarse_phase))
         .saturating_add(crop_bytes)
-        .saturating_add(largest_crop.saturating_mul(2))
+        .saturating_add(coarse.unwrap_or(0))
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -162,6 +179,15 @@ pub struct CropStoreStats {
     pub build_seconds: f64,
     /// Crop reads the store could not serve (cut from the decoded source instead).
     pub misses: u64,
+    /// The coarse stage's sparse chains: chains, stored tiles of all their tiles, raw
+    /// (admitted) and written bytes and index bytes (zero when the coarse stage samples
+    /// decoded sources).
+    pub coarse_chains: u64,
+    pub coarse_tiles: u64,
+    pub coarse_chain_tiles: u64,
+    pub coarse_raw_bytes: u64,
+    pub coarse_written_bytes: u64,
+    pub coarse_index_bytes: u64,
 }
 
 /// The cut crops: one scratch log and its index.
@@ -207,15 +233,44 @@ impl CropStore {
 /// One stored block back to the crop's RGBA8 texels; a block that does not decode to
 /// exactly the crop's bytes is corrupt (`InvalidState`).
 fn decode_block(block: &[u8], stored: bool, key: &CropRequest) -> Result<Vec<u8>, JobError> {
-    let raw = usize::try_from(key.raw_bytes()).map_err(|_| state("crop size"))?;
+    let (w, h) = (
+        usize::try_from(key.width).map_err(|_| state("crop width"))?,
+        usize::try_from(key.height).map_err(|_| state("crop height"))?,
+    );
+    unpack(block, stored, w, h)
+}
+
+/// A `width`×`height` RGBA8 block as stored: its vertical-predictor residual through the
+/// spill block codec.
+pub(crate) fn pack(
+    rgba: &[u8],
+    width: usize,
+    height: usize,
+    scratch: &mut Vec<u8>,
+) -> codec::Encoded {
+    codec::encode(&predict(rgba, width, height), scratch)
+}
+
+/// [`pack`]'s inverse; a block that does not decode to exactly `width`×`height` texels is
+/// corrupt (`InvalidState`).
+pub(crate) fn unpack(
+    block: &[u8],
+    stored: bool,
+    width: usize,
+    height: usize,
+) -> Result<Vec<u8>, JobError> {
+    let raw = width
+        .checked_mul(height)
+        .and_then(|n| n.checked_mul(4))
+        .ok_or_else(|| state("block size"))?;
     let mut residual = Vec::new();
     residual
         .try_reserve_exact(raw)
-        .map_err(|_| resource("stored crop decode"))?;
+        .map_err(|_| resource("stored block decode"))?;
     residual.resize(raw, 0);
     codec::decode(block, stored, &mut residual)
-        .map_err(|e| state(&format!("stored crop is corrupt: {e}")))?;
-    Ok(unpredict(residual, key.width as usize, key.height as usize))
+        .map_err(|e| state(&format!("stored block is corrupt: {e}")))?;
+    Ok(unpredict(residual, width, height))
 }
 
 #[cfg(test)]
@@ -276,21 +331,77 @@ fn unpredict(mut planes: Vec<u8>, width: usize, height: usize) -> Vec<u8> {
 /// Every leaf's crops, sorted by image and deduplicated, and what cutting them needs.
 pub(crate) struct CropPlan {
     pub requests: Vec<CropRequest>,
-    /// Raw bytes of every crop: the store's scratch bound.
+    /// Raw bytes of every crop: the leaf log's scratch bound.
     pub scratch_bytes: u64,
-    /// The index's memory ([`INDEX_BYTES_PER_CROP`] per crop).
+    /// The crop index's memory ([`INDEX_BYTES_PER_CROP`] per crop).
     pub index_bytes: u64,
-    /// The largest single image's cut ([`image_charge`]).
-    pub largest_image_bytes: u64,
     pub seconds: f64,
+    /// The coarse stage's sparse chains, cut beside the crops.
+    pub coarse: Option<CoarsePlan>,
 }
 
-/// One image's crops (sorted, deduplicated) and its cut's memory.
-fn image_groups(captured: &FullCaptured, requests: &[CropRequest]) -> Result<Vec<Group>, JobError> {
-    let mut groups = Vec::new();
+/// The tiles of every chain the coarse stage samples ([`sparse`]).
+pub(crate) struct CoarsePlan {
+    pub needs: sparse::Needs,
+    /// Raw bytes of every marked tile: the coarse log's scratch bound.
+    pub scratch_bytes: u64,
+    /// The chains' index memory, held until the coarse stage ends.
+    pub index_bytes: u64,
+}
+
+impl CropPlan {
+    /// Scratch of both logs.
+    pub(crate) fn total_scratch_bytes(&self) -> u64 {
+        self.scratch_bytes
+            .saturating_add(self.coarse.as_ref().map_or(0, |c| c.scratch_bytes))
+    }
+    /// Index memory of both stores.
+    pub(crate) fn total_index_bytes(&self) -> u64 {
+        self.index_bytes
+            .saturating_add(self.coarse.as_ref().map_or(0, |c| c.index_bytes))
+    }
+    /// The largest single image's cut ([`image_charge`]) beside the logs' write buffers:
+    /// the least memory the build runs in.
+    pub(crate) fn largest_image_bytes(&self, captured: &FullCaptured) -> Result<u64, JobError> {
+        Ok(image_groups(captured, self)?
+            .iter()
+            .map(|g| g.charge)
+            .max()
+            .unwrap_or(0)
+            .saturating_add(LOG_BUFFER_BYTES.saturating_mul(2)))
+    }
+    /// The plan without its coarse chains (the coarse stage then decodes its sources).
+    pub(crate) fn without_coarse(self) -> Self {
+        Self {
+            coarse: None,
+            ..self
+        }
+    }
+}
+
+/// One image's cut: its crops (a range of the sorted requests), its coarse chains and
+/// their memory.
+struct Group<'p> {
+    image: usize,
+    charge: u64,
+    crops: std::ops::Range<usize>,
+    coarse: Vec<(u8, &'p sparse::Marks)>,
+}
+
+/// Every image with crops or coarse tiles to cut, in image order.
+fn image_groups<'p>(
+    captured: &FullCaptured,
+    plan: &'p CropPlan,
+) -> Result<Vec<Group<'p>>, JobError> {
+    let requests = &plan.requests;
+    let coarse = plan.coarse.as_ref().map(|c| &c.needs.chains);
+    let mut images: Vec<u32> = requests.iter().map(|r| r.image).collect();
+    images.extend(coarse.into_iter().flat_map(|c| c.keys().map(|k| k.0)));
+    images.sort_unstable();
+    images.dedup();
+    let mut groups = Vec::with_capacity(images.len());
     let mut start = 0;
-    while start < requests.len() {
-        let image = requests[start].image;
+    for image in images {
         let end = start
             + requests[start..]
                 .iter()
@@ -309,26 +420,44 @@ fn image_groups(captured: &FullCaptured, requests: &[CropRequest]) -> Result<Vec
                 chains.push(r.class);
             }
         }
-        groups.push((
-            usize::try_from(image).map_err(|_| state("crop image index"))?,
-            image_charge(info, count(chains.len()), total, largest),
-            start..end,
-        ));
+        let marks: Vec<(u8, &sparse::Marks)> = coarse
+            .into_iter()
+            .flat_map(|c| c.range((image, 0)..=(image, u8::MAX)))
+            .map(|(k, m)| (k.1, m))
+            .collect();
+        let tiles = (!marks.is_empty()).then(|| {
+            marks
+                .iter()
+                .map(|(_, m)| m.marked().1)
+                .fold(0u64, u64::saturating_add)
+        });
+        groups.push(Group {
+            image: usize::try_from(image).map_err(|_| state("crop image index"))?,
+            charge: image_charge(info, count(chains.len()), total, largest, tiles),
+            crops: start..end,
+            coarse: marks,
+        });
         start = end;
+    }
+    if start != requests.len() {
+        return Err(state("crop requests are not sorted by image"));
     }
     Ok(groups)
 }
 
 /// Re-projects every leaf at its planned density (the layout final preparation builds) and
-/// collects its store crops. `memory` bounds what the pass holds: the request list (counted
+/// collects its store crops, and (with `coarse`) marks every chain tile a coarse sample can
+/// read ([`sparse::Needs`]). `memory` bounds what the pass holds: the request list (counted
 /// before deduplication, as it is held) beside one leaf's working set, `leaf_bytes` (its
 /// triangles and their layout). `None` when that would exceed `memory` (the stage then reads
-/// crops from the decoded sources, as without the store).
+/// crops from the decoded sources, as without the store); the plan has no coarse chains
+/// when their index would not fit beside the crops'.
 pub(crate) fn plan(
     captured: &FullCaptured,
     profile: crate::mesh_large::config::Profile,
     memory: u64,
     leaf_bytes: u64,
+    coarse: bool,
     progress: &crate::mesh_large::phases::StepProgress<'_>,
 ) -> Result<Option<CropPlan>, JobError> {
     let started = std::time::Instant::now();
@@ -342,6 +471,7 @@ pub(crate) fn plan(
         samplers: &captured.samplers,
         image_info: &captured.image_info,
     };
+    let mut needs = coarse.then(|| sparse::Needs::new(captured)).transpose()?;
     let mut triangles = captured.triangles.reader()?;
     let mut requests: Vec<CropRequest> = Vec::new();
     progress.begin(
@@ -360,12 +490,14 @@ pub(crate) fn plan(
             if i.is_multiple_of(4096) {
                 progress.check()?;
             }
-            leaf.push(
-                triangles
-                    .next()
-                    .transpose()?
-                    .ok_or_else(|| state("leaf triangles truncated"))?,
-            );
+            let triangle = triangles
+                .next()
+                .transpose()?
+                .ok_or_else(|| state("leaf triangles truncated"))?;
+            if let Some(needs) = &mut needs {
+                needs.mark(&captured.image_info, &triangle)?;
+            }
+            leaf.push(triangle);
         }
         let keys = super::atlas::crop_requests(
             leaf,
@@ -384,22 +516,31 @@ pub(crate) fn plan(
     progress.end()?;
     requests.sort_unstable();
     requests.dedup();
-    let groups = image_groups(captured, &requests)?;
     let scratch_bytes = requests
         .iter()
         .try_fold(0u64, |n, r| n.checked_add(r.raw_bytes()))
         .ok_or_else(|| state("crop scratch overflow"))?;
+    let index_bytes = count(requests.len()).saturating_mul(INDEX_BYTES_PER_CROP);
+    let coarse = needs
+        .map(|needs| CoarsePlan {
+            scratch_bytes: needs
+                .chains
+                .values()
+                .map(|m| m.marked().1)
+                .fold(0u64, u64::saturating_add),
+            index_bytes: needs.index_bytes(),
+            needs,
+        })
+        // No chain to cut (no triangle binds an image), or no room for their index.
+        .filter(|c| {
+            !c.needs.chains.is_empty() && index_bytes.saturating_add(c.index_bytes) <= memory
+        });
     Ok(Some(CropPlan {
         scratch_bytes,
-        index_bytes: count(requests.len()).saturating_mul(INDEX_BYTES_PER_CROP),
-        largest_image_bytes: groups
-            .iter()
-            .map(|g| g.1)
-            .max()
-            .unwrap_or(0)
-            .saturating_add(LOG_BUFFER_BYTES),
+        index_bytes,
         seconds: started.elapsed().as_secs_f64(),
         requests,
+        coarse,
     }))
 }
 
@@ -408,7 +549,7 @@ fn count(n: usize) -> u64 {
     u64::try_from(n).unwrap_or(u64::MAX)
 }
 
-/// The leaf log's write buffer, held through the build beside the image cuts.
+/// Each log's write buffer, held through the build beside the image cuts.
 pub(crate) const LOG_BUFFER_BYTES: u64 = 1 << 20;
 /// How long the build's caller waits for a finished image before its next heartbeat; well
 /// under [`crate::mesh_large::phases::STEP_HEARTBEAT`].
@@ -426,13 +567,20 @@ fn stopped_by_sibling() -> JobError {
     )
 }
 
-/// Cuts every crop of `plan` image by image on the caller's thread pool. Images go in
-/// fixed batches whose cuts together lease at most `memory` bytes less the log buffer (each
-/// at least one image, which the caller has checked fits), so output order and peak memory
-/// do not depend on the worker count. While a batch runs, the caller reports progress and
-/// keeps the step's heartbeat; the first image that fails stops the rest of its batch. Cuts
-/// take `page_memory`, the leaf stage's page workspace, as their memory limit, as pages
-/// cutting from decoded sources do. The log never grows past the plan's raw bytes.
+/// One image's cut: its crops' blocks and, per coarse class, its chain's tiles.
+type Cut = (
+    Vec<(CropRequest, codec::Encoded)>,
+    Vec<(u8, Vec<(usize, usize, codec::Encoded)>)>,
+);
+
+/// Cuts every crop and coarse tile of `plan` image by image on the caller's thread pool.
+/// Images go in fixed batches whose cuts together lease at most `memory` bytes less the
+/// logs' buffers (each at least one image, which the caller has checked fits), so output
+/// order and peak memory do not depend on the worker count. While a batch runs, the caller
+/// reports progress and keeps the step's heartbeat; the first image that fails stops the
+/// rest of its batch. Crop cuts take `page_memory`, the leaf stage's page workspace, as
+/// their memory limit, as pages cutting from decoded sources do. Neither log grows past
+/// its plan's raw bytes.
 pub(crate) fn build(
     captured: &FullCaptured,
     plan: CropPlan,
@@ -441,19 +589,32 @@ pub(crate) fn build(
     pool: &rayon::ThreadPool,
     progress: &crate::mesh_large::phases::StepProgress<'_>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
-) -> Result<CropStore, JobError> {
+) -> Result<(CropStore, Option<sparse::Chains>), JobError> {
     let started = std::time::Instant::now();
-    let groups = image_groups(captured, &plan.requests)?;
-    let memory = memory.saturating_sub(LOG_BUFFER_BYTES);
-    if groups.iter().any(|g| g.1 > memory) {
+    let groups = image_groups(captured, &plan)?;
+    let memory = memory.saturating_sub(LOG_BUFFER_BYTES.saturating_mul(2));
+    if groups.iter().any(|g| g.charge > memory) {
         return Err(JobError::new(
             JobErrorKind::ResourceLimit,
             "leaf crop store: one source image's cut exceeds its memory",
         ));
     }
+    let refused = || {
+        JobError::new(
+            JobErrorKind::ResourceLimit,
+            "leaf crop store exceeded its admitted scratch",
+        )
+    };
     let buffer = usize::try_from(LOG_BUFFER_BYTES).map_err(|_| state("log buffer"))?;
     let mut writer = crate::spill::ByteWriter::new(&captured.scratch, "leaf-crops", buffer)?;
+    let mut coarse_writer = plan
+        .coarse
+        .as_ref()
+        .map(|_| crate::spill::ByteWriter::new(&captured.scratch, "coarse-tiles", buffer))
+        .transpose()?;
     let mut index = BTreeMap::new();
+    let mut chains: BTreeMap<(u32, u8), sparse::Chain> = BTreeMap::new();
+    let mut coarse_tiles = 0u64;
     let mut peak = 0u64;
     progress.begin(
         crate::mesh_large::phases::Step::LeafCropStore,
@@ -464,8 +625,8 @@ pub(crate) fn build(
         // The next batch: images in order while their cuts fit `memory` together.
         let mut end = done;
         let mut leased = 0u64;
-        while end < groups.len() && (end == done || leased + groups[end].1 <= memory) {
-            leased += groups[end].1;
+        while end < groups.len() && (end == done || leased + groups[end].charge <= memory) {
+            leased += groups[end].charge;
             end += 1;
         }
         peak = peak.max(leased);
@@ -477,14 +638,11 @@ pub(crate) fn build(
             (pool, progress, done),
             check,
         )?;
-        for blocks in cuts {
-            for (key, block) in blocks {
+        for (group, (crops, coarse)) in groups[done..end].iter().zip(cuts) {
+            for (key, block) in crops {
                 let offset = writer.len();
                 if offset.saturating_add(count(block.bytes.len())) > plan.scratch_bytes {
-                    return Err(JobError::new(
-                        JobErrorKind::ResourceLimit,
-                        "leaf crop store exceeded its admitted scratch",
-                    ));
+                    return Err(refused());
                 }
                 writer.append(&block.bytes)?;
                 index.insert(
@@ -497,6 +655,36 @@ pub(crate) fn build(
                     },
                 );
             }
+            let (Some(log), Some(bound)) = (
+                coarse_writer.as_mut(),
+                plan.coarse.as_ref().map(|c| c.scratch_bytes),
+            ) else {
+                continue;
+            };
+            for ((class, tiles), (_, marks)) in coarse.into_iter().zip(&group.coarse) {
+                let mut chain = sparse::Chain::new(marks);
+                for (level, tile, block) in tiles {
+                    let offset = log.len();
+                    if offset.saturating_add(count(block.bytes.len())) > bound {
+                        return Err(refused());
+                    }
+                    log.append(&block.bytes)?;
+                    coarse_tiles += 1;
+                    let slot = chain
+                        .levels
+                        .get_mut(level)
+                        .and_then(|l| l.1.get_mut(tile))
+                        .ok_or_else(|| state("coarse tile outside its chain"))?;
+                    *slot = Some(sparse::Entry {
+                        offset,
+                        len: u32::try_from(block.bytes.len())
+                            .map_err(|_| state("coarse tile block size"))?,
+                        stored: block.stored,
+                    });
+                }
+                let image = u32::try_from(group.image).map_err(|_| state("crop image index"))?;
+                chains.insert((image, class), chain);
+            }
         }
         done = end;
         progress.advance(count(done))?;
@@ -504,27 +692,45 @@ pub(crate) fn build(
     progress.end()?;
     let written = writer.len();
     let log = writer.finish()?;
-    Ok(CropStore {
-        stats: CropStoreStats {
-            crops: count(index.len()),
-            images: count(groups.len()),
-            raw_bytes: plan.scratch_bytes,
-            written_bytes: written,
-            memory_bytes: memory,
-            memory_peak_bytes: peak,
-            index_bytes: plan.index_bytes,
-            plan_seconds: plan.seconds,
-            build_seconds: started.elapsed().as_secs_f64(),
-            misses: 0,
+    let coarse_written = coarse_writer.as_ref().map_or(0, |w| w.len());
+    let coarse = plan.coarse.as_ref();
+    let stats = CropStoreStats {
+        crops: count(index.len()),
+        images: count(groups.len()),
+        raw_bytes: plan.scratch_bytes,
+        written_bytes: written,
+        memory_bytes: memory,
+        memory_peak_bytes: peak,
+        index_bytes: plan.index_bytes,
+        plan_seconds: plan.seconds,
+        build_seconds: started.elapsed().as_secs_f64(),
+        misses: 0,
+        coarse_chains: count(chains.len()),
+        coarse_tiles,
+        coarse_chain_tiles: coarse.map_or(0, |c| c.needs.chains.values().map(|m| m.tiles()).sum()),
+        coarse_raw_bytes: coarse.map_or(0, |c| c.scratch_bytes),
+        coarse_written_bytes: coarse_written,
+        coarse_index_bytes: coarse.map_or(0, |c| c.index_bytes),
+    };
+    let coarse = coarse_writer
+        .map(|w| -> Result<sparse::Chains, JobError> {
+            Ok(sparse::Chains {
+                log: w.finish()?,
+                chains,
+                decodes: Default::default(),
+            })
+        })
+        .transpose()?;
+    Ok((
+        CropStore {
+            stats,
+            log,
+            index,
+            misses: AtomicU64::new(0),
         },
-        log,
-        index,
-        misses: AtomicU64::new(0),
-    })
+        coarse,
+    ))
 }
-
-type Group = (usize, u64, std::ops::Range<usize>);
-type Blocks = Vec<(CropRequest, codec::Encoded)>;
 
 /// One batch's cuts, in image order, run on `pool` while the caller (`progress`, at step
 /// count `done` before the batch) reports each finished image and keeps the heartbeat.
@@ -532,7 +738,7 @@ type Blocks = Vec<(CropRequest, codec::Encoded)>;
 /// error returned is the caller's, else the first real failure in image order.
 fn cut_batch(
     captured: &FullCaptured,
-    batch: &[Group],
+    batch: &[Group<'_>],
     requests: &[CropRequest],
     page_memory: u64,
     (pool, progress, done): (
@@ -541,9 +747,9 @@ fn cut_batch(
         usize,
     ),
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
-) -> Result<Vec<Blocks>, JobError> {
+) -> Result<Vec<Cut>, JobError> {
     use std::sync::atomic::AtomicBool;
-    let results: Vec<std::sync::Mutex<Option<Result<Blocks, JobError>>>> =
+    let results: Vec<std::sync::Mutex<Option<Result<Cut, JobError>>>> =
         batch.iter().map(|_| std::sync::Mutex::new(None)).collect();
     let stop = AtomicBool::new(false);
     let finished = (std::sync::Mutex::new(0usize), std::sync::Condvar::new());
@@ -556,14 +762,14 @@ fn cut_batch(
     };
     let mut caller_error = None;
     pool.in_place_scope(|scope| {
-        for ((image, _, range), slot) in batch.iter().zip(&results) {
+        for (group, slot) in batch.iter().zip(&results) {
             let (cut_check, stop, finished) = (&cut_check, &stop, &finished);
             scope.spawn(move |_| {
                 let result = cut_image(
                     captured,
-                    *image,
+                    group,
                     page_memory,
-                    &requests[range.clone()],
+                    &requests[group.crops.clone()],
                     cut_check,
                 );
                 if result.is_err() {
@@ -592,7 +798,7 @@ fn cut_batch(
     if let Some(error) = caller_error {
         return Err(error);
     }
-    let results: Vec<Result<Blocks, JobError>> = results
+    let results: Vec<Result<Cut, JobError>> = results
         .into_iter()
         .map(|slot| {
             slot.into_inner()
@@ -611,15 +817,17 @@ fn cut_batch(
 }
 
 /// Decodes one source image once and cuts each of its crops (at its density level, with
-/// its wrap) exactly as [`crops::copy_crop_tiled`] would from the decoded source.
+/// its wrap) exactly as [`crops::copy_crop_tiled`] would from the decoded source, then the
+/// marked tiles of each coarse chain built from it ([`sparse::cut`]).
 fn cut_image(
     captured: &FullCaptured,
-    image: usize,
+    group: &Group<'_>,
     page_memory: u64,
     requests: &[CropRequest],
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
-) -> Result<Blocks, JobError> {
+) -> Result<Cut, JobError> {
     check()?;
+    let image = group.image;
     let info = captured
         .image_info
         .get(image)
@@ -686,10 +894,28 @@ fn cut_image(
             usize::try_from(r.width).map_err(|_| state("crop width"))?,
             usize::try_from(r.height).map_err(|_| state("crop height"))?,
         );
-        let block = codec::encode(&predict(&cut, cw, ch), &mut scratch);
-        out.push((*r, block));
+        out.push((*r, pack(&cut, cw, ch, &mut scratch)));
     }
-    Ok(out)
+    // The leaf density chains are done; the coarse chains are built one at a time, the
+    // last from the decoded image itself.
+    drop(levels);
+    let mut coarse = Vec::with_capacity(group.coarse.len());
+    let mut source = Some(rgba);
+    for (k, &(class, marks)) in group.coarse.iter().enumerate() {
+        let rgba = if k + 1 == group.coarse.len() {
+            source.take()
+        } else {
+            source.clone()
+        }
+        .ok_or_else(|| state("coarse chain source"))?;
+        let level0 = mips::Level {
+            width: info.width,
+            height: info.height,
+            rgba,
+        };
+        coarse.push((class, sparse::cut(level0, class_of(class)?, marks, check)?));
+    }
+    Ok((out, coarse))
 }
 
 #[cfg(test)]
