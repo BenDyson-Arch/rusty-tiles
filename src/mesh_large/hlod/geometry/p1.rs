@@ -74,7 +74,9 @@ fn fits(vertices: usize, faces: usize, rows: usize) -> bool {
 /// estimate exceeds the job's charge). Per pass (stage 0, 1): work units spent, removals
 /// left and Steiner rescues made and refused (`collapse::Stats::steiner_why`), the work spent
 /// rescuing and in Steiner rescues, the main loop's work by site (`siteWork`,
-/// `collapse::SiteWork`) and its refused checks by reason (`refusedBy`, `collapse::Stats::why`).
+/// `collapse::SiteWork`) and its refused checks by reason (`refusedBy`, `collapse::Stats::why`),
+/// and the faces of a proposal the contraction fold guard refused, by rule (`guardRefused`,
+/// in `folds::Refusal` order) and how many of them have a Steiner corner (`guardSteiner`).
 #[derive(Clone, Copy, Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct Report {
@@ -95,6 +97,8 @@ pub(crate) struct Report {
     /// test that refused, so a high-valence vertex's sampled faces can shift a refusal to
     /// another reason than a full scan would report; the totals are those of the decisions.
     pub refused_by: [[u64; 13]; 2],
+    pub guard_refused: [[u64; 6]; 2],
+    pub guard_steiner: [u64; 2],
 }
 
 impl Report {
@@ -135,6 +139,8 @@ impl Report {
             steiner_work: [0; 2],
             site_work: [collapse::SiteWork::default(); 2],
             refused_by: [[0; 13]; 2],
+            guard_refused: [[0; 6]; 2],
+            guard_steiner: [0; 2],
         }
     }
 
@@ -281,6 +287,8 @@ pub(super) fn attempt(
     let points = interface_points(interface);
     // Merged vertices; Steiner vertices follow them.
     let inputs = m.positions.len();
+    // The fold guard's refusals of the last proposal `publishable` assessed.
+    let guard_seen: RefCell<Option<([u64; 6], u64)>> = RefCell::new(None);
     // `faces` over `m` (the merged children with any Steiner vertices) as a proposal, if it
     // keeps every contract segment and point, passes the contraction fold guard under
     // `policy` and changes topology only within `floor`.
@@ -302,7 +310,16 @@ pub(super) fn attempt(
             mapped,
         )
         .with_policy(policy);
-        if guard.violations(&m.positions, faces).contains(&true) {
+        let refusals = guard.refusals(&m.positions, faces);
+        if refusals.iter().any(|&r| r != 0) {
+            let mut seen = ([0u64; 6], 0u64);
+            for (t, &r) in faces.iter().zip(&refusals) {
+                if r != 0 {
+                    seen.0[usize::from(r - 1)] += 1;
+                    seen.1 += u64::from(t.iter().any(|&v| v as usize >= inputs));
+                }
+            }
+            *guard_seen.borrow_mut() = Some(seen);
             return None;
         }
         let change = topology::changes_noting(m, faces, interface, floor, &mut false)?;
@@ -409,6 +426,10 @@ pub(super) fn attempt(
         };
         if let Some(built) = publishable(&with_added, &faces, &mapped, stage_policy) {
             return Ok((Some((stage, built)), report));
+        }
+        if let Some((rules, steiner)) = guard_seen.borrow_mut().take() {
+            report.guard_refused[usize::from(stage)] = rules;
+            report.guard_steiner[usize::from(stage)] = steiner;
         }
     }
     Ok((None, report))

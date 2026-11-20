@@ -106,6 +106,32 @@ impl Policy {
     }
 }
 
+/// Why the guard refuses a face (`Source::refusals`), by the rule that first marks it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub(crate) enum Refusal {
+    /// The source holds the face only the other way round.
+    Reversed = 1,
+    /// A new face on three shared points outside its seam owner.
+    SharedFace = 2,
+    /// A new face with a zero normal.
+    ZeroArea = 3,
+    /// More faces on one corner set, in a direction, than the source holds.
+    Coincident = 4,
+    /// An edge between two shared points used more often, in a direction, than the
+    /// source (or the contracted chord's licence) holds.
+    SharedEdge = 5,
+    /// Two or more faces use an edge in one direction without the source's licence.
+    Book = 6,
+}
+
+/// Keep a face's first refusal.
+fn mark(slot: &mut u8, why: Refusal) {
+    if *slot == 0 {
+        *slot = why as u8;
+    }
+}
+
 impl Source {
     pub(crate) fn new(positions: &[[f32; 3]], triangles: &[[u32; 3]]) -> Self {
         let _cpu = super::super::cpu_profile::start(
@@ -196,12 +222,12 @@ impl Source {
         positions: &[[f32; 3]],
         triangles: &[[u32; 3]],
         canonical: &[[u32; 3]],
-    ) -> (Vec<bool>, Vec<bool>) {
+    ) -> (Vec<u8>, Vec<bool>) {
         let _cpu = super::super::cpu_profile::start(
             super::super::cpu_profile::Stage::Faces,
             triangles.len(),
         );
-        let mut invalid = vec![false; triangles.len()];
+        let mut invalid = vec![0u8; triangles.len()];
         let mut original = vec![false; triangles.len()];
         let mut faces = Vec::with_capacity(triangles.len());
         for (i, (t, ids)) in triangles.iter().zip(canonical).enumerate() {
@@ -210,17 +236,25 @@ impl Source {
             // A source face license is independent of proposal validity below.
             original[i] = source[d] != 0;
             // Reject the old orient() repair rather than flipping or removing a face.
-            invalid[i] = (source[d] == 0 && source[1 - d] != 0 && !self.policy.folds)
+            invalid[i] = if source[d] == 0 && source[1 - d] != 0 && !self.policy.folds {
+                Refusal::Reversed as u8
+            } else if source == [0, 0]
                 // Two disjoint children can independently close the same three
                 // shared points into opposite faces. Their union would license
                 // a new twin as "input". Retain the local source strip instead.
-                || (source == [0, 0]
-                    && f.iter().all(|p| self.boundary.contains(p))
-                    && !self.policy.owns_face(f))
-                || (source == [0, 0]
-                    && super::topology::normal(positions, *t)
-                        .iter()
-                        .all(|&n| n == 0.));
+                && f.iter().all(|p| self.boundary.contains(p))
+                && !self.policy.owns_face(f)
+            {
+                Refusal::SharedFace as u8
+            } else if source == [0, 0]
+                && super::topology::normal(positions, *t)
+                    .iter()
+                    .all(|&n| n == 0.)
+            {
+                Refusal::ZeroArea as u8
+            } else {
+                0
+            };
             let mut group = *ids;
             group.sort_unstable();
             faces.push((group, d as u8, i as u32));
@@ -240,7 +274,7 @@ impl Source {
                 let source = self.faces.get(&f).copied().unwrap_or_default();
                 if counts[0] > source[0] || counts[1] > source[1] {
                     for &(_, _, i) in &faces[at..end] {
-                        invalid[i as usize] = true;
+                        mark(&mut invalid[i as usize], Refusal::Coincident);
                     }
                 }
             }
@@ -281,7 +315,13 @@ impl Source {
     /// Any face rejected; no vertex-sized work.
     pub(super) fn rejects(&self, positions: &[[f32; 3]], triangles: &[[u32; 3]]) -> bool {
         self.rejected_faces(positions, triangles, false)
-            .contains(&true)
+            .iter()
+            .any(|&r| r != 0)
+    }
+
+    /// Each face's first refusal (`Refusal` as u8, 0 when admitted), as `violations` decides.
+    pub(crate) fn refusals(&self, positions: &[[f32; 3]], triangles: &[[u32; 3]]) -> Vec<u8> {
+        self.rejected_faces(positions, triangles, false)
     }
 
     fn check(
@@ -295,7 +335,7 @@ impl Source {
         VERTEX_FLAGS.with(|n| n.set(n.get() + positions.len()));
         let mut vertices = vec![false; positions.len()];
         for (t, invalid) in triangles.iter().zip(invalid) {
-            if invalid {
+            if invalid != 0 {
                 for &v in t {
                     vertices[v as usize] = true;
                 }
@@ -309,7 +349,7 @@ impl Source {
         positions: &[[f32; 3]],
         triangles: &[[u32; 3]],
         changed_boundary: bool,
-    ) -> Vec<bool> {
+    ) -> Vec<u8> {
         let incidence_cpu = super::super::cpu_profile::start(
             super::super::cpu_profile::Stage::Incidence,
             triangles.len(),
@@ -406,8 +446,13 @@ impl Source {
                 })
             };
             if unsupported {
+                let why = if boundary {
+                    Refusal::SharedEdge
+                } else {
+                    Refusal::Book
+                };
                 for &(_, (i, _, _)) in &edges[at..end] {
-                    invalid[i] = true;
+                    mark(&mut invalid[i], why);
                 }
             }
             at = end;
