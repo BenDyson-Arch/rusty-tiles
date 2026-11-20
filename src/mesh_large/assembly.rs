@@ -356,7 +356,7 @@ impl Record for DecodedVertex {
     fn decode_in(layout: Layout, bytes: &[u8]) -> Self {
         Self {
             position: std::array::from_fn(|a| {
-                f32::from_le_bytes(bytes[4 * a..4 * a + 4].try_into().unwrap())
+                f32::from_le_bytes(crate::spill::field(bytes, 4 * a))
             }),
             attributes: CornerAttributes::decode(layout, &bytes[12..]),
         }
@@ -965,8 +965,8 @@ impl Record for CornerVertex {
     }
     fn decode(bytes: &[u8]) -> Self {
         Self {
-            vertex: u64::from_le_bytes(bytes[..8].try_into().unwrap()),
-            triangle: u64::from_le_bytes(bytes[8..16].try_into().unwrap()),
+            vertex: u64::from_le_bytes(crate::spill::field(bytes, 0)),
+            triangle: u64::from_le_bytes(crate::spill::field(bytes, 8)),
             corner: bytes[16],
         }
     }
@@ -1013,7 +1013,7 @@ impl Record for PlacedCorner {
     }
     fn decode_in(layout: Layout, bytes: &[u8]) -> Self {
         Self {
-            triangle: u64::from_le_bytes(bytes[..8].try_into().unwrap()),
+            triangle: u64::from_le_bytes(crate::spill::field(bytes, 0)),
             corner: bytes[8],
             vertex: DecodedVertex::decode_in(layout, &bytes[9..]),
         }
@@ -1229,8 +1229,8 @@ type SortKey = (u64, u32, u32, u32, u64, u64);
 /// Sort key of an encoded record: Morton key, provenance, expanded ordinal
 /// ([`FullTriangle`]'s order).
 fn sort_key(bytes: &[u8]) -> SortKey {
-    let u64_at = |at: usize| u64::from_le_bytes(bytes[at..at + 8].try_into().unwrap());
-    let u32_at = |at: usize| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
+    let u64_at = |at: usize| u64::from_le_bytes(crate::spill::field(bytes, at));
+    let u32_at = |at: usize| u32::from_le_bytes(crate::spill::field(bytes, at));
     (
         u64_at(0),
         u32_at(8),
@@ -1309,10 +1309,10 @@ impl Record for StagedRun {
         out[24] = u8::from(self.stored);
     }
     fn decode(bytes: &[u8]) -> Self {
-        let u32_at = |at: usize| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
+        let u32_at = |at: usize| u32::from_le_bytes(crate::spill::field(bytes, at));
         Self {
             bucket: u32_at(0),
-            offset: u64::from_le_bytes(bytes[4..12].try_into().unwrap()),
+            offset: u64::from_le_bytes(crate::spill::field(bytes, 4)),
             group: u32_at(12),
             stored_bytes: u32_at(16),
             records: u32_at(20),

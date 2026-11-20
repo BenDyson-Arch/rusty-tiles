@@ -1071,6 +1071,9 @@ pub(crate) fn produce(
         diagnostics.incidence_scratch.walk,
         &admit,
     );
+    let border_check = || check();
+    let border_progress =
+        StepProgress::new(&border_check, input.phases.emitter()).merging_as(Step::BordersMerge);
     // The borders admit their own scratch: the build, then once the graph is built,
     // everything they will hold through the walk (`Borders::build`).
     let (borders, border_lease) = borders::Borders::build(
@@ -1084,6 +1087,7 @@ pub(crate) fn produce(
             &captured.corner_depths,
             &captured.lattice,
         )?,
+        captured.triangles.len(),
         (
             captured.tree.stats.per_depth[0].maximum_extent,
             settings.mutation.relief_cap(settings.cap),
@@ -1097,7 +1101,7 @@ pub(crate) fn produce(
             },
         ),
         &ledger,
-        check,
+        &border_progress,
     )?;
     drop(source_open_ends);
     report.borders_by_depth = (0..captured.tree.stats.height)
