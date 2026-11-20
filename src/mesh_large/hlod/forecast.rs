@@ -34,7 +34,7 @@ use crate::{
     mesh_large::{
         config::TreeConfig,
         full::FullCaptured,
-        phases::StepProgress,
+        phases::{Step, StepProgress},
         records::{Bounds, NodeKind, NodeRecord},
     },
     JobError, JobErrorKind,
@@ -143,11 +143,12 @@ pub(crate) struct CellForecast {
 #[derive(Clone)]
 struct Handed {
     coarse: bool,
-    /// The contract points of the tiles it hands up, sorted and distinct: its own contract's
-    /// when it publishes, or the union of its frontier tiles' when it is omitted with a
-    /// bounded frontier (what a recovered root merges). Points of a contract past the limit
-    /// are not listed; `unlisted` counts their linked items instead.
-    keys: Vec<interfaces::Key>,
+    /// The contract points of the tiles it hands up, as sorted, distinct source vertex ids
+    /// (one per point key): its own contract's when it publishes, or the union of its
+    /// frontier tiles' when it is omitted with a bounded frontier (what a recovered root
+    /// merges). Points of a contract past the limit are not listed; `unlisted` counts their
+    /// linked items instead.
+    keys: Vec<u64>,
     unlisted: u64,
     /// Its own contract's points (or linked items past the limit), as reported.
     points: u64,
@@ -167,6 +168,8 @@ struct Frame {
     children: Vec<Handed>,
     /// Its children's points were dropped (`drop_unbounded`).
     unbounded: bool,
+    /// Its own contract, read when it opens (`None` past the limit).
+    contract: Option<borders::ContractCounts>,
     area: f64,
     open: [u64; DEPTHS],
     length: [f64; DEPTHS],
@@ -195,6 +198,7 @@ pub(crate) fn memory_need(captured: &FullCaptured, config: &TreeConfig, cap: usi
         1,
     )
     .max(borders::memory_need(sorter))
+    .max(borders::listed_items_memory(sorter))
     .saturating_add(borders::WALK_CACHE_BYTES)
     .saturating_add(
         borders::contract_workspace_bytes((cap as u64).saturating_mul(6)).saturating_mul(2),
@@ -207,12 +211,13 @@ pub(crate) fn memory_need(captured: &FullCaptured, config: &TreeConfig, cap: usi
             .internal
             .saturating_mul(std::mem::size_of::<CellForecast>() as u64),
     )
-    // An open frame holds at most `2 × INPUTS` tiles' points: keys are dropped once its
-    // children's frontier passes `INPUTS` tiles beside an omission (`drop_unbounded`).
+    // An open frame holds its own contract's points and at most `2 × INPUTS` tiles'
+    // points: keys are dropped once its children's frontier passes `INPUTS` tiles beside an
+    // omission (`drop_unbounded`).
     .saturating_add(u64::from(captured.tree.stats.height).saturating_mul(
         std::mem::size_of::<Frame>() as u64
             + 8 * std::mem::size_of::<Handed>() as u64
-            + 2 * recovery::INPUTS as u64 * child_key_bytes(cap),
+            + (2 * recovery::INPUTS as u64 + 1) * child_key_bytes(cap),
     ))
     // One parent's union of its children's points.
     .saturating_add(2 * recovery::INPUTS as u64 * child_key_bytes(cap))
@@ -223,36 +228,47 @@ pub(crate) fn memory_need(captured: &FullCaptured, config: &TreeConfig, cap: usi
 fn child_key_bytes(cap: usize) -> u64 {
     (cap as u64)
         .saturating_mul(12)
-        .saturating_mul(std::mem::size_of::<interfaces::Key>() as u64)
+        .saturating_mul(std::mem::size_of::<u64>() as u64)
 }
 
 /// Worst-case scratch of the forecast stage, for a memory-backed scratch charge: the
-/// incidence pass's worst case beside the border build's.
+/// incidence pass's worst case beside the border build's and its contract item sort (at
+/// most one linked item per incidence row and depth, as `borders::scratch_need` bounds the
+/// references).
 pub(crate) fn scratch_need(captured: &FullCaptured, config: &TreeConfig) -> Option<u64> {
     let n = captured.triangles.len();
     let sorter = config.sorter(1);
-    interfaces::memory_backed_need(n, sorter)?.checked_add(borders::scratch_need(
-        n.checked_mul(6)?,
-        n.checked_mul(3)?,
-        n.checked_mul(3)?,
-        captured.tree.stats.nodes,
-        captured.tree.stats.leaves,
-        captured.tree.stats.height.saturating_sub(1),
-        sorter,
-    )?)
+    let height = captured.tree.stats.height.saturating_sub(1);
+    interfaces::memory_backed_need(n, sorter)?
+        .checked_add(borders::scratch_need(
+            n.checked_mul(6)?,
+            n.checked_mul(3)?,
+            n.checked_mul(3)?,
+            captured.tree.stats.nodes,
+            captured.tree.stats.leaves,
+            height,
+            sorter,
+        )?)?
+        .checked_add(borders::listed_items_scratch(
+            n.checked_mul(6)?.checked_mul(u64::from(height) + 1)?,
+            sorter,
+        )?)
 }
 
 /// Run the bake's incidence pass and border contracts over `captured`, then forecast every
 /// coarse cell. `charged` is the memory charged for memory-backed scratch (0 on disk).
+/// `walk_progress` reports the contract gather and the walk (and their sort's merge
+/// passes); the incidence and border steps report alongside it.
 pub(crate) fn forecast(
     captured: &FullCaptured,
     config: &TreeConfig,
     settings: &Settings,
     leaves: &[LeafFacts],
     charged: u64,
-    progress: &StepProgress<'_>,
-    check: &(dyn Fn() -> Result<(), JobError> + Sync),
+    walk_progress: &StepProgress<'_>,
 ) -> Result<Forecast, JobError> {
+    let progress = walk_progress.alongside(Step::IncidenceMerge);
+    let borders_progress = walk_progress.alongside(Step::BordersMerge);
     let cap = settings.cap;
     if leaves.len() as u64 != captured.tree.stats.leaves {
         return Err(state("leaf facts differ from the tree's leaves"));
@@ -278,7 +294,7 @@ pub(crate) fn forecast(
         // One item worker, as `memory_need` charges.
         1,
         &admit,
-        progress,
+        &progress,
     )?;
     let incidence_scratch_peak_bytes = captured.scratch.stage_peak_bytes();
     if incidence_scratch_peak_bytes > stats.scratch.declared() {
@@ -330,14 +346,40 @@ pub(crate) fn forecast(
             &captured.corner_depths,
             &captured.lattice,
         )?,
+        stats.rows,
+        captured.triangles.len(),
         captured.tree.stats.per_depth[0].maximum_extent,
         settings.mutation.relief_cap(cap),
         &border_lease,
-        check,
+        &borders_progress,
     )?;
     drop(source_open_ends);
-    let cells = walk(captured, &borders, settings, leaves, check)?;
+    // Every contract the walk reads, gathered in one pass and sorted by node.
+    let items = borders.listed_item_count(6 * cap)?;
+    let items_lease = ledger.admit(
+        "inspect-contract-items",
+        borders::listed_items_scratch(items, sorter).ok_or_else(|| {
+            JobError::new(
+                JobErrorKind::ResourceLimit,
+                "contract item scratch bound overflows",
+            )
+        })?,
+    )?;
+    walk_progress.begin(Step::InspectContracts, items)?;
+    let mut listed = borders.listed_items(&captured.scratch, sorter, 6 * cap, walk_progress)?;
+    walk_progress.end()?;
     ledger.check()?;
+    let cells = walk(
+        captured,
+        &borders,
+        &mut listed,
+        settings,
+        leaves,
+        walk_progress,
+    )?;
+    ledger.check()?;
+    drop(listed);
+    drop(items_lease);
     drop(borders);
     drop(border_lease);
     Ok(Forecast {
@@ -348,24 +390,11 @@ pub(crate) fn forecast(
     })
 }
 
-/// The points of a contract: sorted and distinct (the rows are merged per item).
-fn point_keys(contract: &borders::Contract) -> Vec<interfaces::Key> {
-    let mut keys: Vec<_> = contract
-        .interface
-        .iter()
-        .filter(|r| r.is_vertex())
-        .map(|r| r.a)
-        .collect();
-    keys.sort_unstable();
-    keys.dedup();
-    keys
-}
-
 /// The border points a parent's merged input holds: the distinct union of the contract
 /// points of the tiles its children hand up (a point on a face between two tiles is in
 /// both), and the linked items of contracts past the limit.
-fn union_points(children: &[Handed]) -> (Vec<interfaces::Key>, u64) {
-    let mut keys: Vec<interfaces::Key> = children
+fn union_points(children: &[Handed]) -> (Vec<u64>, u64) {
+    let mut keys: Vec<u64> = children
         .iter()
         .flat_map(|c| c.keys.iter().copied())
         .collect();
@@ -407,11 +436,13 @@ fn drop_unbounded(frame: &mut Frame) {
 fn walk(
     captured: &FullCaptured,
     borders: &Borders,
+    listed: &mut borders::ListedItems<'_>,
     settings: &Settings,
     leaves: &[LeafFacts],
-    check: &(dyn Fn() -> Result<(), JobError> + Sync),
+    progress: &StepProgress<'_>,
 ) -> Result<Vec<CellForecast>, JobError> {
     let cap = settings.cap;
+    progress.begin(Step::InspectForecast, captured.tree.stats.nodes)?;
     let mut cells: Vec<CellForecast> = Vec::new();
     cells
         .try_reserve_exact(usize::try_from(captured.tree.stats.internal).unwrap_or(usize::MAX))
@@ -483,18 +514,15 @@ fn walk(
                 ..only
             }
         } else {
-            let contract = borders.contract(key, 6 * cap)?;
+            let contract = frame.contract.take();
             let items = borders.contract_items(key)?;
             let (points, segments, minimum, locks) = match &contract {
-                Some(c) => {
-                    let points = c.interface.iter().filter(|r| r.is_vertex()).count() as u64;
-                    (
-                        Some(points),
-                        Some(c.interface.len() as u64 - points),
-                        c.minimum_triangles() as u64,
-                        c.terminal_locks(),
-                    )
-                }
+                Some(c) => (
+                    Some(c.points.len() as u64),
+                    Some(c.segments),
+                    c.minimum_triangles(),
+                    c.terminal_locks,
+                ),
                 None => (None, None, u64::MAX, 0),
             };
             // The tiles the build merges: its children's, or for a recovered root the
@@ -568,9 +596,9 @@ fn walk(
                 outcome,
             });
             let omitted = outcome.omitted();
-            let (keys, unlisted) = match (omitted, frontier, &contract) {
+            let (keys, unlisted) = match (omitted, frontier, contract) {
                 // Built: its own tile's contract.
-                (false, _, Some(c)) => (point_keys(c), 0),
+                (false, _, Some(c)) => (c.points, 0),
                 (false, _, None) => (Vec::new(), items),
                 // Omitted with a bounded frontier: the frontier tiles' points.
                 (true, Some(_), _) => (union, unlisted),
@@ -598,22 +626,38 @@ fn walk(
         }
         Ok(())
     };
-    for node in captured.tree.nodes.reader()? {
+    for (done, node) in captured.tree.nodes.reader()?.enumerate() {
         let node = node?;
-        check()?;
+        progress.advance(done as u64)?;
         while stack.last().is_some_and(|f| f.node.end <= node.first) {
             close(&mut stack, &mut cells, leaf)?;
         }
         if let Some(parent) = stack.last_mut() {
             parent.started += 1;
         }
+        let key = TileKey {
+            first: node.first,
+            end: node.end,
+            depth: node.depth(),
+            leaf_begin: leaf,
+            leaf_end: leaf + 1,
+        };
+        // Contract items are taken in node order, so a cell reads its own as it opens.
+        let items = match borders.contract_items(key)? {
+            n if n > (6 * cap) as u64 => None,
+            _ => Some(listed.take(borders.node_id(key)?)?),
+        };
         if node.kind == NodeKind::Internal {
+            let contract = items
+                .map(|items| borders.contract_counts(node.depth(), &items))
+                .transpose()?;
             stack.push(Frame {
                 node,
                 leaf_begin: leaf,
                 started: 0,
                 children: Vec::with_capacity(8),
                 unbounded: false,
+                contract,
                 area: 0.,
                 open: [0; DEPTHS],
                 length: [0.; DEPTHS],
@@ -623,16 +667,9 @@ fn walk(
         let facts = leaves
             .get(leaf as usize)
             .ok_or_else(|| state("a leaf without its facts"))?;
-        let key = TileKey {
-            first: node.first,
-            end: node.end,
-            depth: node.depth(),
-            leaf_begin: leaf,
-            leaf_end: leaf + 1,
-        };
-        let (keys, unlisted, points) = match borders.contract(key, 6 * cap)? {
-            Some(c) => {
-                let keys = point_keys(&c);
+        let (keys, unlisted, points) = match items {
+            Some(items) => {
+                let keys = Borders::contract_points(&items);
                 let n = keys.len() as u64;
                 (keys, 0, n)
             }
@@ -670,6 +707,7 @@ fn walk(
     if leaf as usize != leaves.len() {
         return Err(state("the forecast walk did not visit every leaf"));
     }
+    progress.end()?;
     Ok(cells)
 }
 
@@ -769,7 +807,7 @@ mod tests {
     fn handed(keys: &[u32], omitted: bool, tiles: Option<u32>) -> Handed {
         Handed {
             coarse: true,
-            keys: keys.iter().map(|&k| [k, 0, 0]).collect(),
+            keys: keys.iter().map(|&k| u64::from(k)).collect(),
             unlisted: 0,
             points: keys.len() as u64,
             omitted,
@@ -821,6 +859,7 @@ mod tests {
             started: children.len(),
             children,
             unbounded: false,
+            contract: None,
             area: 0.,
             open: [0; DEPTHS],
             length: [0.; DEPTHS],

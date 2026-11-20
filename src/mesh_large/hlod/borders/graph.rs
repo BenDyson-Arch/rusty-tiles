@@ -11,6 +11,7 @@ use crate::{
             interfaces::{InterfaceRow, Key},
             store::TileKey,
         },
+        phases::{Step, StepProgress},
         records::{NodeKind, NodeRecord},
     },
     spill::{ExternalSorter, Scratch, Sequence, SequenceWriter, SortConfig},
@@ -133,15 +134,19 @@ impl Source {
             Item = Result<super::super::interfaces::KeyRecord, crate::spill::SpillError>,
         >,
         admitted: &dyn Fn() -> Result<(), JobError>,
-        check: &(dyn Fn() -> Result<(), JobError> + Sync),
+        progress: &StepProgress<'_>,
     ) -> Result<Self, JobError> {
+        let check = || progress.check();
         let (nodes, leaves, depth) = build_tree(scratch, tree)?;
         let mut leaf_rows = SequenceWriter::new(scratch, "border-leaf-rows", sorter.buffer_bytes)?;
-        let mut sorted = ExternalSorter::<Words<7>>::new(scratch, sorter)?;
+        let mut sorted = ExternalSorter::<Words<7>>::new(scratch, sorter)?.observed(progress);
+        // The caller begins `BordersRows` with the row count.
+        let mut rows_total = 0u64;
         for (i, row) in rows.enumerate() {
             if i.is_multiple_of(4096) {
-                check()?;
+                progress.advance(i as u64)?;
             }
+            rows_total += 1;
             let r = row?;
             leaf_rows.push(&r)?;
             sorted.push(Words([
@@ -162,6 +167,8 @@ impl Source {
         let mut item: Option<[u64; 6]> = None;
         let mut begin = 0;
         let mut terminal = 31;
+        progress.end()?;
+        progress.begin(Step::BordersGraph, rows_total)?;
         let flush = |k: [u64; 6],
                      begin,
                      end,
@@ -176,7 +183,10 @@ impl Source {
             }
             Ok(())
         };
-        for row in sorted.finish()? {
+        for (i, row) in sorted.finish()?.enumerate() {
+            if i.is_multiple_of(4096) {
+                progress.advance(i as u64)?;
+            }
             let r = row?.0;
             let k: [u64; 6] = r[..6].try_into().unwrap();
             if item.is_some_and(|old| old != k) {
@@ -256,6 +266,7 @@ impl Source {
             }
         }
         admitted()?;
+        progress.end()?;
         Ok(source)
     }
 
@@ -271,8 +282,11 @@ impl Source {
     pub(super) fn retain_faces(
         &mut self,
         faces: impl Iterator<Item = Result<[Key; 3], JobError>>,
-        check: &(dyn Fn() -> Result<(), JobError> + Sync),
+        triangles: u64,
+        progress: &StepProgress<'_>,
     ) -> Result<(), JobError> {
+        let check = || progress.check();
+        progress.begin(Step::BordersFaces, triangles)?;
         let mut filter = vec![0u64; FILTER_WORDS];
         let probes = |k: &Key| {
             let mut h = (u64::from(k[0]) | u64::from(k[1]) << 32) ^ u64::from(k[2]) << 17;
@@ -292,7 +306,7 @@ impl Source {
         }
         for (i, face) in faces.enumerate() {
             if i.is_multiple_of(4096) {
-                check()?;
+                progress.advance(i as u64)?;
             }
             let face = face?;
             if !face.iter().all(|k| {
@@ -364,6 +378,7 @@ impl Source {
                 }
             }
         }
+        progress.end()?;
         Ok(())
     }
     /// Whether edge `a`-`b` is shared and external (a border between owners) at `depth`.
