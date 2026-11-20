@@ -1680,7 +1680,7 @@ pub(super) mod tests {
     #[test]
     fn leaf_masks_are_charged_beside_the_sorts_not_the_assembly() {
         let config = TreeConfig::new(Profile::Balanced);
-        let base = memory_bound(&config, 1 << 20, 0, 2, 1 << 30, (0, 0, 0), 0).unwrap();
+        let base = memory_bound(&config, 1 << 20, 0, 2, 1 << 30, (0, 0, 0, 0), 0).unwrap();
         let sorts = base.geometry.sort_bytes;
         // An assembly larger than the sorts plus the masks: nothing more to charge.
         let large = memory_bound(
@@ -1689,7 +1689,7 @@ pub(super) mod tests {
             0,
             2,
             1 << 30,
-            (0, 0, 0),
+            (0, 0, 0, 0),
             sorts + (8 << 20),
         )
         .unwrap();
@@ -1706,7 +1706,7 @@ pub(super) mod tests {
             0,
             2,
             1 << 30,
-            (0, 0, 0),
+            (0, 0, 0, 0),
             sorts + (1 << 19),
         )
         .unwrap();
