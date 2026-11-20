@@ -279,6 +279,9 @@ struct State<'a> {
     /// The last checked vertex's live faces, with `changes` when they were collected: a
     /// pop checks one vertex against up to `RETRY_VALENCE` targets with no change between.
     star_cache: Option<(u32, u64, Vec<u32>)>,
+    /// The directed edges live faces use twice or more (`books_hold` can refuse only a
+    /// change that touches one, or makes one).
+    books: HashSet<(u32, u32)>,
 }
 
 /// Moved faces a high-valence vertex's check samples first (`State::check_star`).
@@ -315,9 +318,21 @@ impl<'a> State<'a> {
     fn dec_dir(&mut self, e: (u32, u32)) {
         if let Some(c) = self.dir.get_mut(&e) {
             *c -= 1;
+            if *c == 1 {
+                self.books.remove(&e);
+            }
             if *c == 0 {
                 self.dir.remove(&e);
             }
+        }
+    }
+
+    /// One use more of directed edge `e`.
+    fn inc_dir(&mut self, e: (u32, u32)) {
+        let c = self.dir.entry(e).or_default();
+        *c += 1;
+        if *c == 2 {
+            self.books.insert(e);
         }
     }
 
@@ -409,9 +424,6 @@ impl<'a> State<'a> {
         self.src_dir.contains_key(&(a, b)) || self.src_dir.contains_key(&(b, a))
     }
 
-    /// The guard's licence for directed edge `a -> b` between two shared points: its
-    /// count in the contracted source (`Problem::shared`), or none when the source has the
-    /// edge in neither direction and this cell owns the new segment (N1, stage 1).
     /// Whether every edge a change touches still passes the contraction fold guard's book
     /// rule (`folds::book_refused`, the guard's own predicate) once the change is made:
     /// faces `gone` die, faces `changed` take new corners and faces `added` are created;
@@ -469,10 +481,9 @@ impl<'a> State<'a> {
         let rewritten: HashMap<u32, [u32; 3]> = changed.iter().copied().collect();
         let dead: HashSet<u32> = gone.iter().copied().collect();
         for (x, y) in books {
-            if self.iface[x as usize]
-                && self.iface[y as usize]
-                && self.shared_licence(x, y).is_some()
-            {
+            // A vertex the change adds (`pending`, not yet in `iface`) is never shared.
+            let shared = |v: u32| self.iface.get(v as usize).copied().unwrap_or(false);
+            if shared(x) && shared(y) && self.shared_licence(x, y).is_some() {
                 continue;
             }
             let (kx, ky) = (key_of(x), key_of(y));
@@ -527,6 +538,9 @@ impl<'a> State<'a> {
         true
     }
 
+    /// The guard's licence for directed edge `a -> b` between two shared points: its
+    /// count in the contracted source (`Problem::shared`), or none when the source has the
+    /// edge in neither direction and this cell owns the new segment (N1, stage 1).
     fn shared_licence(&self, a: u32, b: u32) -> Option<u32> {
         let count = |a: u32, b: u32| match &self.p.shared {
             Some(shared) => shared.get(&(a, b)).copied().unwrap_or(0),
@@ -842,15 +856,16 @@ impl<'a> State<'a> {
             }
         }
         // The guard's book rule on every edge the collapse touches: a moved wing of a
-        // source book keeps the edge's counts but not its faces. Only an edge left with two
-        // or more faces in one direction can be refused, which `delta` shows at no cost.
-        let after = |e: &(u32, u32)| {
-            i64::from(self.dir.get(e).copied().unwrap_or(0))
-                + i64::from(delta.get(e).copied().unwrap_or(0))
+        // source book keeps the edge's counts but not its faces. Only an edge used twice or
+        // more in one direction, before or after, can be refused: one already a book
+        // (`books`), or one this collapse makes so.
+        let touches_book =
+            |&(a, b): &(u32, u32)| self.books.contains(&(a, b)) || self.books.contains(&(b, a));
+        let makes_book = |(e, &d): (&(u32, u32), &i32)| {
+            d > 0 && i64::from(self.dir.get(e).copied().unwrap_or(0)) + i64::from(d) >= 2
         };
-        if delta
-            .keys()
-            .any(|&(a, b)| after(&(a, b)) >= 2 || after(&(b, a)) >= 2)
+        if (!self.books.is_empty() && delta.keys().any(touches_book))
+            || delta.iter().any(makes_book)
         {
             let rewritten: Vec<(u32, [u32; 3])> = moved
                 .iter()
@@ -957,7 +972,7 @@ impl<'a> State<'a> {
             self.dec_face(s);
             self.faces[f as usize] = g;
             for j in 0..3 {
-                *self.dir.entry((g[j], g[(j + 1) % 3])).or_default() += 1;
+                self.inc_dir((g[j], g[(j + 1) % 3]));
             }
             *self.face_set.entry(sorted(g)).or_default() += 1;
         }
@@ -1286,7 +1301,7 @@ impl<'a> State<'a> {
             let g = t.map(|w| if w == r { sid } else { w });
             self.faces[f as usize] = g;
             for j in 0..3 {
-                *self.dir.entry((g[j], g[(j + 1) % 3])).or_default() += 1;
+                self.inc_dir((g[j], g[(j + 1) % 3]));
             }
             *self.face_set.entry(sorted(g)).or_default() += 1;
             self.vf[sid as usize].push(f);
@@ -1296,10 +1311,7 @@ impl<'a> State<'a> {
         self.alive.push(true);
         self.alive_faces += 1;
         for j in 0..3 {
-            *self
-                .dir
-                .entry((bridge[j], bridge[(j + 1) % 3]))
-                .or_default() += 1;
+            self.inc_dir((bridge[j], bridge[(j + 1) % 3]));
         }
         *self.face_set.entry(sorted(bridge)).or_default() += 1;
         for v in bridge {
@@ -1330,7 +1342,7 @@ impl<'a> State<'a> {
                 let g = t.map(|w| if w == u { v } else { w });
                 self.faces[f as usize] = g;
                 for j in 0..3 {
-                    *self.dir.entry((g[j], g[(j + 1) % 3])).or_default() += 1;
+                    self.inc_dir((g[j], g[(j + 1) % 3]));
                 }
                 *self.face_set.entry(sorted(g)).or_default() += 1;
                 self.vf[v as usize].push(f);
@@ -1389,6 +1401,7 @@ impl<'a> State<'a> {
             next_poll: Cell::new(0),
             changes: 0,
             star_cache: None,
+            books: HashSet::default(),
         };
         for (i, &t) in p.triangles.iter().enumerate() {
             for j in 0..3 {
@@ -1409,6 +1422,12 @@ impl<'a> State<'a> {
             }
         }
         st.src_dir = st.dir.clone();
+        st.books = st
+            .dir
+            .iter()
+            .filter(|&(_, &c)| c >= 2)
+            .map(|(&e, _)| e)
+            .collect();
         // Boundary edges: perpendicular planes, heavily weighted.
         for (i, &t) in p.triangles.iter().enumerate() {
             let _ = i;
@@ -1852,6 +1871,9 @@ mod tests {
         }
     }
 
+    /// Positions, triangles, classes and shared points of a collapse fixture.
+    type Fixture = (Vec<[f32; 3]>, Vec<[u32; 3]>, Vec<Class>, Vec<bool>);
+
     /// A source book: two faces use the interior edge p→q in the same direction (no face
     /// uses q→p), and the third corner of one is r, a border vertex to be removed onto the
     /// chord a–b. Collapsing r onto a or b keeps p→q's count at its source count but moves
@@ -1859,9 +1881,6 @@ mod tests {
     /// same-direction faces only unchanged, or with a reverse face and on distinct sides).
     /// p, q and w are locked, as `problem` locks every free corner of a fold face; x is the
     /// strip's free apex below the chord. Vertices: a, r, b, p, q, w, x.
-    /// Positions, triangles, classes and shared points of a collapse fixture.
-    type Fixture = (Vec<[f32; 3]>, Vec<[u32; 3]>, Vec<Class>, Vec<bool>);
-
     fn moved_book_wing() -> Fixture {
         (
             vec![
@@ -2085,6 +2104,135 @@ mod tests {
         );
         assert!(out.is_some(), "{stats:?}");
         assert_eq!(added, vec![([32., 3., 0.], 1)]);
+    }
+
+    /// A flip at r–x would rewrite the face (x, r, q) into (r, q, p), a new face on r→q,
+    /// which the source face (r, q, w) also uses that way: a moved book wing, refused as the
+    /// fold guard refuses it. Without the book face the same flip is made.
+    #[test]
+    fn a_flip_does_not_move_a_book_wing() {
+        let positions = vec![
+            [0., 0., 0.],
+            [1., 0., 0.],
+            [0.5, 1., 0.],
+            [0.5, -1., 0.],
+            [0.25, -0.5, 1.],
+        ];
+        let (r, x) = (0, 1);
+        for book in [false, true] {
+            let mut triangles = vec![[0, 1, 2], [1, 0, 3]];
+            if book {
+                triangles.push([0, 3, 4]);
+            }
+            let keys: Vec<Key> = positions.iter().map(|&p| key(p)).collect();
+            let n = positions.len();
+            let p = Problem {
+                positions: &positions,
+                triangles: &triangles,
+                class: vec![Class::Free; n],
+                interface: vec![false; n],
+                segments: HashSet::default(),
+                target: 1,
+                limit: 4,
+                min_cos: 0.,
+                owns_segment: None,
+                owns_face: None,
+                keys: &keys,
+                steiner: false,
+                snap: None,
+                protected: None,
+                shared: None,
+                work_limit: u64::MAX,
+                cancel: None,
+            };
+            let mut st = State::new(&p);
+            assert_eq!(st.flip(r, x), !book, "book {book}");
+        }
+    }
+
+    /// Removing r (onto the chord x–y, shared points) needs (x, r, w) to change, and its
+    /// edge w→x is a book: the source face (w, x, z) uses it the same way, and w is not
+    /// shared, so the guard's book rule applies. Collapsing r onto x or y and every Steiner
+    /// position move that wing: all refused (the rescue as `steiner_why[6]`), and r stays.
+    /// Without the book face, r collapses.
+    #[test]
+    fn a_steiner_position_does_not_move_a_book_wing() {
+        let mut positions = crossing_fan();
+        positions.push([16., 32., 20.]);
+        let keys: Vec<Key> = positions.iter().map(|&p| key(p)).collect();
+        let faces = [[0, 1, 3], [3, 1, 2], [3, 0, 4]];
+        for book in [true, false] {
+            let triangles = &faces[..if book { 3 } else { 2 }];
+            let p = Problem {
+                positions: &positions,
+                triangles,
+                // z, the book face's free corner, is locked as `problem` locks every
+                // free corner of a fold face.
+                class: vec![
+                    Class::Locked,
+                    Class::Remove([0, 2]),
+                    Class::Locked,
+                    Class::Locked,
+                    Class::Locked,
+                ],
+                interface: vec![true, false, true, false, false],
+                segments: [(0, 2)].into_iter().collect(),
+                target: 4,
+                limit: 4,
+                min_cos: 0.,
+                owns_segment: None,
+                owns_face: None,
+                keys: &keys,
+                steiner: true,
+                snap: Some(&unit),
+                protected: None,
+                shared: None,
+                work_limit: u64::MAX,
+                cancel: None,
+            };
+            let (out, stats, added) = simplify_added(&p);
+            if book {
+                assert!(out.is_none(), "{stats:?}");
+                assert!(added.is_empty(), "{added:?}");
+                assert_eq!(stats.removed_left, 1, "{stats:?}");
+                assert!(stats.steiner_why[6] > 0, "{stats:?}");
+            } else {
+                assert!(out.is_some(), "{stats:?}");
+            }
+        }
+    }
+
+    /// A change adding two same-direction faces on an edge from a shared point to the
+    /// vertex it adds (`pending`, not yet in the state's tables) is judged, not indexed out
+    /// of bounds: the vertex it adds is never shared, and the two new faces are a book.
+    #[test]
+    fn a_pending_vertex_is_not_shared() {
+        let positions = vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.], [1., 1., 1.]];
+        let triangles = [[0, 1, 2], [0, 2, 3]];
+        let keys: Vec<Key> = positions.iter().map(|&p| key(p)).collect();
+        let p = Problem {
+            positions: &positions,
+            triangles: &triangles,
+            class: vec![Class::Free; 4],
+            interface: vec![true, false, false, false],
+            segments: HashSet::default(),
+            target: 1,
+            limit: 4,
+            min_cos: 0.,
+            owns_segment: None,
+            owns_face: None,
+            keys: &keys,
+            steiner: false,
+            snap: None,
+            protected: None,
+            shared: None,
+            work_limit: u64::MAX,
+            cancel: None,
+        };
+        let st = State::new(&p);
+        let s = 4;
+        let added = [[0, s, 1], [0, s, 2]];
+        assert!(!st.books_hold(&[], &[], &added, Some((s, [0.5, 0.5, -1.]))));
     }
 
     /// The review's three-face counterexample: the bridge (s, x, y) of every position on
@@ -2593,13 +2741,15 @@ mod tests {
         // single face on its edge to the target.
         triangles.retain(|_| next() >= 0.12);
         let grid_faces = triangles.len();
-        for _ in 0..1 + (next() * 4.) as usize {
+        // Fins: mostly source books (a second face using a grid edge in the same
+        // direction), else a reversed third face.
+        for _ in 0..3 + (next() * 6.) as usize {
             let t = triangles[(next() * grid_faces as f32) as usize % grid_faces];
             let (a, b) = (t[0], t[1]);
             let c = positions.len() as u32;
             let (pa, pb) = (positions[a as usize], positions[b as usize]);
             positions.push([(pa[0] + pb[0]) / 2., (pa[1] + pb[1]) / 2., 3. + next()]);
-            triangles.push(if next() < 0.5 { [a, b, c] } else { [b, a, c] });
+            triangles.push(if next() < 0.75 { [a, b, c] } else { [b, a, c] });
         }
         let k = 65 + (next() * 56.) as u32;
         let apex = positions.len() as u32;
