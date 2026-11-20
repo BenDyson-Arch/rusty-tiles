@@ -148,6 +148,19 @@ pub struct LastResortRecord {
     pub refused_controls: u32,
 }
 
+/// What P1 did in one cell where it ran, built or omitted (`geometry::p1::Report`): its
+/// outcome, work units per pass against the limit, and Steiner rescues made and refused.
+/// Deterministic, so runs compare exactly.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct P1Record {
+    /// The cell's first node and cell depth.
+    pub first: u64,
+    pub depth: u32,
+    #[serde(flatten)]
+    pub(crate) report: geometry::p1::Report,
+}
+
 /// A tile declaring `asset.extras.rustyTiles.lastResort` (D1/D11 amendment A2).
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct DeclaredTile {
@@ -658,6 +671,9 @@ pub(crate) struct HlodReport {
     /// Every tile only a retry published, in walk order (`LastResortRecord`).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub last_resort_records: Vec<LastResortRecord>,
+    /// Every cell where P1 ran, in walk order (`P1Record`); reported in the diagnostics.
+    #[serde(skip)]
+    pub p1_records: Vec<P1Record>,
     /// Content-less cells (omitted coarse tiles), by cell depth, and of them the sources:
     /// cells whose exact interface (or topology plain simplification cannot reduce) needs
     /// more triangles than the cap. Includes propagation and pass-through cells. A declared
@@ -773,6 +789,8 @@ pub struct HlodDiagnostics {
     pub declared_tiles: Vec<DeclaredTile>,
     /// Every tile only a retry published, declared or not (`last_resort_tiles` of them).
     pub last_resort_records: Vec<LastResortRecord>,
+    /// Every cell where P1 ran, built or omitted (`P1Record`).
+    pub p1_records: Vec<P1Record>,
     pub jobs: u64,
     /// Whole-process user+system CPU seconds of the stage (incidence, walk, encoding).
     pub cpu_seconds: Option<f64>,
@@ -936,6 +954,7 @@ enum Finished {
         topology_attempts: u32,
         construction_topology: Option<audit::Index>,
         root_search: Option<(error::SearchStats, f64, root_competition::Timing)>,
+        p1: Option<Box<geometry::p1::Report>>,
     },
 }
 
@@ -1240,6 +1259,7 @@ pub(crate) fn produce(
     diagnostics.fold_faces = report.fold_faces;
     diagnostics.declared_tiles = report.declared_tiles.clone();
     diagnostics.last_resort_records = report.last_resort_records.clone();
+    diagnostics.p1_records = report.p1_records.clone();
     diagnostics.omitted_proxies = report.omitted_proxies;
     diagnostics.omission_sources = report.omission_sources;
     diagnostics.omitted_by_depth = report.omitted_by_depth.clone();
@@ -1262,6 +1282,7 @@ pub(crate) fn produce(
             "last_resort_tiles": diagnostics.last_resort_tiles,
             "last_resort_stages": diagnostics.last_resort_stages,
             "last_resort_records": diagnostics.last_resort_records,
+            "p1_records": diagnostics.p1_records,
             "fold_faces": diagnostics.fold_faces,
             "scratch_peak_bytes": diagnostics.stage_scratch_peak_bytes,
             "scratch_bound_bytes": diagnostics.stage_scratch_bound_bytes,
@@ -1625,12 +1646,18 @@ fn prepare(
     // Keep S1's open-border vertices at their leaf-canonical decode. Prepare the final
     // positions once: representatives and measurement both consume this publication.
     let border = encode::open_border(&built.geometry.triangles, built.geometry.positions.len());
-    let fixed: Vec<bool> = built
+    let mut fixed: Vec<bool> = built
         .locked
         .iter()
         .zip(&border)
         .map(|(l, b)| *l || *b)
         .collect();
+    // P1's Steiner vertices keep the canonical point P1 checked.
+    for &g in &built.generated {
+        if let Some(f) = fixed.get_mut(g as usize) {
+            *f = true;
+        }
+    }
     let mut positions = captured.lattice.encode_coarse(
         &built.geometry.positions,
         &built.geometry.ells,
@@ -1646,26 +1673,29 @@ fn prepare(
         built.geometry.key.leaf_end,
         &contract.holders,
     );
-    if !geometry::folds::decode_valid_with(
-        &built.geometry.positions,
-        &positions.decoded,
-        &built.geometry.triangles,
-        &built.geometry.interface,
-        &policy,
-    ) {
+    // A decode is valid when the fold guard accepts it and P1's Steiner faces stay
+    // embedded on the delivered positions.
+    let valid = |decoded: &[[f32; 3]]| {
+        geometry::folds::decode_valid_with(
+            &built.geometry.positions,
+            decoded,
+            &built.geometry.triangles,
+            &built.geometry.interface,
+            &policy,
+        ) && geometry::embedding::generated_embedded(
+            decoded,
+            &built.geometry.triangles,
+            &built.generated,
+        )
+    };
+    if !valid(&positions.decoded) {
         positions = captured.lattice.encode_coarse(
             &built.geometry.positions,
             &built.geometry.ells,
             &vec![true; fixed.len()],
             built.geometry.key.depth,
         )?;
-        if !geometry::folds::decode_valid_with(
-            &built.geometry.positions,
-            &positions.decoded,
-            &built.geometry.triangles,
-            &built.geometry.interface,
-            &policy,
-        ) {
+        if !valid(&positions.decoded) {
             built.rejection = Some(geometry::Rejection::Decode);
             return Ok(None);
         }
@@ -1859,6 +1889,7 @@ fn build_tile(
             &[half, settings.cap],
             contract,
             &|k| job.borders.mapping(closed.key.depth, k),
+            &captured.lattice,
             &mut |built| {
                 if settings.mutation == Mutation::DropSegment {
                     let tile = &mut built.geometry;
@@ -1878,11 +1909,17 @@ fn build_tile(
                 // their accumulation is a sum and a max, so the split changes nothing.
                 #[cfg(test)]
                 if let Mutation::RefuseBuilds(k) = settings.mutation {
-                    let rank = match (built.primary, built.staged, built.last_resort_stage) {
+                    let rank = match (
+                        built.primary,
+                        built.p1,
+                        built.staged,
+                        built.last_resort_stage,
+                    ) {
                         (true, ..) => 0,
-                        (false, false, 0) => 1,
-                        (false, true, 0) => 2,
-                        (_, _, stage) => 2 + stage,
+                        (_, true, ..) => 1,
+                        (_, _, false, 0) => 2,
+                        (_, _, true, 0) => 3,
+                        (.., stage) => 3 + stage,
                     };
                     if rank < k {
                         built.rejection = Some(geometry::Rejection::Controls);
@@ -1919,6 +1956,7 @@ fn build_tile(
             settings.mutation.last_resorts(),
             // Reused calls write no audit records: reuse only without the audit sidecar.
             settings.mutation.reuse() && audit.is_none(),
+            settings.mutation.p1(),
         )?;
         // Replayed calls' S2 searches, as if they had run (read only after this point).
         nearest.stats.add(outcome.reused.search);
@@ -1926,6 +1964,7 @@ fn build_tile(
         outcome
     } else {
         geometry::Outcome {
+            p1: None,
             built: None,
             contraction_failed: false,
             attempted_topology: Default::default(),
@@ -2013,6 +2052,7 @@ fn build_tile(
                 })
                 .collect::<Result<_, JobError>>()?,
             topology: Box::new(outcome.attempted_topology),
+            p1: outcome.p1.map(Box::new),
             topology_attempts,
             root_search: root_competition
                 .as_ref()
@@ -2214,6 +2254,7 @@ fn build_tile(
             .retry
             .filter(|_| built.last_resort)
             .map(|r| (r, refused)),
+        p1: outcome.p1,
         fold_faces: if last_resort.is_some() { fold_faces } else { 0 },
         declared_folds: last_resort.is_some(),
         carries_folds,
@@ -2293,6 +2334,13 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
     report.protected_faces += u64::from(row.protected_faces);
     report.retries += u64::from(row.retries);
     report.last_resort_tiles += u64::from(row.last_resort);
+    if let Some(p1) = row.p1 {
+        report.p1_records.push(P1Record {
+            first: row.first,
+            depth: row.encoded_depth,
+            report: p1,
+        });
+    }
     if let Some((retry, refused)) = row.retry {
         report.last_resort_records.push(LastResortRecord {
             first: row.first,
@@ -2569,6 +2617,7 @@ fn walk(
                         topology_attempts: 0,
                         construction_topology: None,
                         root_search: None,
+                        p1: None,
                     };
                     let _ = sender.send((
                         closed.id,
@@ -2722,7 +2771,15 @@ fn walk(
                         topology_attempts,
                         construction_topology,
                         root_search,
+                        p1,
                     } => {
+                        if let Some(report_p1) = p1 {
+                            report.p1_records.push(P1Record {
+                                first: key.first,
+                                depth: key.depth,
+                                report: *report_p1,
+                            });
+                        }
                         if let Some((search, cpu, timing)) = root_search {
                             report.root_competition_timing.add(timing);
                             report.error_measurement.nearest.add(search);

@@ -596,8 +596,26 @@ no selector.
   T-junctions are counted, never matched with a tolerance. Adjacent faces may be
   retriangulated, but delivered border edges and border-connected components
   survive. This does not make the source watertight.
-- **Last resorts.** When ordinary simplification cannot meet the cap, the
-  [last-resort stages](#last-resort-declarations) run.
+- **P1 contraction.** When a cell's ordinary build publishes nothing, one
+  more build contracts and simplifies its children in a single pass that never
+  makes what the fold guard, the topology check or the interface check refuses
+  (link condition, orientation, source edge and face multiplicities, shared
+  points). A border vertex whose removal would need a new face on three shared
+  points is replaced by an interior vertex on the leaf lattice (a Steiner
+  vertex), which is never on the contract. A Steiner rescue is admitted only
+  when the vertex's faces form one simple fan between its two arc neighbours on
+  its own contract chord, the new point is a canonical lattice point no other
+  vertex or source border point holds, every changed face keeps a strictly
+  positive orientation (an unresolved sign refuses it), and no changed face
+  meets another face outside their common vertices (exact predicates). The Steiner vertex keeps its canonical decode,
+  and its faces are checked again on the delivered positions. Its proposal is
+  assessed like any other; a second pass adds the stage-1 seam-owner licence and
+  is declared as stage 1. P1 runs only where the ordinary build publishes
+  nothing; the ordinary build's tiles change only where the corrected chord
+  licence (exterior child segments only, which every build's contraction guard
+  uses) changes what the guard accepts.
+- **Last resorts.** When ordinary simplification and P1 cannot meet the cap,
+  the [last-resort stages](#last-resort-declarations) run.
 - **Residual omission.** A coarse tile is omitted only if the shared border
   geometry it must keep exceeds the 8,192-triangle cap on its own, or if the
   last resort cannot keep the open boundaries that touch its border. The run

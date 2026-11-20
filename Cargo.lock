@@ -1972,6 +1972,7 @@ dependencies = [
  "proj4rs",
  "proj4wkt",
  "rayon",
+ "robust",
  "rstar",
  "rusqlite",
  "rustc-hash",

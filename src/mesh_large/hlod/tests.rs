@@ -1904,8 +1904,10 @@ fn parent_jobs_allocate_within_their_charge() {
                     relief_floor: 0.,
                 },
                 &|_| Ok(None),
+                &crate::mesh_large::leaves::geometry::LatticePlan::float_for_tests(),
                 &mut |_| Ok(true),
                 &|| Ok(()),
+                true,
                 true,
                 true,
             )
@@ -5386,8 +5388,10 @@ fn ordinary_drops_under_pressure_go_smallest_first() {
             &[cap, cap],
             &contract,
             &|_| Ok(None),
+            &crate::mesh_large::leaves::geometry::LatticePlan::float_for_tests(),
             &mut |_| Ok(true),
             &|| Ok(()),
+            true,
             true,
             true,
         )
@@ -5528,8 +5532,10 @@ fn a_drop_order_that_would_empty_the_tile_fails_the_attempt() {
             &[cap, cap],
             &contract,
             &|_| Ok(None),
+            &crate::mesh_large::leaves::geometry::LatticePlan::float_for_tests(),
             &mut |_| Ok(true),
             &|| Ok(()),
+            true,
             true,
             true,
         )
@@ -6087,14 +6093,16 @@ fn last_resort_records(dir: &Path) -> Vec<(u64, u64, u64, String)> {
         .iter()
         .map(|r| {
             let (stage, resort) = (r["stage"].as_u64().unwrap(), r["resort"].as_str().unwrap());
-            let expected = match resort {
-                "fix2" | "staged" => 0,
-                "n1" => 1,
-                "n2" => 2,
-                "n3" | "n3Recovery" | "rootCandidate" => 3,
+            let expected: &[u64] = match resort {
+                "fix2" | "staged" => &[0],
+                // P1: its default pass (0) or with N1's seam-owner licence (1).
+                "p1" => &[0, 1],
+                "n1" => &[1],
+                "n2" => &[2],
+                "n3" | "n3Recovery" | "rootCandidate" => &[3],
                 other => panic!("unknown resort {other}"),
             };
-            assert_eq!(stage, expected, "{r}");
+            assert!(expected.contains(&stage), "{r}");
             let refused: u64 = ["refusedDecode", "refusedTopology", "refusedControls"]
                 .iter()
                 .map(|k| r[k].as_u64().unwrap())
@@ -6183,7 +6191,8 @@ fn last_resort_case(
 
 /// D1/D11 amendment A2, stage N1. On three noisy sheets folded onto one another, a
 /// depth-1 cell fits only once it may create new faces and edges on the shared points
-/// of the seam segments it owns; no fold is admitted. Develop omits it. On D11's ladder
+/// of the seam segments it owns, or (P1) once a Steiner vertex replaces the border vertex
+/// whose removal needs them; no fold is admitted. Develop omits it. On D11's ladder
 /// alone (relief off) the cells still omitted are border-bound: their contracts leave the
 /// cap no room. With border relief (A1) those borders relax, and the root builds too.
 #[test]
@@ -6192,12 +6201,24 @@ fn n1_builds_a_seam_bound_cell_on_the_segments_it_owns() {
     let name = "N1 folded sheets";
     let sheet = folded_sheet(96, 3, 0., 0.0001, 23);
     let (develop, dir) = last_resort_case(name, sheet.clone(), &work.path().join("d11"), false);
-    let n1: Vec<_> = last_resort_tiles(&dir)
+    // Develop omits them; P1 (its default or seam-owner pass) or N1 builds them now.
+    let seam_bound: Vec<_> = last_resort_records(&dir)
         .into_iter()
-        .filter(|t| t.2 == 1)
+        .filter(|r| !develop.contains(&(r.0, r.1)))
         .collect();
-    assert!(!n1.is_empty(), "{name}: {:?}", last_resort_tiles(&dir));
-    assert!(n1.iter().all(|t| !develop.contains(&(t.0, t.1))), "{name}");
+    assert!(
+        !seam_bound.is_empty(),
+        "{name}: {:?}",
+        last_resort_records(&dir)
+    );
+    // Some of them are seam-bound cells P1 or N1 builds without a fold (stage at most 1);
+    // the others are ancestors that only inherited the omission.
+    assert!(
+        seam_bound
+            .iter()
+            .any(|r| r.3 == "n1" || (r.3 == "p1" && r.2 <= 1)),
+        "{name}: {seam_bound:?}"
+    );
     let (_, relieved) = last_resort_case(name, sheet, &work.path().join("relief"), true);
     assert!(
         rows(&relieved.join("proxies.jsonl"))
@@ -6618,7 +6639,9 @@ fn root_competition_city_sweep() {
 
 /// The bounded natural search found no own-root recovery: N3 is already part of
 /// incumbent construction. These are the closest actual refusals, not injected
-/// failures: a challenger that fails prepare, and a propagated descendant omission.
+/// failures: a challenger that fails prepare, and a propagated descendant omission. P1 is
+/// off: it builds both cells before the ladder (`every_ladder_build_publishes_with_its_record`
+/// covers the candidate's record).
 #[test]
 fn root_competition_preserves_natural_guard_and_descendant_refusals() {
     for (name, source) in [
@@ -6627,7 +6650,8 @@ fn root_competition_preserves_natural_guard_and_descendant_refusals() {
     ] {
         let work = tempfile::tempdir().unwrap();
         let input = write_gltf(&work.path().join("src"), &source);
-        let dirs = [Mutation::NoRootCompetition, Mutation::None].map(|mutation| {
+        // Without P1, which now builds these cells before the ladder reaches N3.
+        let dirs = [Mutation::NoP1NoRootCompetition, Mutation::NoP1].map(|mutation| {
             stage(
                 &input,
                 &work.path().join(format!("{mutation:?}")),
@@ -6750,8 +6774,8 @@ fn root_competition_fills_a_forced_own_build_omission_and_is_job_invariant() {
 }
 
 /// Each build of the ladder publishes with its own record. Refusing every proposal of the
-/// first k builds (as S2's controls would) makes the next build publish: fix 2, staged
-/// reduction, N1, N2, N3. Its record names that build and stage, gives the primary
+/// first k builds (as S2's controls would) makes the next build publish: P1, fix 2,
+/// staged reduction, N1, N2, N3. Its record names that build and stage, gives the primary
 /// build's refusal as the reason, and counts the refused primary proposals by check.
 #[test]
 fn every_ladder_build_publishes_with_its_record() {
@@ -6759,11 +6783,12 @@ fn every_ladder_build_publishes_with_its_record() {
     let source = grid((16, 16), (0., 100.), (0., 100.), &bump, [0.4, 0.5, 0.3, 1.]);
     let input = write_gltf(&work.path().join("src"), &[source]);
     for (k, resorts, want) in [
-        (1u8, &["fix2"][..], 0u64),
-        (2, &["staged"][..], 0),
-        (3, &["n1"][..], 1),
-        (4, &["n2"][..], 2),
-        (5, &["n3", "n3Recovery"][..], 3),
+        (1u8, &["p1"][..], &[0u64, 1][..]),
+        (2, &["fix2"][..], &[0][..]),
+        (3, &["staged"][..], &[0][..]),
+        (4, &["n1"][..], &[1][..]),
+        (5, &["n2"][..], &[2][..]),
+        (6, &["n3", "n3Recovery"][..], &[3][..]),
     ] {
         let dir = stage(
             &input,
@@ -6788,13 +6813,28 @@ fn every_ladder_build_publishes_with_its_record() {
             .collect();
         assert!(!forced.is_empty(), "k={k}: {records:?}");
         for r in &forced {
-            assert_eq!(r["stage"], want, "k={k}: {r}");
+            assert!(want.contains(&r["stage"].as_u64().unwrap()), "k={k}: {r}");
             assert_eq!(r["reason"], "proposalsRefused", "k={k}: {r}");
             assert!(r["refusedControls"].as_u64().unwrap() > 0, "k={k}: {r}");
             assert_eq!(r["refusedDecode"], 0, "k={k}: {r}");
             assert_eq!(r["refusedTopology"], 0, "k={k}: {r}");
         }
-        if k == 5 {
+        // P1's own record: its proposal built the cell (k = 1) or assessment refused it,
+        // within its work limit.
+        let resources: Value =
+            serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
+        let p1 = resources["hlod"]["diagnostics"]["p1_records"]
+            .as_array()
+            .unwrap();
+        let outcome = if k == 1 { "built" } else { "refused" };
+        assert!(p1.iter().any(|r| r["outcome"] == outcome), "k={k}: {p1:?}");
+        for r in p1 {
+            let limit = r["workLimit"].as_u64().unwrap();
+            assert_ne!(r["outcome"], "exhausted", "k={k}: {r}");
+            assert!(r["work"][0].as_u64().unwrap() <= limit, "k={k}: {r}");
+            assert!(r["passes"].as_u64().unwrap() <= 2, "k={k}: {r}");
+        }
+        if k == 6 {
             published_and_valid("refused ladder", &dir, work.path());
         }
     }

@@ -879,6 +879,7 @@ mod tests {
             &m.triangles,
             interface,
             &previous,
+            [0, 0],
             &mapping,
         );
         let cap = m.triangles.len();
@@ -1106,6 +1107,7 @@ mod tests {
                 &m.triangles,
                 &interface,
                 &previous,
+                [0, 0],
                 &labels,
             );
             let mut map: Vec<_> = (0..m.positions.len() as u32).collect();

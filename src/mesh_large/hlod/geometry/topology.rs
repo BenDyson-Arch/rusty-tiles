@@ -205,6 +205,7 @@ pub(super) fn contract(
     m: &mut Merged,
     interface: &[InterfaceRow],
     previous_interface: &[InterfaceRow],
+    leaves: [u32; 2],
     mapping: &super::BorderMap<'_>,
     receipt: &mut Receipt,
     fallbacks: bool,
@@ -215,6 +216,7 @@ pub(super) fn contract(
         m,
         interface,
         previous_interface,
+        leaves,
         mapping,
         receipt,
         fallbacks,
@@ -234,6 +236,7 @@ pub(super) fn contract_noting(
     m: &mut Merged,
     interface: &[InterfaceRow],
     previous_interface: &[InterfaceRow],
+    leaves: [u32; 2],
     mapping: &super::BorderMap<'_>,
     receipt: &mut Receipt,
     fallbacks: bool,
@@ -245,6 +248,7 @@ pub(super) fn contract_noting(
         m,
         interface,
         previous_interface,
+        leaves,
         mapping,
         receipt,
         None,
@@ -314,7 +318,9 @@ fn choose_targets(
 }
 
 /// Keep the licenses of the original merged children across recovery proposals.
-/// `fallbacks`: see `constrained::contract`. `folds` (A2's N3): the guard runs under that
+/// `leaves`: the parent's leaf interval for the guard's path witnesses
+/// (`folds::Source::for_contraction`). `fallbacks`: see `constrained::contract`.
+/// `folds` (A2's N3): the guard runs under that
 /// last-resort policy, so the snap may fold faces; the shared-point rules (seam owner),
 /// exact interface items and an unchanged topology still decide. `relief`: the contract has
 /// relieved chords (A1), and the slot receives this contraction's residue when it does not
@@ -327,6 +333,7 @@ pub(super) fn contract_from(
     m: &mut Merged,
     interface: &[InterfaceRow],
     previous_interface: &[InterfaceRow],
+    leaves: [u32; 2],
     mapping: &super::BorderMap<'_>,
     receipt: &mut Receipt,
     original_faces: Option<&[[u32; 3]]>,
@@ -404,6 +411,7 @@ pub(super) fn contract_from(
                     &original,
                     interface,
                     previous_interface,
+                    leaves,
                     &mapping_by_vertex,
                 )
                 .with_policy(policy.clone());
@@ -472,6 +480,7 @@ pub(super) fn contract_from(
         original_faces.unwrap_or(&m.triangles),
         interface,
         previous_interface,
+        leaves,
         &mapping_by_vertex,
     );
     drop(mapping_by_vertex);
@@ -1924,6 +1933,7 @@ pub(super) mod tests {
             &mut m,
             &interface,
             &previous,
+            [0, 0],
             &map,
             &mut receipt,
             true,
@@ -1950,6 +1960,7 @@ pub(super) mod tests {
             &mut m,
             &[],
             &[],
+            [0, 0],
             &|k| Ok((k == middle).then_some((a, b, 0.75, 0))),
             &mut Receipt::default(),
             false,
@@ -2049,6 +2060,7 @@ pub(super) mod tests {
             &m.triangles,
             &rows(&[(a, q)]),
             &previous,
+            [0, 0],
             &mapping,
         );
         let mapped: Vec<_> = m
@@ -2065,6 +2077,7 @@ pub(super) mod tests {
             &mut m,
             &interface,
             &previous,
+            [0, 0],
             &|p| Ok((p == middle).then_some((a, q, 0.5, 0))),
             &mut receipt,
             false,
@@ -2131,6 +2144,7 @@ pub(super) mod tests {
             &mut m,
             &interface,
             &previous,
+            [0, 0],
             &|p| Ok((p == middle).then_some((a, b, 0.5, 0))),
             &mut receipt,
             false,
@@ -2435,6 +2449,7 @@ pub(super) mod tests {
                 InterfaceRow::new(0, a, middle, 0, 1),
                 InterfaceRow::new(0, middle, b, 0, 1),
             ],
+            [0, 0],
             &|p| Ok((p == middle).then_some((a, b, 0.5, 0))),
             &mut receipt,
             false,
