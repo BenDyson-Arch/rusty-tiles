@@ -178,6 +178,17 @@ html,body,#view{margin:0;width:100%;height:100%;overflow:hidden}
     else viewer.camera.setView({destination: imageryBounds});
   }
   button('Full scene', overview);
+  // A fixed light, so the preview looks the same at any hour. Cesium's default sun follows
+  // the wall clock (frozen at page load here) and lights the scene from below at night.
+  // Sun from the north-west, 35 degrees above the local horizon at the scene's centre.
+  if (spheres.length) {
+    const enu = C.Transforms.eastNorthUpToFixedFrame(C.BoundingSphere.fromBoundingSpheres(spheres).center);
+    const elevation = C.Math.toRadians(35), azimuth = C.Math.toRadians(315);
+    const toSun = new C.Cartesian3(Math.cos(elevation) * Math.sin(azimuth),
+      Math.cos(elevation) * Math.cos(azimuth), Math.sin(elevation));
+    const direction = C.Matrix4.multiplyByPointAsVector(enu, C.Cartesian3.negate(toSun, new C.Cartesian3()), new C.Cartesian3());
+    viewer.scene.light = new C.DirectionalLight({direction: C.Cartesian3.normalize(direction, direction)});
+  }
   overview();
   viewer.screenSpaceEventHandler.setInputAction(async event => {
     const feature = viewer.scene.pick(event.position);
