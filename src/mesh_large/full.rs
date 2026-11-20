@@ -2479,10 +2479,6 @@ pub(super) mod tests {
         }
     }
 
-    /// The corner join over adversarial trees equals H1's weld table and an in-memory oracle
-    /// for every worker count: a point shared by corners in nearly every leaf, slivers whose
-    /// corners lie in far leaves' boxes, coincident triangles (one key: degenerate runs and
-    /// packed octants) and keys unrelated to positions, so leaf boxes overlap everywhere.
     /// A failure in a later wave of the corner join is reported for the first failing leaf
     /// in leaf order: every leaf from the start of the second wave fails, that first one after
     /// a delay and every later one at once, so a later leaf fails first in time.
@@ -2536,6 +2532,10 @@ pub(super) mod tests {
         }
     }
 
+    /// The corner join over adversarial trees equals H1's weld table and an in-memory oracle
+    /// for every worker count: a point shared by corners in nearly every leaf, slivers whose
+    /// corners lie in far leaves' boxes, coincident triangles (one key: degenerate runs and
+    /// packed octants) and keys unrelated to positions, so leaf boxes overlap everywhere.
     #[test]
     fn corner_join_matches_the_weld_table_on_adversarial_trees() {
         let scratch = Scratch::create(None, 0).unwrap();
