@@ -16,6 +16,23 @@ pub(super) fn memory_need(sorter: SortConfig) -> u64 {
         + 2 * contract_workspace_bytes(6 * super::TRIANGLE_CAP as u64)
 }
 
+/// One list head of [`Borders::listed_items`]: next unread reference, node, items left.
+type ListHead = (u64, u64, u64);
+
+/// Resident bound of [`Borders::listed_items`] over a tree of `nodes` nodes: its sort and
+/// stream, and one list head per node (reserved exactly, held until the lists drain).
+pub(super) fn listed_items_memory(sorter: SortConfig, nodes: u64) -> u64 {
+    sorter
+        .memory_bound::<disk::Words<4>>()
+        .saturating_add(nodes.saturating_mul(std::mem::size_of::<ListHead>() as u64))
+}
+
+/// Scratch bound of [`Borders::listed_items`] for `items` linked items.
+pub(super) fn listed_items_scratch(items: u64, sorter: SortConfig) -> Option<u64> {
+    let sort = config::sort_spill::<disk::Words<4>>(items, sorter)?;
+    sort.finish_peak.checked_add(sort.stream_slack)
+}
+
 pub(super) const WALK_CACHE_BYTES: u64 = 8 * disk::CACHE_BYTES;
 
 use self::{
@@ -29,8 +46,12 @@ use super::{
     store::TileKey,
 };
 use crate::{
-    mesh_large::{config, records::NodeRecord},
-    spill::{Scratch, Sequence, SortConfig},
+    mesh_large::{
+        config,
+        phases::{Step, StepProgress},
+        records::NodeRecord,
+    },
+    spill::{ExternalSorter, Scratch, Sequence, SortConfig, SortedStream},
     JobError,
 };
 use std::collections::BTreeMap;
@@ -240,6 +261,52 @@ pub(crate) fn holders_from_rows(interface: &[InterfaceRow]) -> Vec<Holders> {
     holders
 }
 
+/// A contract as `mesh-inspect`'s forecast counts it ([`Borders::contract_counts`]).
+pub(super) struct ContractCounts {
+    /// Its distinct points, as sorted source vertex ids.
+    pub points: Vec<u64>,
+    /// Its distinct segments (the interface's edge rows).
+    pub segments: u64,
+    /// [`Contract::terminal_locks`].
+    pub terminal_locks: u64,
+}
+impl ContractCounts {
+    /// [`Contract::minimum_triangles`].
+    pub(super) fn minimum_triangles(&self) -> u64 {
+        (self.points.len() as u64).max(self.segments).div_ceil(3)
+    }
+}
+
+/// [`Borders::listed_items`]: listed nodes' items, taken in ascending node order.
+pub(super) struct ListedItems<'s, 'p> {
+    stream: std::iter::Peekable<SortedStream<'s, disk::Words<4>>>,
+    /// Cancellation, checked as items are taken.
+    progress: &'s StepProgress<'p>,
+}
+impl ListedItems<'_, '_> {
+    /// The linked items of `node`'s own contract (empty for an empty list). Nodes must be
+    /// taken in ascending order; the items of nodes skipped over are dropped.
+    pub(super) fn take(&mut self, node: u64) -> Result<Vec<[u64; 3]>, JobError> {
+        let mut items: Vec<[u64; 3]> = Vec::new();
+        let mut read = 0u64;
+        // Errors are taken too, and returned.
+        while let Some(item) = self
+            .stream
+            .next_if(|r| r.as_ref().map_or(true, |w| w.0[0] <= node))
+        {
+            if read.is_multiple_of(4096) {
+                self.progress.check()?;
+            }
+            read += 1;
+            let [at, a, b, edge] = item?.0;
+            if at == node {
+                items.push([a, b, edge]);
+            }
+        }
+        Ok(items)
+    }
+}
+
 impl Contract {
     /// Whether any certificate is relieved (A1).
     pub(super) fn relieved(&self) -> bool {
@@ -270,11 +337,16 @@ impl Borders {
         rows: impl Iterator<Item = Result<InterfaceRow, crate::spill::SpillError>>,
         open_ends: impl Iterator<Item = Result<super::interfaces::KeyRecord, crate::spill::SpillError>>,
         faces: impl Iterator<Item = Result<[Key; 3], JobError>>,
+        rows_total: u64,
+        triangles: u64,
         extent: f64,
         cap: usize,
         lease: &ComponentLease<'_, '_>,
-        check: &(dyn Fn() -> Result<(), JobError> + Sync),
+        progress: &StepProgress<'_>,
     ) -> Result<Self, JobError> {
+        let check = || progress.check();
+        let check = &check;
+        progress.begin(Step::BordersRows, rows_total)?;
         let mut source = Source::build(
             scratch,
             sorter,
@@ -282,9 +354,9 @@ impl Borders {
             rows,
             open_ends,
             &|| lease.charge(0),
-            check,
+            progress,
         )?;
-        source.retain_faces(faces, check)?;
+        source.retain_faces(faces, triangles, progress)?;
         let mut borders = Self {
             maps: Disk::new(scratch, "border-maps")?,
             segments: Disk::new(scratch, "border-segments")?,
@@ -303,15 +375,22 @@ impl Borders {
         }
         // Source arcs are traversed one level at a time; their temporary ordered points
         // are discarded after certificates and source-vertex maps have been materialized.
-        for depth in (0..=borders.source.depth).rev() {
-            check()?;
+        let levels = u64::from(borders.source.depth) + 1;
+        progress.begin(Step::BordersLevels, levels)?;
+        for (done, depth) in (0..=borders.source.depth).rev().enumerate() {
+            progress.advance(done as u64)?;
             borders.level(scratch, depth, check)?;
             lease.charge(borders.bytes())?;
         }
+        progress.end()?;
         #[cfg(test)]
         borders.check_retention()?;
         let mut ancestors = [(0u64, 0u64, 0u32); 32];
+        progress.begin(Step::BordersPublish, borders.source.nodes.len)?;
         for id in 0..borders.source.nodes.len {
+            if id.is_multiple_of(4096) {
+                progress.advance(id)?;
+            }
             let mut node = borders.source.nodes.get(id)?;
             let depth = node[2] as u32;
             let mut published = depth;
@@ -332,6 +411,7 @@ impl Borders {
         borders.segments.flush()?;
         borders.refs.flush()?;
         lease.charge(borders.bytes())?;
+        progress.end()?;
         Ok(borders)
     }
     /// Test builds: an external vertex retained at a depth is retained one level finer
@@ -434,7 +514,7 @@ impl Borders {
         &mut self,
         scratch: &Scratch,
         depth: u32,
-        check: &(dyn Fn() -> Result<(), JobError> + Sync),
+        check: &dyn Fn() -> Result<(), JobError>,
     ) -> Result<(), JobError> {
         let mark = (self.segments.len, self.refs.len);
         self.walk(scratch, depth, &mut Mode::Emit(&BTreeMap::new()), check)?;
@@ -511,7 +591,7 @@ impl Borders {
         scratch: &Scratch,
         depth: u32,
         mode: &mut Mode<'_>,
-        check: &(dyn Fn() -> Result<(), JobError> + Sync),
+        check: &dyn Fn() -> Result<(), JobError>,
     ) -> Result<(), JobError> {
         let emits = matches!(mode, Mode::Emit(_));
         let mut active = Disk::<1>::new(scratch, "border-live-edges")?;
@@ -624,7 +704,7 @@ impl Borders {
         active: &mut Disk<1>,
         arc: &mut Disk<3>,
         mode: &mut Mode<'_>,
-        check: &(dyn Fn() -> Result<(), JobError> + Sync),
+        check: &dyn Fn() -> Result<(), JobError>,
     ) -> Result<(), JobError> {
         let mut begin = arc.len;
         let retained = |v| -> Result<u64, JobError> {
@@ -1146,6 +1226,139 @@ impl Borders {
             relief_floor,
         }))
     }
+    /// The tree node of `key` (its index in the frozen tree's preorder).
+    pub(super) fn node_id(&self, key: TileKey) -> Result<u64, JobError> {
+        self.source.node(key)
+    }
+
+    /// The linked items of every node whose own contract list holds at most `limit` items.
+    pub(super) fn listed_item_count(&self, limit: usize) -> Result<u64, JobError> {
+        let mut total = 0u64;
+        for id in 0..self.source.nodes.len {
+            let n = self.source.nodes.get(id)?[7];
+            if n <= limit as u64 {
+                total = total.saturating_add(n);
+            }
+        }
+        Ok(total)
+    }
+
+    /// Every linked item of the nodes whose own contract list holds at most `limit` items,
+    /// as `[node, first endpoint, second endpoint, chain source edge]` sorted by node, in
+    /// one pass (`mesh-inspect`'s forecast). A list links each reference to a strictly
+    /// smaller index, and every reference belongs to exactly one list, so taking the
+    /// greatest unread reference of all lists at a time reads the reference store once in
+    /// descending order; segments are emitted just before their references, so they are
+    /// read in nearly the same order. Following one list at a time instead reads a page
+    /// per item, each page about once per list that crosses it. `progress` advances by
+    /// item; the caller begins its step with [`Self::listed_item_count`].
+    pub(super) fn listed_items<'s, 'p>(
+        &self,
+        scratch: &'s Scratch,
+        sorter: SortConfig,
+        limit: usize,
+        progress: &'s StepProgress<'p>,
+    ) -> Result<ListedItems<'s, 'p>, JobError> {
+        let mut sorted = ExternalSorter::<disk::Words<4>>::new(scratch, sorter)?.observed(progress);
+        // At most one head per node, as `listed_items_memory` charges; a head is popped
+        // before its successor is pushed, so the heap never grows past it.
+        let mut heads: Vec<ListHead> = Vec::new();
+        heads
+            .try_reserve_exact(usize::try_from(self.source.nodes.len).unwrap_or(usize::MAX))
+            .map_err(|_| {
+                JobError::new(
+                    crate::JobErrorKind::ResourceLimit,
+                    "contract list heads allocation failed",
+                )
+            })?;
+        for id in 0..self.source.nodes.len {
+            if id.is_multiple_of(4096) {
+                progress.check()?;
+            }
+            let n = self.source.nodes.get(id)?;
+            if n[7] <= limit as u64 && n[6] != NONE {
+                heads.push((n[6], id, n[7]));
+            }
+        }
+        let mut heads = std::collections::BinaryHeap::from(heads);
+        let mut done = 0u64;
+        while let Some((at, node, left)) = heads.pop() {
+            if done.is_multiple_of(4096) {
+                progress.advance(done)?;
+            }
+            done += 1;
+            let link = self.refs.get(at)?;
+            let s = self.segments.get(link[1])?;
+            sorted.push(disk::Words([node, s[0], s[1], s[2]]))?;
+            match (link[0], left) {
+                (NONE, 1) => {}
+                (NONE, _) | (_, 0 | 1) => {
+                    return Err(state("a contract list differs from its item count"))
+                }
+                (next, _) => heads.push((next, node, left - 1)),
+            }
+        }
+        Ok(ListedItems {
+            stream: sorted.finish()?.peekable(),
+            progress,
+        })
+    }
+
+    /// What `mesh-inspect`'s forecast reads of a contract at `depth` with these linked
+    /// items (`[first endpoint, second endpoint, chain source edge]`), equal to the
+    /// corresponding values of [`Self::contract`]; its rows, certificates and holders are
+    /// not built.
+    pub(super) fn contract_counts(
+        &self,
+        depth: u32,
+        items: &[[u64; 3]],
+    ) -> Result<ContractCounts, JobError> {
+        let points = Self::contract_points(items);
+        // Edge rows: one per distinct endpoint pair (ids order as keys do).
+        let mut edges: Vec<[u64; 2]> = items
+            .iter()
+            .filter(|[a, b, _]| a != b)
+            .map(|&[a, b, _]| [a.min(b), a.max(b)])
+            .collect();
+        edges.sort_unstable();
+        edges.dedup();
+        let depth = u64::from(depth);
+        let mut terminal_locks = 0u64;
+        for &p in &points {
+            // The low half holds the minimum terminal leaf depth (as `own_contract` reads it).
+            if self.source.vertices.get(p)?[7] & u64::from(u32::MAX) <= depth {
+                terminal_locks += 1;
+            }
+        }
+        // One certificate per linked chord, locked when its source edge is terminal.
+        let mut chains: Vec<u64> = items
+            .iter()
+            .filter(|[a, b, _]| a != b)
+            .map(|&[_, _, edge]| edge)
+            .collect();
+        chains.sort_unstable();
+        for edge in chains {
+            if self.source.edges.get(edge)?[6] <= depth {
+                terminal_locks += 1;
+            }
+        }
+        Ok(ContractCounts {
+            segments: edges.len() as u64,
+            points,
+            terminal_locks,
+        })
+    }
+
+    /// The points of a contract with these linked items, as sorted, distinct source vertex
+    /// ids. Vertex ids follow key order, so they count and compare as the contract's point
+    /// keys do.
+    pub(super) fn contract_points(items: &[[u64; 3]]) -> Vec<u64> {
+        let mut points: Vec<u64> = items.iter().flat_map(|&[a, b, _]| [a, b]).collect();
+        points.sort_unstable();
+        points.dedup();
+        points
+    }
+
     pub(super) fn mapping(
         &self,
         depth: u32,
@@ -1326,10 +1539,12 @@ mod tests {
                 rows.into_iter().map(Ok),
                 std::iter::empty(),
                 std::iter::empty(),
+                0,
+                0,
                 4096.,
                 super::super::TRIANGLE_CAP,
                 &lease,
-                &|| Ok(()),
+                crate::mesh_large::phases::StepProgress::silent(),
             )
             .unwrap();
             let node = borders
@@ -1484,12 +1699,15 @@ mod tests {
             rows.into_iter().map(Ok),
             std::iter::empty(),
             faces.into_iter().map(Ok),
+            0,
+            0,
             4096.,
             super::super::TRIANGLE_CAP,
             &lease,
-            &|| Ok(()),
+            crate::mesh_large::phases::StepProgress::silent(),
         )
         .unwrap();
+        assert_counts_match_contracts(&borders, &scratch, sorter);
         let cell_a = borders
             .contract(
                 TileKey {
@@ -1576,12 +1794,15 @@ mod tests {
             rows.iter().copied().map(Ok),
             std::iter::empty(),
             std::iter::empty(),
+            0,
+            0,
             4096.,
             super::super::TRIANGLE_CAP,
             &lease,
-            &|| Ok(()),
+            crate::mesh_large::phases::StepProgress::silent(),
         )
         .unwrap();
+        assert_counts_match_contracts(&borders, &scratch, sorter);
         let tile = |first, end, depth, leaf_begin, leaf_end| TileKey {
             first,
             end,
@@ -1633,12 +1854,15 @@ mod tests {
             rows.into_iter().map(Ok),
             [Ok(super::super::interfaces::KeyRecord(points[2]))].into_iter(),
             std::iter::empty(),
+            0,
+            0,
             4096.,
             super::super::TRIANGLE_CAP,
             &lease,
-            &|| Ok(()),
+            crate::mesh_large::phases::StepProgress::silent(),
         )
         .unwrap();
+        assert_counts_match_contracts(&pinned, &scratch, sorter);
         let middle = pinned.mapping(1, points[3]).unwrap().unwrap();
         assert_eq!((middle.0, middle.1), (points[3], points[3]));
         assert_eq!(
@@ -1719,13 +1943,96 @@ mod tests {
             rows.into_iter().map(Ok),
             std::iter::empty(),
             std::iter::empty(),
+            0,
+            0,
             4096.,
             cap,
             &lease,
-            &|| Ok(()),
+            crate::mesh_large::phases::StepProgress::silent(),
         )
         .unwrap();
+        assert_counts_match_contracts(&borders, &scratch, sorter);
         read(&borders)
+    }
+
+    /// The gathered items give every node exactly what its full contract gives
+    /// `mesh-inspect`'s forecast, with every list or only the shorter ones listed.
+    fn assert_counts_match_contracts(borders: &Borders, scratch: &Scratch, sorter: SortConfig) {
+        let lengths: Vec<u64> = (0..borders.source.nodes.len)
+            .map(|id| borders.source.nodes.get(id).unwrap()[7])
+            .collect();
+        let mut sorted = lengths.clone();
+        sorted.sort_unstable();
+        let median = sorted[sorted.len() / 2] as usize;
+        // A cancelled run stops before it reads a list.
+        let stop = || Err(JobError::new(crate::JobErrorKind::Cancelled, "stopped"));
+        let cancelled = crate::mesh_large::phases::StepProgress::new(&stop, None);
+        let refs = borders.refs.read_count();
+        assert!(borders
+            .listed_items(scratch, sorter, 6 * super::super::TRIANGLE_CAP, &cancelled)
+            .is_err());
+        assert_eq!(
+            borders.refs.read_count(),
+            refs,
+            "no list read once cancelled"
+        );
+        for limit in [6 * super::super::TRIANGLE_CAP, median] {
+            let listed: u64 = lengths.iter().filter(|&&n| n <= limit as u64).sum();
+            assert_eq!(borders.listed_item_count(limit).unwrap(), listed);
+            let progress = crate::mesh_large::phases::StepProgress::silent();
+            let mut items = borders
+                .listed_items(scratch, sorter, limit, progress)
+                .unwrap();
+            for (id, &n) in lengths.iter().enumerate() {
+                let id = id as u64;
+                let r = borders.source.nodes.get(id).unwrap();
+                let key = tile(r[0], r[1], r[2] as u32, r[3] as u32, r[4] as u32);
+                assert_eq!(borders.node_id(key).unwrap(), id);
+                let full = borders.own_contract(key, limit).unwrap();
+                let Some(full) = full else {
+                    assert!(
+                        n > limit as u64,
+                        "node {id}: only a list past its limit is absent"
+                    );
+                    continue;
+                };
+                let taken = items.take(id).unwrap();
+                assert_eq!(taken.len() as u64, n, "node {id} items");
+                let counts = borders.contract_counts(key.depth, &taken).unwrap();
+                let mut keys: Vec<Key> = full
+                    .interface
+                    .iter()
+                    .filter(|r| r.is_vertex())
+                    .map(|r| r.a)
+                    .collect();
+                keys.sort_unstable();
+                keys.dedup();
+                let ids = |p: &[u64]| -> Vec<Key> {
+                    p.iter().map(|&v| borders.source.key(v).unwrap()).collect()
+                };
+                assert_eq!(
+                    ids(&Borders::contract_points(&taken)),
+                    keys,
+                    "node {id} points"
+                );
+                assert_eq!(ids(&counts.points), keys, "node {id} counted points");
+                assert_eq!(
+                    counts.segments,
+                    (full.interface.len() - keys.len()) as u64,
+                    "node {id} segments"
+                );
+                assert_eq!(
+                    counts.terminal_locks,
+                    full.terminal_locks(),
+                    "node {id} locks"
+                );
+                assert_eq!(
+                    counts.minimum_triangles(),
+                    full.minimum_triangles() as u64,
+                    "node {id} minimum"
+                );
+            }
+        }
     }
 
     fn tile(first: u64, end: u64, depth: u32, leaf_begin: u32, leaf_end: u32) -> TileKey {

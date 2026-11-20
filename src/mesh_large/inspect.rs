@@ -1022,16 +1022,7 @@ fn run(run: Run<'_>) -> Result<(InspectReport, InspectDiagnostics), JobError> {
         stats.leaves.saturating_mul(forecast::LEAF_FACT_BYTES),
     )?;
     stage.admit("incidence_and_borders", forecast_need)?;
-    let incidence_progress = StepProgress::new(check, Some(emit)).merging_as(Step::IncidenceMerge);
-    let forecast = forecast::forecast(
-        captured,
-        config,
-        settings,
-        &leaves,
-        charged,
-        &incidence_progress,
-        check,
-    )?;
+    let forecast = forecast::forecast(captured, config, settings, &leaves, charged, &progress)?;
     drop(leaves);
     let mut cell_features = 0u64;
     if let Some(w) = writer.as_mut() {

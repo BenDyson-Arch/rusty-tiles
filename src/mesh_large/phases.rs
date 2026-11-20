@@ -255,6 +255,19 @@ pub(crate) enum Step {
     IncidenceEnds,
     /// HLOD incidence: an intermediate merge pass of one of its sorts.
     IncidenceMerge,
+    /// HLOD shared borders: incidence rows stored and sorted by item (one unit per row).
+    BordersRows,
+    /// HLOD shared borders: sorted rows reduced to the border graph (one unit per row).
+    BordersGraph,
+    /// HLOD shared borders: source faces read for face retention (one unit per retained
+    /// triangle).
+    BordersFaces,
+    /// HLOD shared borders: one contraction level per tree depth, deepest first.
+    BordersLevels,
+    /// HLOD shared borders: every tree node's publication depth (one unit per node).
+    BordersPublish,
+    /// HLOD shared borders: an intermediate merge pass of the row sort.
+    BordersMerge,
     /// `mesh-inspect`: every triangle corner sorted by exact position (repeated positions,
     /// position ids).
     InspectVertices,
@@ -265,6 +278,11 @@ pub(crate) enum Step {
     InspectLoops,
     /// `mesh-inspect`: an intermediate merge pass of one of its sorts.
     InspectMerge,
+    /// `mesh-inspect`: every contract the forecast reads, gathered in one pass over the
+    /// shared-border store and sorted by node (one unit per linked item).
+    InspectContracts,
+    /// `mesh-inspect`: the coarse-omission forecast over the tree (one unit per node).
+    InspectForecast,
     /// Leaf delivery: every leaf's source crops planned (one unit per leaf).
     LeafCrops,
     /// Leaf delivery: source images decoded and their crops stored (one unit per image).
@@ -291,10 +309,18 @@ impl Step {
             Self::IncidenceReduce => "hlod_incidence_reduce",
             Self::IncidenceEnds => "hlod_incidence_ends",
             Self::IncidenceMerge => "hlod_incidence_merge",
+            Self::BordersRows => "hlod_borders_rows",
+            Self::BordersGraph => "hlod_borders_graph",
+            Self::BordersFaces => "hlod_borders_faces",
+            Self::BordersLevels => "hlod_borders_levels",
+            Self::BordersPublish => "hlod_borders_publish",
+            Self::BordersMerge => "hlod_borders_merge",
             Self::InspectVertices => "inspect_vertices",
             Self::InspectEdges => "inspect_edges",
             Self::InspectLoops => "inspect_loops",
             Self::InspectMerge => "inspect_merge",
+            Self::InspectContracts => "inspect_contracts",
+            Self::InspectForecast => "inspect_forecast",
             Self::LeafCrops => "leaf_crop_plan",
             Self::LeafCropStore => "leaf_crop_store",
         }
@@ -345,6 +371,11 @@ impl<'a> StepProgress<'a> {
             merge: Step::Merge,
             merged: Cell::new(0),
         }
+    }
+    /// A reporter for another sequence of steps of the same phase, with the same
+    /// cancellation and event sink, reporting its merge passes as `merge`.
+    pub(crate) fn alongside(&self, merge: Step) -> Self {
+        Self::new(self.check, self.emit).merging_as(merge)
     }
     /// Reports sort merge passes as `merge` (capture's is [`Step::Merge`]).
     pub(crate) fn merging_as(mut self, merge: Step) -> Self {

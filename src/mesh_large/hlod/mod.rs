@@ -1084,6 +1084,9 @@ pub(crate) fn produce(
         )
         .ok_or_else(|| resource("shared-border scratch bound overflows"))?,
     )?;
+    let border_check = || check();
+    let border_progress =
+        StepProgress::new(&border_check, input.phases.emitter()).merging_as(Step::BordersMerge);
     let borders = borders::Borders::build(
         &captured.scratch,
         input.config.sorter(1),
@@ -1095,10 +1098,12 @@ pub(crate) fn produce(
             &captured.corner_depths,
             &captured.lattice,
         )?,
+        stats.rows,
+        captured.triangles.len(),
         captured.tree.stats.per_depth[0].maximum_extent,
         settings.mutation.relief_cap(settings.cap),
         &border_lease,
-        check,
+        &border_progress,
     )?;
     drop(source_open_ends);
     report.borders_by_depth = (0..captured.tree.stats.height)

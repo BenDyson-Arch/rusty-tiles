@@ -178,6 +178,12 @@ Progress reaches `callback` as for `mesh_to_tileset`. The phases are:
   when a sort merges);
 - the incidence steps `hlod_incidence_items`, `hlod_incidence_reduce` and
   `hlod_incidence_ends`;
+- the shared-border steps `hlod_borders_rows`, `hlod_borders_graph`,
+  `hlod_borders_faces`, `hlod_borders_levels` and `hlod_borders_publish` (and
+  `hlod_borders_merge` when the row sort merges), as for `mesh`;
+- `inspect_contracts` (every border contract the forecast reads, gathered in
+  one pass, one unit per linked item) and `inspect_forecast` (the omission
+  forecast, one unit per tree node), with `inspect_merge` for a merge pass;
 - `ready_to_publish`.
 
 ## Source and placement
@@ -1669,7 +1675,12 @@ stage's `hlod_incidence` phase reports its steps the same way:
 `hlod_incidence_items` (triangles read into their leaves' interface items),
 `hlod_incidence_reduce` (the sorted items, merged into shared rows) and `hlod_incidence_ends`
 (two units per open-edge endpoint), with `hlod_incidence_merge` for an
-intermediate merge pass. Before `leaf_build`, a run with source images on
+intermediate merge pass. The shared-border contracts built next report
+`hlod_borders_rows` (incidence rows stored and sorted), `hlod_borders_graph`
+(the sorted rows reduced to the border graph), `hlod_borders_faces` (retained
+triangles read for face retention), `hlod_borders_levels` (one unit per tree
+depth) and `hlod_borders_publish` (tree nodes), with `hlod_borders_merge` for an
+intermediate merge pass of the row sort. Before `leaf_build`, a run with source images on
 disk-backed scratch reports `leaf_crop_plan` (leaves re-projected for their
 crops) and, when it builds the crop store, `leaf_crop_store` (source images
 cut), the same way. Required
