@@ -72,7 +72,9 @@ fn fits(vertices: usize, faces: usize, rows: usize) -> bool {
 /// floor), `exhausted` (a pass spent its work budget), `stalled` (border removals left
 /// in both passes) or `skipped` (the contract alone exceeds the cap, or the workspace
 /// estimate exceeds the job's charge). Per pass (stage 0, 1): work units spent, removals
-/// left and Steiner rescues made and refused (`collapse::Stats::steiner_why`).
+/// left and Steiner rescues made and refused (`collapse::Stats::steiner_why`), the work spent
+/// rescuing and in Steiner rescues, the main loop's work by site (`siteWork`,
+/// `collapse::SiteWork`) and its refused checks by reason (`refusedBy`, `collapse::Stats::why`).
 #[derive(Clone, Copy, Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct Report {
@@ -87,6 +89,12 @@ pub(crate) struct Report {
     /// Of `work`: units spent rescuing stuck removals, and of those in Steiner rescues.
     pub rescue_work: [u64; 2],
     pub steiner_work: [u64; 2],
+    /// The main loop's work by site (`collapse::SiteWork`).
+    pub site_work: [collapse::SiteWork; 2],
+    /// Collapse checks refused, by reason (`collapse::Stats::why`). The reason is the first
+    /// test that refused, so a high-valence vertex's sampled faces can shift a refusal to
+    /// another reason than a full scan would report; the totals are those of the decisions.
+    pub refused_by: [[u64; 13]; 2],
 }
 
 impl Report {
@@ -125,6 +133,8 @@ impl Report {
             steiner_refused: [[0; 6]; 2],
             rescue_work: [0; 2],
             steiner_work: [0; 2],
+            site_work: [collapse::SiteWork::default(); 2],
+            refused_by: [[0; 13]; 2],
         }
     }
 
@@ -137,6 +147,8 @@ impl Report {
         self.steiner_refused[i] = stats.steiner_why;
         self.rescue_work[i] = stats.rescue_work;
         self.steiner_work[i] = stats.steiner_work;
+        self.site_work[i] = stats.site;
+        self.refused_by[i] = stats.why;
     }
 }
 

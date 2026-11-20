@@ -110,6 +110,10 @@ pub(crate) struct Stats {
     pub steiner: u64,
     /// Refusals by reason: 1 vanish, 2 link, 3 pinch, 4 zero area, 5 flip, 6 reversed,
     /// 7 shared face, 8 coincident, 9 shared edge, 10 book, 11 segment, 12 not an edge.
+    /// Each refused check counts once, under the first test that refused it; that test
+    /// depends on the order they run in. A vertex above `RETRY_VALENCE` tests a sample of
+    /// its moved faces first, so it may report a different reason than testing every face
+    /// in turn would (its accept or refuse decision is the same).
     pub why: [u64; 13],
     /// Work units spent (`State::work`), and whether `Problem::work_limit` stopped the pass.
     pub work: u64,
@@ -123,6 +127,33 @@ pub(crate) struct Stats {
     /// Of `work`: units spent in the rescue rounds, and of those in Steiner rescues.
     pub rescue_work: u64,
     pub steiner_work: u64,
+    /// Of `work`: the main loop's units by site (`SiteWork`). With `rescue_work` they sum
+    /// to `work`.
+    pub site: SiteWork,
+}
+
+/// Where the main loop spends its work units, to find a superlinear site in a cell that
+/// uses much of its budget. `queue`: the initial queueing of every vertex, once per outer
+/// pass; `candidates`: the target scan of each pop; `checks`: the guard checks of each
+/// tried target, of which `refused_checks` failed; `apply`: applying a collapse and
+/// rescanning the target's neighbours; `requeue`: queueing the target again; `neighbours`:
+/// queueing its neighbours again. Counts: `pops` (entries acted on), `checks_run`, and the
+/// largest single check and candidate scan, which name a high-valence vertex when one
+/// dominates.
+#[derive(Default, Debug, Clone, Copy, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SiteWork {
+    pub queue: u64,
+    pub candidates: u64,
+    pub checks: u64,
+    pub refused_checks: u64,
+    pub apply: u64,
+    pub requeue: u64,
+    pub neighbours: u64,
+    pub pops: u64,
+    pub checks_run: u64,
+    pub max_check: u64,
+    pub max_candidates: u64,
 }
 
 #[derive(PartialEq)]
@@ -241,7 +272,16 @@ struct State<'a> {
     /// Whether `Problem::cancel` returned true, and the work count of its next poll.
     cancelled: Cell<bool>,
     next_poll: Cell<u64>,
+    /// Mesh changes so far (collapses, flips, Steiner rescues): a cached star is current
+    /// while this is unchanged.
+    changes: u64,
+    /// The last checked vertex's live faces, with `changes` when they were collected: a
+    /// pop checks one vertex against up to `RETRY_VALENCE` targets with no change between.
+    star_cache: Option<(u32, u64, Vec<u32>)>,
 }
+
+/// Moved faces a high-valence vertex's check samples first (`State::check_star`).
+const PROBE: usize = 32;
 
 /// Targets a vertex tries per pop (its cheapest), and the candidate count above which a
 /// vertex is not requeued after every change around it.
@@ -454,26 +494,150 @@ impl<'a> State<'a> {
         }
     }
 
-    /// 0 when valid, else the refusal reason (`Stats::why` index).
+    /// 0 when valid, else the refusal reason (`Stats::why` index). It costs u's star, not
+    /// v's (a rim vertex tried against a fan apex of valence k no longer scans the apex).
     fn check(&mut self, u: u32, v: u32) -> u8 {
         self.stats.checks += 1;
-        let star_u: Vec<u32> = self.live_faces(u).collect();
-        let (shared, moved): (Vec<u32>, Vec<u32>) = star_u
-            .iter()
-            .partition(|&&f| self.faces[f as usize].contains(&v));
+        // u's star, collected once per pop: the targets a pop tries change nothing between.
+        let star_u = match self.star_cache.take() {
+            Some((w, at, star)) if w == u && at == self.changes => star,
+            _ => {
+                let star: Vec<u32> = self.live_faces(u).collect();
+                self.work.set(
+                    self.work
+                        .get()
+                        .saturating_add(u64::try_from(star.len()).unwrap_or(u64::MAX)),
+                );
+                star
+            }
+        };
+        let why = self.check_star(u, v, &star_u);
+        self.star_cache = Some((u, self.changes, star_u));
+        why
+    }
+
+    /// The tests of one moved face `t` (u moving to v) that depend on nothing else the
+    /// check accumulates: 4 degenerate, 5 turned over, 6 reversed against the source, 7 a new
+    /// face on three shared points, 8 coincident with a live face, 9 a new unlicensed edge
+    /// between shared points. 0 when it passes them.
+    fn face_test(&self, t: [u32; 3], u: u32, v: u32) -> u8 {
+        let iface = &self.iface;
+        let g = t.map(|w| if w == u { v } else { w });
+        let (n0, n1) = (self.normal(t), self.normal(g));
+        let (l0, l1) = (dot(n0, n0).sqrt(), dot(n1, n1).sqrt());
+        if l1 <= 1e-12 * l0.max(1e-30) || l1 == 0. {
+            return 4;
+        }
+        if l0 > 0. && dot(n0, n1) < self.p.min_cos * l0 * l1 {
+            return 5;
+        }
+        let s = sorted(g);
+        let src = self.src_face.get(&s).copied().unwrap_or([0, 0]);
+        let d = parity(g);
+        if src[d] == 0 && src[1 - d] != 0 {
+            return 6; // reversed against the source
+        }
+        if src == [0, 0]
+            && g.iter().all(|&w| iface[w as usize])
+            && !self.p.owns_face.is_some_and(|own| own(g))
+        {
+            return 7; // new face on three shared points
+        }
+        if self.face_set.contains_key(&s) {
+            return 8; // coincident
+        }
+        // new edges incident to v
+        for &w in &g {
+            if w != v
+                && iface[v as usize]
+                && iface[w as usize]
+                && self.shared_licence(v, w) == Some(0)
+                && self.shared_licence(w, v) == Some(0)
+            {
+                return 9;
+            }
+        }
+        0
+    }
+
+    /// `check` on u's live faces `star_u`.
+    fn check_star(&mut self, u: u32, v: u32, star_u: &[u32]) -> u8 {
+        // The faces u and v share, from the smaller of the two stars: u's is in hand, and
+        // either may be a fan apex of thousands.
+        let shared: Vec<u32> = if star_u.len() <= self.vf[v as usize].len() {
+            self.work.set(
+                self.work
+                    .get()
+                    .saturating_add(u64::try_from(star_u.len()).unwrap_or(u64::MAX)),
+            );
+            star_u
+                .iter()
+                .copied()
+                .filter(|&f| self.faces[f as usize].contains(&v))
+                .collect()
+        } else {
+            let mut seen = 0u64;
+            let shared = self
+                .live_faces(v)
+                .filter(|&f| {
+                    seen += 1;
+                    self.faces[f as usize].contains(&u)
+                })
+                .collect();
+            self.work.set(self.work.get().saturating_add(seen));
+            shared
+        };
         if shared.is_empty() {
             return 12;
         }
-        let star_v = self.live_faces(v).count();
-        let visited = u64::try_from(star_u.len() + star_v).unwrap_or(u64::MAX);
-        self.work.set(self.work.get().saturating_add(visited));
-        if moved.is_empty() && star_v == shared.len() {
-            return 1; // the component would vanish
+        let moved: Vec<u32> = if star_u.len() > RETRY_VALENCE {
+            // A high-valence u (a fan apex) is refused against most targets by one of its
+            // moved faces alone. Test a spread sample of them first, by the same face tests
+            // as below: a refusal here is one the full check makes too, so the decision is
+            // unchanged; only its cost falls.
+            let step = (star_u.len() / PROBE).max(1);
+            let mut probed = 0u64;
+            for &f in star_u.iter().step_by(step).take(PROBE) {
+                let t = self.faces[f as usize];
+                if t.contains(&v) {
+                    continue;
+                }
+                probed += 1;
+                let why = self.face_test(t, u, v);
+                if why != 0 {
+                    self.work.set(self.work.get().saturating_add(probed));
+                    return why;
+                }
+            }
+            self.work.set(self.work.get().saturating_add(probed));
+            star_u
+                .iter()
+                .copied()
+                .filter(|&f| !self.faces[f as usize].contains(&v))
+                .collect()
+        } else {
+            star_u
+                .iter()
+                .copied()
+                .filter(|&f| !self.faces[f as usize].contains(&v))
+                .collect()
+        };
+        if moved.is_empty() {
+            // The component vanishes unless v keeps a face without u (stops at the first).
+            let mut seen = 0u64;
+            let keeps = self.live_faces(v).any(|f| {
+                seen += 1;
+                !self.faces[f as usize].contains(&u)
+            });
+            self.work.set(self.work.get().saturating_add(seen));
+            if !keeps {
+                return 1;
+            }
         }
-        // Link condition.
-        let (mut nu, mut nv) = (Vec::new(), Vec::new());
+        // Link condition: a neighbour of u that is also v's (an edge to v in the live
+        // directed counts, which is sharing a face) must be the apex of a shared face.
+        let mut nu = Vec::new();
         self.neighbours(u, &mut nu);
-        self.neighbours(v, &mut nv);
         let expected: Vec<u32> = shared
             .iter()
             .map(|&f| {
@@ -484,21 +648,19 @@ impl<'a> State<'a> {
                     .unwrap_or(u32::MAX)
             })
             .collect();
-        // `nv` is the latest scan: its vertices carry the current epoch (linear test).
-        let in_nv = {
-            let (mark, epoch) = (self.mark.borrow(), self.epoch.get());
-            nu.iter()
-                .map(|&w| mark.get(w as usize) == Some(&epoch))
-                .collect::<Vec<bool>>()
-        };
-        for (&w, &shared) in nu.iter().zip(&in_nv) {
-            if w != v && shared && !expected.contains(&w) {
+        for &w in &nu {
+            if w != v && self.undirected(w, v) > 0 && !expected.contains(&w) {
                 return 2;
             }
         }
-        // Boundary pinch: two boundary vertices joined by an interior edge.
-        if !self.is_boundary_edge(u, v) && self.on_boundary(u, &nu) && self.on_boundary(v, &nv) {
-            return 3;
+        // Boundary pinch: two boundary vertices joined by an interior edge. v's neighbours
+        // are scanned only when the rest holds.
+        if !self.is_boundary_edge(u, v) && self.on_boundary(u, &nu) {
+            let mut nv = Vec::new();
+            self.neighbours(v, &mut nv);
+            if self.on_boundary(v, &nv) {
+                return 3;
+            }
         }
         // Local directed-edge accounting.
         let mut delta: HashMap<(u32, u32), i32> = HashMap::default();
@@ -513,44 +675,18 @@ impl<'a> State<'a> {
         let iface = &self.iface;
         for &f in &moved {
             let t = self.faces[f as usize];
+            let why = self.face_test(t, u, v);
+            if why != 0 {
+                return why;
+            }
             let g = t.map(|w| if w == u { v } else { w });
-            let (n0, n1) = (self.normal(t), self.normal(g));
-            let (l0, l1) = (dot(n0, n0).sqrt(), dot(n1, n1).sqrt());
-            if l1 <= 1e-12 * l0.max(1e-30) || l1 == 0. {
-                return 4;
-            }
-            if l0 > 0. && dot(n0, n1) < self.p.min_cos * l0 * l1 {
-                return 5;
-            }
             let s = sorted(g);
-            let src = self.src_face.get(&s).copied().unwrap_or([0, 0]);
-            let d = parity(g);
-            if src[d] == 0 && src[1 - d] != 0 {
-                return 6; // reversed against the source
-            }
-            if src == [0, 0]
-                && g.iter().all(|&w| iface[w as usize])
-                && !self.p.owns_face.is_some_and(|own| own(g))
-            {
-                return 7; // new face on three shared points
-            }
-            if self.face_set.contains_key(&s) || new_faces.contains(&s) {
-                return 8; // coincident
+            if new_faces.contains(&s) {
+                return 8; // coincident with another moved face
             }
             for j in 0..3 {
                 *delta.entry((t[j], t[(j + 1) % 3])).or_default() -= 1;
                 *delta.entry((g[j], g[(j + 1) % 3])).or_default() += 1;
-            }
-            // new edges incident to v
-            for &w in &g {
-                if w != v
-                    && iface[v as usize]
-                    && iface[w as usize]
-                    && self.shared_licence(v, w) == Some(0)
-                    && self.shared_licence(w, v) == Some(0)
-                {
-                    return 9;
-                }
             }
             new_faces.insert(s);
         }
@@ -667,6 +803,7 @@ impl<'a> State<'a> {
             }
         }
         // apply
+        self.changes += 1;
         for (f, g) in [(f1, g1), (f2, g2)] {
             let t = self.faces[f as usize];
             for j in 0..3 {
@@ -971,6 +1108,7 @@ impl<'a> State<'a> {
             return false;
         };
         // apply: new vertex
+        self.changes += 1;
         self.taken().insert(private_key(ps32));
         self.pos.push(psd);
         self.added.push((ps32, r));
@@ -1020,6 +1158,7 @@ impl<'a> State<'a> {
 
     fn apply(&mut self, u: u32, v: u32) {
         self.stats.collapses += 1;
+        self.changes += 1;
         let star_u: Vec<u32> = self.live_faces(u).collect();
         for f in star_u {
             let t = self.faces[f as usize];
@@ -1093,6 +1232,8 @@ impl<'a> State<'a> {
             retry_after: vec![0; n],
             cancelled: Cell::new(false),
             next_poll: Cell::new(0),
+            changes: 0,
+            star_cache: None,
         };
         for (i, &t) in p.triangles.iter().enumerate() {
             for j in 0..3 {
@@ -1162,11 +1303,13 @@ pub(crate) fn simplify_added(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats, 
             st.stats.rescues,
         );
         let mut heap = BinaryHeap::new();
+        let w0 = st.work.get();
         for u in 0..id(st.pos.len()) {
             if !st.dead[u as usize] && !st.vf[u as usize].is_empty() {
                 st.push(&mut heap, u);
             }
         }
+        st.stats.site.queue += st.work.get() - w0;
         while let Some(e) = heap.pop() {
             if (st.alive_faces <= p.target && st.removes_left == 0) || st.exhausted() {
                 break;
@@ -1179,17 +1322,37 @@ pub(crate) fn simplify_added(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats, 
                 continue;
             }
             let mut done = false;
+            st.stats.site.pops += 1;
+            let w0 = st.work.get();
             let candidates = st.candidates(u);
+            let spent = st.work.get() - w0;
+            st.stats.site.candidates += spent;
+            st.stats.site.max_candidates = st.stats.site.max_candidates.max(spent);
             let tried = candidates.len();
             // A high-valence vertex tries its cheapest `RETRY_VALENCE` targets: each check
             // moves all its faces, so trying every target would cost its valence squared.
             for (_, v) in candidates.into_iter().take(RETRY_VALENCE) {
-                if st.valid(u, v) {
+                let w0 = st.work.get();
+                let valid = st.valid(u, v);
+                let spent = st.work.get() - w0;
+                let site = &mut st.stats.site;
+                site.checks_run += 1;
+                site.checks += spent;
+                site.max_check = site.max_check.max(spent);
+                if !valid {
+                    site.refused_checks += spent;
+                }
+                if valid {
+                    let w0 = st.work.get();
                     st.apply(u, v);
                     st.neighbours(v, &mut nb);
                     let list = nb.clone();
+                    let w1 = st.work.get();
                     let n = st.push(&mut heap, v);
                     st.retry_after[v as usize] = retry_wait(n);
+                    let w2 = st.work.get();
+                    st.stats.site.apply += w1 - w0;
+                    st.stats.site.requeue += w2 - w1;
                     for w in list {
                         // A high-valence neighbour is queued again only after a share of its
                         // neighbourhood has changed, not after every change: each requeue
@@ -1203,6 +1366,7 @@ pub(crate) fn simplify_added(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats, 
                         let n = st.push(&mut heap, w);
                         st.retry_after[w as usize] = retry_wait(n);
                     }
+                    st.stats.site.neighbours += st.work.get() - w2;
                     done = true;
                     break;
                 }
@@ -1939,6 +2103,424 @@ mod tests {
             "an exhausted pass has no result"
         );
         stats
+    }
+
+    /// The main loop's work by site and the rescue rounds account for all the pass's work.
+    #[test]
+    fn site_work_accounts_for_the_pass() {
+        for (positions, triangles, class, target) in [
+            {
+                let (p, t, c) = grid(64);
+                let n = t.len() / 8;
+                (p, t, c, n)
+            },
+            {
+                let (p, t, c) = fan(4000);
+                (p, t, c, 16)
+            },
+        ] {
+            let keys: Vec<Key> = positions.iter().map(|&p| key(p)).collect();
+            let stats = free(&positions, &triangles, class, &keys, target, u64::MAX);
+            let s = stats.site;
+            let main = s.queue + s.candidates + s.checks + s.apply + s.requeue + s.neighbours;
+            assert_eq!(main + stats.rescue_work, stats.work, "{stats:?}");
+            assert!(
+                s.refused_checks <= s.checks && s.pops > 0 && s.checks_run > 0,
+                "{s:?}"
+            );
+            assert!(
+                s.max_check <= s.checks && s.max_candidates <= s.candidates,
+                "{s:?}"
+            );
+        }
+    }
+
+    /// A closed prism: two k-vertex cap fans (apexes 0 and 1 at the cap centres) joined by a
+    /// wall strip, 4k faces; the rims jittered so the walls are not planar.
+    fn prism(k: u32) -> (Vec<[f32; 3]>, Vec<[u32; 3]>) {
+        let mut positions = vec![[0f32, 0., 0.], [0., 0., 1.]];
+        for ring in 0..2u32 {
+            for i in 0..k {
+                let a = std::f32::consts::TAU * i as f32 / k as f32;
+                let r = 1. + 0.01 * ((i * 7 + ring * 3) % 5) as f32;
+                positions.push([r * a.cos(), r * a.sin(), ring as f32]);
+            }
+        }
+        let (b, t) = (|i: u32| 2 + i % k, |i: u32| 2 + k + i % k);
+        let mut triangles = Vec::new();
+        for i in 0..k {
+            triangles.push([0, b(i + 1), b(i)]);
+            triangles.push([1, t(i), t(i + 1)]);
+            triangles.push([b(i), b(i + 1), t(i + 1)]);
+            triangles.push([b(i), t(i + 1), t(i)]);
+        }
+        (positions, triangles)
+    }
+
+    impl State<'_> {
+        /// The check as it was before the star cache, the probe and the target-side
+        /// shortcuts: u's and v's stars and neighbours collected afresh, every moved face
+        /// tested in turn. Pure (no work charged, no cache), for the differential test.
+        fn reference_check(&self, u: u32, v: u32) -> u8 {
+            let star_u: Vec<u32> = self.live_faces(u).collect();
+            let (shared, moved): (Vec<u32>, Vec<u32>) = star_u
+                .iter()
+                .partition(|&&f| self.faces[f as usize].contains(&v));
+            if shared.is_empty() {
+                return 12;
+            }
+            let star_v = self.live_faces(v).count();
+            if moved.is_empty() && star_v == shared.len() {
+                return 1;
+            }
+            let (mut nu, mut nv) = (Vec::new(), Vec::new());
+            self.neighbours(u, &mut nu);
+            self.neighbours(v, &mut nv);
+            let expected: Vec<u32> = shared
+                .iter()
+                .map(|&f| {
+                    self.faces[f as usize]
+                        .iter()
+                        .copied()
+                        .find(|&w| w != u && w != v)
+                        .unwrap_or(u32::MAX)
+                })
+                .collect();
+            let of_v: HashSet<u32> = nv.iter().copied().collect();
+            if nu
+                .iter()
+                .any(|&w| w != v && of_v.contains(&w) && !expected.contains(&w))
+            {
+                return 2;
+            }
+            if !self.is_boundary_edge(u, v) && self.on_boundary(u, &nu) && self.on_boundary(v, &nv)
+            {
+                return 3;
+            }
+            let mut delta: HashMap<(u32, u32), i32> = HashMap::default();
+            let mut new_faces: HashSet<[u32; 3]> = HashSet::default();
+            for &f in &shared {
+                let t = self.faces[f as usize];
+                for j in 0..3 {
+                    *delta.entry((t[j], t[(j + 1) % 3])).or_default() -= 1;
+                }
+            }
+            let iface = &self.iface;
+            for &f in &moved {
+                let t = self.faces[f as usize];
+                let g = t.map(|w| if w == u { v } else { w });
+                let (n0, n1) = (self.normal(t), self.normal(g));
+                let (l0, l1) = (dot(n0, n0).sqrt(), dot(n1, n1).sqrt());
+                if l1 <= 1e-12 * l0.max(1e-30) || l1 == 0. {
+                    return 4;
+                }
+                if l0 > 0. && dot(n0, n1) < self.p.min_cos * l0 * l1 {
+                    return 5;
+                }
+                let s = sorted(g);
+                let src = self.src_face.get(&s).copied().unwrap_or([0, 0]);
+                let d = parity(g);
+                if src[d] == 0 && src[1 - d] != 0 {
+                    return 6;
+                }
+                if src == [0, 0]
+                    && g.iter().all(|&w| iface[w as usize])
+                    && !self.p.owns_face.is_some_and(|own| own(g))
+                {
+                    return 7;
+                }
+                if self.face_set.contains_key(&s) || new_faces.contains(&s) {
+                    return 8;
+                }
+                for j in 0..3 {
+                    *delta.entry((t[j], t[(j + 1) % 3])).or_default() -= 1;
+                    *delta.entry((g[j], g[(j + 1) % 3])).or_default() += 1;
+                }
+                for &w in &g {
+                    if w != v
+                        && iface[v as usize]
+                        && iface[w as usize]
+                        && self.shared_licence(v, w) == Some(0)
+                        && self.shared_licence(w, v) == Some(0)
+                    {
+                        return 9;
+                    }
+                }
+                new_faces.insert(s);
+            }
+            for (&(a, b), &d) in &delta {
+                if d > 0 {
+                    let now = i64::from(self.dir.get(&(a, b)).copied().unwrap_or(0)) + i64::from(d);
+                    let src = self.src_dir.get(&(a, b)).copied().unwrap_or(0);
+                    let shared = if iface[a as usize] && iface[b as usize] {
+                        self.shared_licence(a, b)
+                    } else {
+                        None
+                    };
+                    if now > i64::from(shared.unwrap_or(src.max(1))) {
+                        return 10;
+                    }
+                }
+            }
+            for &(a, b) in delta.keys() {
+                let e = (a.min(b), a.max(b));
+                if self.p.segments.contains(&e) {
+                    let after = i64::from(self.undirected(e.0, e.1))
+                        + i64::from(delta.get(&e).copied().unwrap_or(0))
+                        + i64::from(delta.get(&(e.1, e.0)).copied().unwrap_or(0));
+                    if after <= 0 {
+                        return 11;
+                    }
+                }
+            }
+            0
+        }
+    }
+
+    /// A random mesh for the differential test: a jittered grid (boundary on its rim) with
+    /// random diagonals and heights, fins on some interior edges (three faces on an edge),
+    /// and an open or closed fan whose apex has valence 65 to 120.
+    fn rough_mesh(next: &mut impl FnMut() -> f32) -> (Vec<[f32; 3]>, Vec<[u32; 3]>) {
+        let n = 6 + (next() * 7.) as u32;
+        let mut positions = Vec::new();
+        for i in 0..=n {
+            for j in 0..=n {
+                let (x, y) = (
+                    i as f32 + 0.4 * (next() - 0.5),
+                    j as f32 + 0.4 * (next() - 0.5),
+                );
+                positions.push([x, y, 2. * next()]);
+            }
+        }
+        let at = |i: u32, j: u32| i * (n + 1) + j;
+        let mut triangles = Vec::new();
+        for i in 0..n {
+            for j in 0..n {
+                let (a, b, c, d) = (at(i, j), at(i + 1, j), at(i + 1, j + 1), at(i, j + 1));
+                if next() < 0.5 {
+                    triangles.extend([[a, b, c], [a, c, d]]);
+                } else {
+                    triangles.extend([[a, b, d], [b, c, d]]);
+                }
+            }
+        }
+        // Holes: open boundaries inside the grid, so a common neighbour often holds a
+        // single face on its edge to the target.
+        triangles.retain(|_| next() >= 0.12);
+        let grid_faces = triangles.len();
+        for _ in 0..1 + (next() * 4.) as usize {
+            let t = triangles[(next() * grid_faces as f32) as usize % grid_faces];
+            let (a, b) = (t[0], t[1]);
+            let c = positions.len() as u32;
+            let (pa, pb) = (positions[a as usize], positions[b as usize]);
+            positions.push([(pa[0] + pb[0]) / 2., (pa[1] + pb[1]) / 2., 3. + next()]);
+            triangles.push(if next() < 0.5 { [a, b, c] } else { [b, a, c] });
+        }
+        let k = 65 + (next() * 56.) as u32;
+        let apex = positions.len() as u32;
+        let (ox, oy) = (n as f32 + 10., n as f32 / 2.);
+        positions.push([ox, oy, 1. + next()]);
+        for i in 0..k {
+            let a = std::f32::consts::TAU * i as f32 / k as f32;
+            let r = 4. + next();
+            positions.push([ox + r * a.cos(), oy + r * a.sin(), next()]);
+        }
+        let closed = next() < 0.5;
+        for i in 0..k {
+            if i + 1 == k && !closed {
+                break;
+            }
+            triangles.push([apex, apex + 1 + i, apex + 1 + (i + 1) % k]);
+        }
+        (positions, triangles)
+    }
+
+    /// The star cache, the high-valence probe and the target-side shortcuts change only
+    /// what a check costs: on random meshes with boundaries, nonmanifold edges and stars
+    /// of valence above `RETRY_VALENCE`, every check accepts exactly when the reference
+    /// (the check as it was) accepts, with collapses and flips interleaved so cached stars
+    /// go stale. Refusal reasons may differ (a probe refusal reports the sampled face's).
+    #[test]
+    fn checks_decide_as_the_reference_check() {
+        let mut compared = [0u64; 3];
+        for seed in 0..48u64 {
+            let mut state = seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1;
+            let mut next = move || {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                (state >> 40) as f32 / (1u64 << 24) as f32
+            };
+            let (positions, triangles) = rough_mesh(&mut next);
+            let keys: Vec<Key> = positions.iter().map(|&p| key(p)).collect();
+            let n = positions.len();
+            let mut und: HashMap<(u32, u32), u32> = HashMap::default();
+            for t in &triangles {
+                for j in 0..3 {
+                    let (a, b) = (t[j], t[(j + 1) % 3]);
+                    *und.entry((a.min(b), a.max(b))).or_default() += 1;
+                }
+            }
+            let mut boundary = vec![false; n];
+            for (&(a, b), &c) in &und {
+                if c == 1 {
+                    boundary[a as usize] = true;
+                    boundary[b as usize] = true;
+                }
+            }
+            let interface: Vec<bool> = (0..n)
+                .map(|v| next() < if boundary[v] { 0.5 } else { 0.05 })
+                .collect();
+            let mut edges: Vec<(u32, u32)> = und.keys().copied().collect();
+            edges.sort_unstable();
+            let segments: HashSet<(u32, u32)> = edges
+                .into_iter()
+                .filter(|&(a, b)| interface[a as usize] && interface[b as usize] && next() < 0.5)
+                .collect();
+            let owns_segment = |a: u32, b: u32| (a ^ b) & 1 == 0;
+            let owns_face = |f: [u32; 3]| (f[0] ^ f[1] ^ f[2]) & 1 == 0;
+            let seam_owner = (seed / 3) % 2 == 0;
+            let p = Problem {
+                positions: &positions,
+                triangles: &triangles,
+                class: vec![Class::Free; n],
+                interface,
+                segments,
+                target: 0,
+                limit: 0,
+                min_cos: [0., 0.3, 0.9][(seed % 3) as usize],
+                owns_segment: seam_owner.then_some(&owns_segment as &dyn Fn(u32, u32) -> bool),
+                owns_face: seam_owner.then_some(&owns_face as &dyn Fn([u32; 3]) -> bool),
+                keys: &keys,
+                steiner: false,
+                snap: None,
+                protected: None,
+                shared: None,
+                work_limit: u64::MAX,
+                cancel: None,
+            };
+            let mut st = State::new(&p);
+            let mut nb = Vec::new();
+            for _ in 0..3 * n {
+                let u = (next() * n as f32) as u32 % n as u32;
+                if st.dead[u as usize] || st.vf[u as usize].is_empty() {
+                    continue;
+                }
+                st.neighbours(u, &mut nb);
+                let targets = nb.clone();
+                let mut accepted = Vec::new();
+                for &v in &targets {
+                    let want = st.reference_check(u, v) == 0;
+                    let got = st.check(u, v) == 0;
+                    assert_eq!(got, want, "seed {seed}: check({u}, {v})");
+                    let probed = st.live_faces(u).count() > RETRY_VALENCE;
+                    compared[usize::from(got)] += 1;
+                    compared[2] += u64::from(probed);
+                    if got {
+                        accepted.push(v);
+                    }
+                }
+                // Change the mesh while u's star is cached: a collapse of a neighbour of u
+                // (its target chosen by the reference, so the cache still holds u) or a
+                // flip of an edge at u, then check u again; or a collapse of u itself.
+                let roll = next();
+                let x = targets
+                    .get((next() * targets.len() as f32) as usize % targets.len().max(1))
+                    .copied();
+                if roll < 0.3 {
+                    if let Some(x) = x {
+                        let mut nx = Vec::new();
+                        st.neighbours(x, &mut nx);
+                        if let Some(&y) = nx.iter().find(|&&y| st.reference_check(x, y) == 0) {
+                            st.apply(x, y);
+                        }
+                    }
+                } else if roll < 0.6 {
+                    if let Some(x) = x {
+                        st.flip(u, x);
+                    }
+                } else if roll < 0.8 && !accepted.is_empty() {
+                    let v = accepted[(next() * accepted.len() as f32) as usize % accepted.len()];
+                    st.apply(u, v);
+                    continue;
+                }
+                if st.dead[u as usize] {
+                    continue;
+                }
+                st.neighbours(u, &mut nb);
+                for &v in &nb.clone() {
+                    let want = st.reference_check(u, v) == 0;
+                    let got = st.check(u, v) == 0;
+                    assert_eq!(got, want, "seed {seed}: check({u}, {v}) after a change");
+                    compared[usize::from(got)] += 1;
+                }
+            }
+        }
+        // Both outcomes, and the probe's path, are exercised.
+        assert!(compared.iter().all(|&c| c > 1000), "{compared:?}");
+    }
+
+    /// The cap apexes themselves (valence k) are popped and refused against most of their
+    /// targets, one turned-over face deciding each. A check collected the apex's star and
+    /// neighbours for every target (about 856 units per face at k = 2000); the star is now
+    /// collected once per pop and a spread sample of the moved faces decides most refusals.
+    #[test]
+    fn a_high_valence_vertex_pays_its_star_once_per_pop() {
+        let (positions, triangles) = prism(2000);
+        let keys: Vec<Key> = positions.iter().map(|&p| key(p)).collect();
+        let n = positions.len();
+        let faces = triangles.len() as u64;
+        let stats = free(
+            &positions,
+            &triangles,
+            vec![Class::Free; n],
+            &keys,
+            triangles.len() / 8,
+            u64::MAX,
+        );
+        assert!(stats.why[5] > 0, "{stats:?}");
+        assert!(stats.work < 200 * faces, "{} for {faces} faces", stats.work);
+    }
+
+    /// A rim vertex is tried against its cap's apex, of valence k, over and over when most
+    /// collapses are refused (here a strict normal floor). A check used to scan the target's
+    /// whole star and neighbours, so the work grew with k per refusal: 132,972 units per
+    /// face at k = 2000. A check now costs the moving vertex's star.
+    #[test]
+    fn refused_checks_do_not_pay_the_targets_valence() {
+        let (positions, triangles) = prism(2000);
+        let keys: Vec<Key> = positions.iter().map(|&p| key(p)).collect();
+        let n = positions.len();
+        let p = Problem {
+            positions: &positions,
+            triangles: &triangles,
+            class: vec![Class::Free; n],
+            interface: vec![false; n],
+            segments: HashSet::default(),
+            target: triangles.len() / 8,
+            limit: triangles.len() / 8,
+            min_cos: 0.95,
+            owns_segment: None,
+            owns_face: None,
+            keys: &keys,
+            steiner: false,
+            snap: None,
+            protected: None,
+            shared: None,
+            work_limit: u64::MAX,
+            cancel: None,
+        };
+        let (_, stats) = simplify(&p);
+        let faces = triangles.len() as u64;
+        assert!(
+            stats.site.refused_checks > stats.site.checks / 2,
+            "{stats:?}"
+        );
+        assert!(
+            stats.work < 8_000 * faces,
+            "{} for {faces} faces",
+            stats.work
+        );
     }
 
     /// The work count grows linearly on an ordinary mesh and on a high-valence fan whose
