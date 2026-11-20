@@ -491,16 +491,29 @@ impl<'a> State<'a> {
         if shared.is_empty() {
             return 12;
         }
-        let star_v = self.live_faces(v).count();
-        let visited = u64::try_from(star_u.len() + star_v).unwrap_or(u64::MAX);
-        self.work.set(self.work.get().saturating_add(visited));
-        if moved.is_empty() && star_v == shared.len() {
-            return 1; // the component would vanish
+        // The check costs u's star, not v's: a rim vertex tried against a fan apex of valence
+        // k used to scan the apex's whole star and neighbours on every check, refused or not.
+        self.work.set(
+            self.work
+                .get()
+                .saturating_add(u64::try_from(star_u.len()).unwrap_or(u64::MAX)),
+        );
+        if moved.is_empty() {
+            // The component vanishes unless v keeps a face without u (stops at the first).
+            let mut seen = 0u64;
+            let keeps = self.live_faces(v).any(|f| {
+                seen += 1;
+                !self.faces[f as usize].contains(&u)
+            });
+            self.work.set(self.work.get().saturating_add(seen));
+            if !keeps {
+                return 1;
+            }
         }
-        // Link condition.
-        let (mut nu, mut nv) = (Vec::new(), Vec::new());
+        // Link condition: a neighbour of u that is also v's (an edge to v in the live
+        // directed counts, which is sharing a face) must be the apex of a shared face.
+        let mut nu = Vec::new();
         self.neighbours(u, &mut nu);
-        self.neighbours(v, &mut nv);
         let expected: Vec<u32> = shared
             .iter()
             .map(|&f| {
@@ -511,21 +524,19 @@ impl<'a> State<'a> {
                     .unwrap_or(u32::MAX)
             })
             .collect();
-        // `nv` is the latest scan: its vertices carry the current epoch (linear test).
-        let in_nv = {
-            let (mark, epoch) = (self.mark.borrow(), self.epoch.get());
-            nu.iter()
-                .map(|&w| mark.get(w as usize) == Some(&epoch))
-                .collect::<Vec<bool>>()
-        };
-        for (&w, &shared) in nu.iter().zip(&in_nv) {
-            if w != v && shared && !expected.contains(&w) {
+        for &w in &nu {
+            if w != v && self.undirected(w, v) > 0 && !expected.contains(&w) {
                 return 2;
             }
         }
-        // Boundary pinch: two boundary vertices joined by an interior edge.
-        if !self.is_boundary_edge(u, v) && self.on_boundary(u, &nu) && self.on_boundary(v, &nv) {
-            return 3;
+        // Boundary pinch: two boundary vertices joined by an interior edge. v's neighbours
+        // are scanned only when the rest holds.
+        if !self.is_boundary_edge(u, v) && self.on_boundary(u, &nu) {
+            let mut nv = Vec::new();
+            self.neighbours(v, &mut nv);
+            if self.on_boundary(v, &nv) {
+                return 3;
+            }
         }
         // Local directed-edge accounting.
         let mut delta: HashMap<(u32, u32), i32> = HashMap::default();
@@ -2019,6 +2030,69 @@ mod tests {
                 "{s:?}"
             );
         }
+    }
+
+    /// A closed prism: two k-vertex cap fans (apexes 0 and 1 at the cap centres) joined by a
+    /// wall strip, 4k faces; the rims jittered so the walls are not planar.
+    fn prism(k: u32) -> (Vec<[f32; 3]>, Vec<[u32; 3]>) {
+        let mut positions = vec![[0f32, 0., 0.], [0., 0., 1.]];
+        for ring in 0..2u32 {
+            for i in 0..k {
+                let a = std::f32::consts::TAU * i as f32 / k as f32;
+                let r = 1. + 0.01 * ((i * 7 + ring * 3) % 5) as f32;
+                positions.push([r * a.cos(), r * a.sin(), ring as f32]);
+            }
+        }
+        let (b, t) = (|i: u32| 2 + i % k, |i: u32| 2 + k + i % k);
+        let mut triangles = Vec::new();
+        for i in 0..k {
+            triangles.push([0, b(i + 1), b(i)]);
+            triangles.push([1, t(i), t(i + 1)]);
+            triangles.push([b(i), b(i + 1), t(i + 1)]);
+            triangles.push([b(i), t(i + 1), t(i)]);
+        }
+        (positions, triangles)
+    }
+
+    /// A rim vertex is tried against its cap's apex, of valence k, over and over when most
+    /// collapses are refused (here a strict normal floor). A check used to scan the target's
+    /// whole star and neighbours, so the work grew with k per refusal: 132,972 units per
+    /// face at k = 2000. A check now costs the moving vertex's star.
+    #[test]
+    fn refused_checks_do_not_pay_the_targets_valence() {
+        let (positions, triangles) = prism(2000);
+        let keys: Vec<Key> = positions.iter().map(|&p| key(p)).collect();
+        let n = positions.len();
+        let p = Problem {
+            positions: &positions,
+            triangles: &triangles,
+            class: vec![Class::Free; n],
+            interface: vec![false; n],
+            segments: HashSet::default(),
+            target: triangles.len() / 8,
+            limit: triangles.len() / 8,
+            min_cos: 0.95,
+            owns_segment: None,
+            owns_face: None,
+            keys: &keys,
+            steiner: false,
+            snap: None,
+            protected: None,
+            shared: None,
+            work_limit: u64::MAX,
+            cancel: None,
+        };
+        let (_, stats) = simplify(&p);
+        let faces = triangles.len() as u64;
+        assert!(
+            stats.site.refused_checks > stats.site.checks / 2,
+            "{stats:?}"
+        );
+        assert!(
+            stats.work < 8_000 * faces,
+            "{} for {faces} faces",
+            stats.work
+        );
     }
 
     /// The work count grows linearly on an ordinary mesh and on a high-valence fan whose
