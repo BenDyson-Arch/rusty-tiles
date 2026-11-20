@@ -268,7 +268,16 @@ struct State<'a> {
     /// Whether `Problem::cancel` returned true, and the work count of its next poll.
     cancelled: Cell<bool>,
     next_poll: Cell<u64>,
+    /// Mesh changes so far (collapses, flips, Steiner rescues): a cached star is current
+    /// while this is unchanged.
+    changes: u64,
+    /// The last checked vertex's live faces, with `changes` when they were collected: a
+    /// pop checks one vertex against up to `RETRY_VALENCE` targets with no change between.
+    star_cache: Option<(u32, u64, Vec<u32>)>,
 }
+
+/// Moved faces a high-valence vertex's check samples first (`State::check_star`).
+const PROBE: usize = 32;
 
 /// Targets a vertex tries per pop (its cheapest), and the candidate count above which a
 /// vertex is not requeued after every change around it.
@@ -481,23 +490,134 @@ impl<'a> State<'a> {
         }
     }
 
-    /// 0 when valid, else the refusal reason (`Stats::why` index).
+    /// 0 when valid, else the refusal reason (`Stats::why` index). It costs u's star, not
+    /// v's (a rim vertex tried against a fan apex of valence k no longer scans the apex).
     fn check(&mut self, u: u32, v: u32) -> u8 {
         self.stats.checks += 1;
-        let star_u: Vec<u32> = self.live_faces(u).collect();
-        let (shared, moved): (Vec<u32>, Vec<u32>) = star_u
-            .iter()
-            .partition(|&&f| self.faces[f as usize].contains(&v));
+        // u's star, collected once per pop: the targets a pop tries change nothing between.
+        let star_u = match self.star_cache.take() {
+            Some((w, at, star)) if w == u && at == self.changes => star,
+            _ => {
+                let star: Vec<u32> = self.live_faces(u).collect();
+                self.work.set(
+                    self.work
+                        .get()
+                        .saturating_add(u64::try_from(star.len()).unwrap_or(u64::MAX)),
+                );
+                star
+            }
+        };
+        let why = self.check_star(u, v, &star_u);
+        self.star_cache = Some((u, self.changes, star_u));
+        why
+    }
+
+    /// The tests of one moved face `t` (u moving to v) that depend on nothing else the
+    /// check accumulates: 4 degenerate, 5 turned over, 6 reversed against the source, 7 a new
+    /// face on three shared points, 8 coincident with a live face, 9 a new unlicensed edge
+    /// between shared points. 0 when it passes them.
+    fn face_test(&self, t: [u32; 3], u: u32, v: u32) -> u8 {
+        let iface = &self.iface;
+        let g = t.map(|w| if w == u { v } else { w });
+        let (n0, n1) = (self.normal(t), self.normal(g));
+        let (l0, l1) = (dot(n0, n0).sqrt(), dot(n1, n1).sqrt());
+        if l1 <= 1e-12 * l0.max(1e-30) || l1 == 0. {
+            return 4;
+        }
+        if l0 > 0. && dot(n0, n1) < self.p.min_cos * l0 * l1 {
+            return 5;
+        }
+        let s = sorted(g);
+        let src = self.src_face.get(&s).copied().unwrap_or([0, 0]);
+        let d = parity(g);
+        if src[d] == 0 && src[1 - d] != 0 {
+            return 6; // reversed against the source
+        }
+        if src == [0, 0]
+            && g.iter().all(|&w| iface[w as usize])
+            && !self.p.owns_face.is_some_and(|own| own(g))
+        {
+            return 7; // new face on three shared points
+        }
+        if self.face_set.contains_key(&s) {
+            return 8; // coincident
+        }
+        // new edges incident to v
+        for &w in &g {
+            if w != v
+                && iface[v as usize]
+                && iface[w as usize]
+                && self.shared_licence(v, w) == Some(0)
+                && self.shared_licence(w, v) == Some(0)
+            {
+                return 9;
+            }
+        }
+        0
+    }
+
+    /// `check` on u's live faces `star_u`.
+    fn check_star(&mut self, u: u32, v: u32, star_u: &[u32]) -> u8 {
+        // The faces u and v share, from the smaller of the two stars: u's is in hand, and
+        // either may be a fan apex of thousands.
+        let shared: Vec<u32> = if star_u.len() <= self.vf[v as usize].len() {
+            self.work.set(
+                self.work
+                    .get()
+                    .saturating_add(u64::try_from(star_u.len()).unwrap_or(u64::MAX)),
+            );
+            star_u
+                .iter()
+                .copied()
+                .filter(|&f| self.faces[f as usize].contains(&v))
+                .collect()
+        } else {
+            let mut seen = 0u64;
+            let shared = self
+                .live_faces(v)
+                .filter(|&f| {
+                    seen += 1;
+                    self.faces[f as usize].contains(&u)
+                })
+                .collect();
+            self.work.set(self.work.get().saturating_add(seen));
+            shared
+        };
         if shared.is_empty() {
             return 12;
         }
-        // The check costs u's star, not v's: a rim vertex tried against a fan apex of valence
-        // k used to scan the apex's whole star and neighbours on every check, refused or not.
-        self.work.set(
-            self.work
-                .get()
-                .saturating_add(u64::try_from(star_u.len()).unwrap_or(u64::MAX)),
-        );
+        let moved: Vec<u32> = if star_u.len() > RETRY_VALENCE {
+            // A high-valence u (a fan apex) is refused against most targets by one of its
+            // moved faces alone. Test a spread sample of them first, by the same face tests
+            // as below: a refusal here is one the full check makes too, so the decision is
+            // unchanged; only its cost falls.
+            let step = (star_u.len() / PROBE).max(1);
+            let mut probed = 0u64;
+            for &f in star_u.iter().step_by(step).take(PROBE) {
+                let t = self.faces[f as usize];
+                if t.contains(&v) {
+                    continue;
+                }
+                probed += 1;
+                let why = self.face_test(t, u, v);
+                if why != 0 {
+                    self.work.set(self.work.get().saturating_add(probed));
+                    return why;
+                }
+            }
+            self.work.set(self.work.get().saturating_add(probed));
+            star_u
+                .iter()
+                .copied()
+                .filter(|&f| !self.faces[f as usize].contains(&v))
+                .collect()
+        } else {
+            star_u
+                .iter()
+                .copied()
+                .filter(|&f| !self.faces[f as usize].contains(&v))
+                .collect()
+        };
         if moved.is_empty() {
             // The component vanishes unless v keeps a face without u (stops at the first).
             let mut seen = 0u64;
@@ -551,44 +671,18 @@ impl<'a> State<'a> {
         let iface = &self.iface;
         for &f in &moved {
             let t = self.faces[f as usize];
+            let why = self.face_test(t, u, v);
+            if why != 0 {
+                return why;
+            }
             let g = t.map(|w| if w == u { v } else { w });
-            let (n0, n1) = (self.normal(t), self.normal(g));
-            let (l0, l1) = (dot(n0, n0).sqrt(), dot(n1, n1).sqrt());
-            if l1 <= 1e-12 * l0.max(1e-30) || l1 == 0. {
-                return 4;
-            }
-            if l0 > 0. && dot(n0, n1) < self.p.min_cos * l0 * l1 {
-                return 5;
-            }
             let s = sorted(g);
-            let src = self.src_face.get(&s).copied().unwrap_or([0, 0]);
-            let d = parity(g);
-            if src[d] == 0 && src[1 - d] != 0 {
-                return 6; // reversed against the source
-            }
-            if src == [0, 0]
-                && g.iter().all(|&w| iface[w as usize])
-                && !self.p.owns_face.is_some_and(|own| own(g))
-            {
-                return 7; // new face on three shared points
-            }
-            if self.face_set.contains_key(&s) || new_faces.contains(&s) {
-                return 8; // coincident
+            if new_faces.contains(&s) {
+                return 8; // coincident with another moved face
             }
             for j in 0..3 {
                 *delta.entry((t[j], t[(j + 1) % 3])).or_default() -= 1;
                 *delta.entry((g[j], g[(j + 1) % 3])).or_default() += 1;
-            }
-            // new edges incident to v
-            for &w in &g {
-                if w != v
-                    && iface[v as usize]
-                    && iface[w as usize]
-                    && self.shared_licence(v, w) == Some(0)
-                    && self.shared_licence(w, v) == Some(0)
-                {
-                    return 9;
-                }
             }
             new_faces.insert(s);
         }
@@ -705,6 +799,7 @@ impl<'a> State<'a> {
             }
         }
         // apply
+        self.changes += 1;
         for (f, g) in [(f1, g1), (f2, g2)] {
             let t = self.faces[f as usize];
             for j in 0..3 {
@@ -1009,6 +1104,7 @@ impl<'a> State<'a> {
             return false;
         };
         // apply: new vertex
+        self.changes += 1;
         self.taken().insert(private_key(ps32));
         self.pos.push(psd);
         self.added.push((ps32, r));
@@ -1058,6 +1154,7 @@ impl<'a> State<'a> {
 
     fn apply(&mut self, u: u32, v: u32) {
         self.stats.collapses += 1;
+        self.changes += 1;
         let star_u: Vec<u32> = self.live_faces(u).collect();
         for f in star_u {
             let t = self.faces[f as usize];
@@ -1131,6 +1228,8 @@ impl<'a> State<'a> {
             retry_after: vec![0; n],
             cancelled: Cell::new(false),
             next_poll: Cell::new(0),
+            changes: 0,
+            star_cache: None,
         };
         for (i, &t) in p.triangles.iter().enumerate() {
             for j in 0..3 {
@@ -2052,6 +2151,28 @@ mod tests {
             triangles.push([b(i), t(i + 1), t(i)]);
         }
         (positions, triangles)
+    }
+
+    /// The cap apexes themselves (valence k) are popped and refused against most of their
+    /// targets, one turned-over face deciding each. A check collected the apex's star and
+    /// neighbours for every target (about 856 units per face at k = 2000); the star is now
+    /// collected once per pop and a spread sample of the moved faces decides most refusals.
+    #[test]
+    fn a_high_valence_vertex_pays_its_star_once_per_pop() {
+        let (positions, triangles) = prism(2000);
+        let keys: Vec<Key> = positions.iter().map(|&p| key(p)).collect();
+        let n = positions.len();
+        let faces = triangles.len() as u64;
+        let stats = free(
+            &positions,
+            &triangles,
+            vec![Class::Free; n],
+            &keys,
+            triangles.len() / 8,
+            u64::MAX,
+        );
+        assert!(stats.why[5] > 0, "{stats:?}");
+        assert!(stats.work < 200 * faces, "{} for {faces} faces", stats.work);
     }
 
     /// A rim vertex is tried against its cap's apex, of valence k, over and over when most
