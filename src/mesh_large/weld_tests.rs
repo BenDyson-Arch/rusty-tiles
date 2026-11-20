@@ -9,7 +9,7 @@ use crate::{
         full::{self, tests as full_tests},
         TilerJobs, TilerRequest,
     },
-    tile_view::TileSet,
+    tile_view::{TileRole, TileSet},
     RunControl,
 };
 use serde_json::json;
@@ -293,12 +293,12 @@ const SLIVERS: [[[f32; 3]; 3]; 3] = [
 ];
 
 /// A collapsed sliver with a corner on a surviving face is bounded by the largest
-/// displacement plus its collapsed set's reach from that corner, and the bound is charged;
+/// displacement plus its collapsed set's reach from that corner;
 /// a coincident face is counted. The sliver's 1.001 m corner is the source's largest x, so
 /// the welded faces' box is strictly inside the source's: the assembly checks containment,
 /// not equality, in a welded run.
 #[test]
-fn collapsed_slivers_are_bounded_counted_and_charged() {
+fn collapsed_slivers_are_counted_and_priced_against_the_original() {
     let dir = tempfile::tempdir().unwrap();
     let input = triangles_gltf(&dir.path().join("src"), &SLIVERS);
     let weld = MeshWeld::new(0.002).unwrap();
@@ -328,10 +328,7 @@ fn collapsed_slivers_are_bounded_counted_and_charged() {
         (report.collapse_bound_m - (d + reach)).abs() < 1e-6,
         "{report:?}"
     );
-    assert_eq!(
-        report.geometric_error_term_m,
-        report.collapse_bound_m.next_up()
-    );
+    assert_eq!(report.geometric_error_term_m, 0.);
     let max_x = rows
         .iter()
         .flat_map(|t| t.triangle.positions)
@@ -356,19 +353,22 @@ fn collapsed_slivers_are_bounded_counted_and_charged() {
         (1, 0)
     );
     assert_eq!(on_edge.collapse_bound_m, d);
-    assert_eq!(on_edge.geometric_error_term_m, d.next_up());
-    // The published errors carry the collapse bound.
+    assert_eq!(on_edge.geometric_error_term_m, 0.);
+    // The unwelded extremum x=1.001 is d beyond the leaf, whose maximum x is 1.
     let (archive, result) = bake(&input, dir.path(), "slivers", 1, Some(weld));
     assert_eq!(result.report.weld.as_ref(), Some(&report));
     let set = TileSet::open(&archive).unwrap();
-    assert!(set
+    let leaf = set
         .tiles()
         .iter()
-        .all(|t| t.geometric_error >= report.geometric_error_term_m));
+        .find(|t| t.role == TileRole::Leaf)
+        .unwrap();
+    assert!((d..d * 1.01).contains(&leaf.geometric_error));
+    assert!(leaf.geometric_error < report.collapse_bound_m);
 }
 
-/// A sliver whose every corner collapses away from all surviving faces cannot be bounded:
-/// `mesh` refuses the weld before publishing, and `mesh-inspect` reports it.
+/// A sliver collapsing away from all surviving faces triggers the weld's isolation
+/// policy. Inspection reports the collapse and baking refuses publication.
 #[test]
 fn isolated_collapses_refuse_the_bake_and_are_reported_by_inspect() {
     let dir = tempfile::tempdir().unwrap();
@@ -580,7 +580,7 @@ fn a_capture_welds_near_seams_by_scope_and_moves_positions_only() {
         );
         assert_eq!(report.largest_class, 2);
         assert_eq!(report.max_displacement_m, f64::from(DELTA));
-        assert_eq!(report.geometric_error_term_m, f64::from(DELTA).next_up());
+        assert_eq!(report.geometric_error_term_m, 0.);
         assert_eq!(
             report.join_primitives,
             if join { "same-material" } else { "none" }
@@ -702,18 +702,16 @@ fn a_weld_that_moves_nothing_publishes_the_same_tiles() {
     assert_eq!(plain_result.diagnostics.memory.capture_weld_bytes, 0);
 }
 
-/// A weld that moves vertices adds its largest displacement to every published error, leaf
-/// and coarse, keeps the tile frame, validates, and is the same archive for every worker
-/// count.
+/// A weld prices each leaf locally, preserves the frame and produces identical archives
+/// for different worker counts.
 #[test]
-fn published_errors_carry_the_weld_displacement() {
+fn welded_leaf_errors_are_local_and_reproducible() {
     let work = tempfile::tempdir().unwrap();
     // Near-seams 2 cm wide: a displacement that dwarfs the leaves' own error.
     let input = blocks(&work.path().join("src"), 0.02);
     let weld = MeshWeld::new(0.05).unwrap().joining_same_material();
     let (plain, _) = bake(&input, work.path(), "plain", 2, None);
     let mut archives = Vec::new();
-    let mut term = 0.;
     for jobs in [1, 3] {
         let (welded, result) = bake(
             &input,
@@ -728,18 +726,121 @@ fn published_errors_carry_the_weld_displacement() {
             (stated.max_displacement_m - 0.02).abs() < 1e-6,
             "{stated:?}"
         );
-        term = stated.geometric_error_term_m;
+        assert_eq!(stated.geometric_error_term_m, 0.);
         crate::validate::inspect(crate::validate::ValidationRequest::new(&welded)).unwrap();
         archives.push(fs::read(&welded).unwrap());
         let set = TileSet::open(&welded).unwrap();
-        let errors: Vec<f64> = set.tiles().iter().map(|t| t.geometric_error).collect();
-        assert!(errors.iter().all(|g| *g >= term), "{errors:?}");
+        let leaves: Vec<f64> = set
+            .tiles()
+            .iter()
+            .filter(|t| t.role == TileRole::Leaf)
+            .map(|t| t.geometric_error)
+            .collect();
+        assert!(leaves.iter().any(|g| *g < 0.001), "{leaves:?}");
+        assert!(leaves.iter().any(|g| *g > 0.019), "{leaves:?}");
         let plain_set = TileSet::open(&plain).unwrap();
         assert_eq!(
             set.root_transform().map(f64::to_bits),
             plain_set.root_transform().map(f64::to_bits)
         );
     }
-    assert!(term > 0.02);
     assert!(archives.windows(2).all(|w| w[0] == w[1]));
+}
+
+#[test]
+fn original_positions_follow_authored_vertices_across_primitive_instances() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = blocks(&dir.path().join("source"), DELTA);
+    let (rows, _) = capture(&input, &dir.path().join("plain"), 1, None, None);
+    let original = by_source(&rows);
+    let mut config = full_tests::config(dir.path());
+    config.test_assembly = Some(full_tests::spilled(1));
+    let weld = MeshWeld::new(EPSILON).unwrap();
+    for scope in [weld, weld.joining_same_material()] {
+        config.weld = Some(scope);
+        let capture = full::capture(&input, &config, &mut || Ok(())).unwrap();
+        let positions = capture.original_positions.as_ref().unwrap();
+        let mut changed = 0;
+        for row in capture.triangles.reader().unwrap() {
+            let row = row.unwrap();
+            let key = (row.triangle.source.primitive, row.triangle.source.triangle);
+            let expect = original[&key].triangle.positions;
+            assert_eq!(positions.face(&row).unwrap(), expect);
+            changed += usize::from(row.triangle.positions != expect);
+        }
+        assert!(changed > 0);
+        capture.close().unwrap();
+    }
+}
+
+/// The delivered sheet lies in y=0. Original corners h above that plane give an
+/// analytic witness even when S2 and the decoded geometry both see a flat sheet.
+#[test]
+fn coarse_and_leaf_certificates_cover_the_unwelded_sheet() {
+    let dir = tempfile::tempdir().unwrap();
+    let h = 1. / 32.;
+    let mut faces = Vec::new();
+    for x in 0u16..16 {
+        for z in 0u16..8 {
+            let (x, z) = (f32::from(x), f32::from(z));
+            let corner = [x, 0., z];
+            faces.push([corner, [x + 1., 0., z], [x + 1., 0., z + 1.]]);
+            faces.push([corner, [x + 1., 0., z + 1.], [x, 0., z + 1.]]);
+            if x < 8. {
+                // A vertical sliver collapses onto the first triangle's edge.
+                faces.push([corner, [x, h, z], [x + 1., 0., z]]);
+            }
+        }
+    }
+    let input = triangles_gltf(&dir.path().join("source"), &faces);
+    let output = dir.path().join("sheet.3tz");
+    let audit = dir.path().join("audit");
+    let result = crate::mesh_to_tileset(
+        TilerRequest::new(input, &output)
+            .with_scratch_dir(dir.path())
+            .with_weld(MeshWeld::new(f64::from(h)).unwrap())
+            .with_test_leaf_triangles(16)
+            .with_jobs(TilerJobs::Maximum(NonZeroUsize::new(2).unwrap()))
+            .with_hlod_settings(crate::mesh_large::hlod::Settings {
+                audit_dir: Some(std::sync::Arc::new(audit.clone())),
+                ..crate::mesh_large::hlod::test_settings(128)
+            }),
+        &RunControl::default(),
+    )
+    .unwrap();
+    let h = f64::from(h);
+    let weld = result.report.weld.unwrap();
+    assert_eq!(weld.max_displacement_m, h);
+    assert_eq!(weld.collapsed_triangles, 64);
+    assert_eq!(weld.geometric_error_term_m, 0.);
+    let set = TileSet::open(&output).unwrap();
+    assert!(set
+        .tiles()
+        .iter()
+        .any(|t| t.role == TileRole::Leaf && (h..h * 1.001).contains(&t.geometric_error)));
+    assert!(set
+        .tiles()
+        .iter()
+        .any(|t| t.role == TileRole::Leaf && t.geometric_error < h / 2.));
+    assert!(set
+        .tiles()
+        .iter()
+        .any(|t| t.role == TileRole::Coarse && t.geometric_error >= h));
+    // Inspect the directional certificate itself, before applying the child's
+    // published floor. A welded-only reference cannot see the raised corners.
+    let records = fs::read_to_string(audit.join("borders.jsonl")).unwrap();
+    assert!(
+        records.lines().any(|line| {
+            let record: serde_json::Value = serde_json::from_str(line).unwrap();
+            let certificate = &record["tile"]["certificate"];
+            certificate["reference"] == "source"
+                && certificate["toProxy"]
+                    .as_f64()
+                    .is_some_and(|e| (h..h * 1.01).contains(&e))
+                && certificate["fromProxy"]
+                    .as_f64()
+                    .is_some_and(|e| e < h / 2.)
+        }),
+        "missing directional original-surface witness"
+    );
 }

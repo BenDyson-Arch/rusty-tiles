@@ -67,7 +67,8 @@ height_offset=None, bbox=None, polygon=None, weld_epsilon=None, join_primitives=
 force=False, callback=None)` converts a source mesh to a
 `.3tz` archive in one run. The output has exact full-detail leaves under
 coarse parent tiles (hierarchical level of detail, HLOD). A coarse tile's
-geometric error is a sampled distance to the source, not a guaranteed bound.
+geometric error bounds the continuous two-sided distance from its captured
+source to its decoded surface.
 Its triangles carry one representative `source_primitive` ID, while leaves keep
 exact provenance, and its textures are new charts sampled from the source. See
 the [mesh guide](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/MESH.md#coarse-levels-hlod).
@@ -102,7 +103,7 @@ the tolerance merge onto their class's lowest-index position, and each keeps
 its own normal, UVs and colour. `join_primitives="same-material"` also welds
 across primitives with the same material (alone, it welds exact repeats).
 `result.report["weld"]` gives the merged count and the largest displacement,
-which is added to every published geometric error; the callback receives the
+and geometric error is certified against the original source. The callback receives the
 `capture_weld` step. `inspect_mesh` takes the same two keywords to preview the
 effect on open edges. See
 [weld the source](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/MESH.md#weld-the-source).

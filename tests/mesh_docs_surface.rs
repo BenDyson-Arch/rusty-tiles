@@ -234,19 +234,16 @@ fn removed_surface_is_named_only_in_the_migration_section() {
 }
 
 #[test]
-fn certified_proxy_and_ledger_claims_are_gone_from_the_guide() {
+fn the_guide_describes_certified_surface_error_without_the_removed_proxy_ledger() {
     let current = current_guide(&read("docs/MESH.md"))
-        .replace("not certified", "")
-        .replace("not-certified", "")
-        .replace("not certification", "")
-        // D11 certifies source-parameter border displacement, not surface error.
-        .replace("displacement certified against those arcs", "")
         // A real report field whose name predates HLOD.
         .replace("unique_proxies", "")
         // D11's public omission count, not the removed proxy-bake surface.
         .replace("omitted_proxies", "");
+    let error = section(&current, "### Certified geometric error", false);
+    assert!(error.contains("two-sided, continuous Hausdorff"));
+    assert!(error.contains("hlod-certified-decoded-surface-v1"));
     for forbidden in [
-        "certified",
         "ledger",
         "H17",
         "H27",

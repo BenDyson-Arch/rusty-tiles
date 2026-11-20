@@ -28,6 +28,8 @@ FILE_LIMIT = 1_000_000
 # capture rework, mesh-inspect, the source weld, subset bakes, the run report, the
 # texture crop store and sparse chains). Re-based once rather than raised piecemeal; a
 # bench/ trim of generated results follows as a separate change. bench/ is unchanged.
+# The continuous HLOD certificate (its conformance tests and the Lean proofs) fits
+# inside this budget.
 BUDGETS = {"": 23_100_000, "bench/": 8_500_000}
 # Third-party source vendored for a shipped feature: one pinned upstream version,
 # replaced, never accumulated. Basis Universal v2.50 (vendor/README.md) is the

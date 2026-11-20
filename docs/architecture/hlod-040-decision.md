@@ -1,5 +1,11 @@
 # 0.4 mesh direction: classic octree HLOD
 
+**Certified publication amendment.** D2's sampled value continues to drive
+construction, candidate selection and chart sizing. Published coarse G now
+includes the two-sided continuous bound on the decoded surface. The
+[publication and S2 contract](hlod-s2-error.md) specifies the source frame,
+direct cutoff, child induction, and unchanged seam rules.
+
 Decision date: **2026-10-24**. Owner rule: **“go with best practice that doesn't
 compromise on client speed and processing speed”.** The owner adopted classic
 octree HLOD for `mesh`, replacing H17 certified geometry and H27's per-texel

@@ -357,6 +357,8 @@ pub struct InterfaceCensus {
     /// D5 amendment A3 (declared `textureError`): content tiles refinable to finer
     /// texels, and those whose geometricError is within 1% of the texture-implied error.
     pub texture_refinable_tiles: u64,
+    /// Coarse contents checked against all six extrema of their decoded leaf union.
+    pub surface_error_extent_tiles: u64,
     pub texture_bound_tiles: u64,
     pub coarse_normals: CoarseNormalCensus,
 }

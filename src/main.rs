@@ -234,8 +234,7 @@ struct WeldArgs {
     /// Weld source vertices within METRES of each other (0: exact repeats only) before
     /// capture, each primitive's own; a merged vertex takes its class's lowest-index
     /// position, its normal, UVs and colour stay its own. The merged count and largest
-    /// displacement are reported, and that displacement is added to every published
-    /// geometric error
+    /// displacement are reported. Geometric error is certified against the original source
     #[arg(
         long = "weld-epsilon",
         visible_alias = "weldEpsilon",

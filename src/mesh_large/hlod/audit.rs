@@ -375,6 +375,8 @@ mod tests {
                 interface: Vec::new(),
                 geometric_error: 0.,
                 published_error: 0.,
+                surface_error: 0.,
+                decoded_override: Vec::new(),
                 texture: Default::default(),
                 lease: None,
             },

@@ -355,7 +355,6 @@ impl<T: Record> Sequence<T> {
     }
 
     /// Bytes this sequence holds on disk (its compressed blocks, or all its records).
-    #[cfg(test)]
     pub(crate) fn stored_bytes(&self) -> u64 {
         self.file.bytes()
     }

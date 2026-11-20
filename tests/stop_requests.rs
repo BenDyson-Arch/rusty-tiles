@@ -47,6 +47,11 @@ struct Stopped {
 /// Run the CLI with `args` and `env`, send SIGTERM once `site` announces itself, and
 /// return how and how fast the process ended.
 fn stop_in(args: &[OsString], env: &[(&str, &str)], site: &str) -> Stopped {
+    stop_after(args, env, &format!("rusty-tiles test: in {site}"))
+}
+
+/// A real progress event can identify the phase independently of the test pace hook.
+fn stop_after(args: &[OsString], env: &[(&str, &str)], marker: &str) -> Stopped {
     let mut command = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"));
     command
         .args(args)
@@ -69,25 +74,24 @@ fn stop_in(args: &[OsString], env: &[(&str, &str)], site: &str) -> Stopped {
         let _ = reader.read_to_string(&mut rest);
         all + &rest
     });
-    let marker = format!("rusty-tiles test: in {site}");
     let started = Instant::now();
     loop {
         match receiver.recv_timeout(Duration::from_millis(20)) {
-            Ok(line) if line.contains(&marker) => break,
+            Ok(line) if line.contains(marker) => break,
             Ok(_) => {}
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => {
                 let status = guard.0.as_mut().unwrap().wait().unwrap();
                 guard.0 = None;
                 panic!(
-                    "the run ended ({status}) before reaching {site}:\n{}",
+                    "the run ended ({status}) before reaching {marker}:\n{}",
                     reader.join().unwrap()
                 );
             }
         }
         assert!(
             started.elapsed() < Duration::from_secs(300),
-            "the run never reached {site}"
+            "the run never reached {marker}"
         );
     }
     let pid = guard.0.as_ref().unwrap().id() as libc::pid_t;
@@ -103,7 +107,7 @@ fn stop_in(args: &[OsString], env: &[(&str, &str)], site: &str) -> Stopped {
         }
         assert!(
             sent.elapsed() < Duration::from_secs(60),
-            "{site}: still running 60 s after SIGTERM"
+            "{marker}: still running 60 s after SIGTERM"
         );
         std::thread::sleep(Duration::from_millis(10));
     };
@@ -337,6 +341,34 @@ fn mesh_payload_staging_stops() {
             ("RUSTY_TILES_TEST_PACE_US", "1000000"),
         ],
         "mesh.stage-payload",
+    );
+    assert_stopped(&run, &work.scratch(), &work.out());
+}
+
+/// A SIGTERM at the public certificate progress event uses the normal worker
+/// checkpoint and unwinds the staged archive and its held siblings.
+#[test]
+fn mesh_surface_certification_stops() {
+    let work = Work::new();
+    let input = work.path("grid.glb");
+    fs::write(&input, support::textured_grid_glb(100)).unwrap();
+    let output = work.out().join("grid.3tz");
+    let run = stop_after(
+        &os(&[
+            &"mesh",
+            &"-i",
+            &input,
+            &"-o",
+            &output,
+            &"--jobs",
+            &"2",
+            &"--progress",
+            &"json",
+            &"--scratch-dir",
+            &work.scratch(),
+        ]),
+        &[],
+        r#""phase":"hlod_certify""#,
     );
     assert_stopped(&run, &work.scratch(), &work.out());
 }

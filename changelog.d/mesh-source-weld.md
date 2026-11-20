@@ -12,9 +12,7 @@
   stay each vertex's own, so UV seams are kept. `tilerReport.weld` states the
   merged count, the true largest displacement (a chain can exceed ε) and the
   faces the weld collapsed or made coincident (CLI warning when non-zero).
-  Delivery adds the larger of that displacement and a bound on each collapsed
-  triangle's distance to a surviving face to every published geometric error,
-  leaves' and coarse tiles'; a weld that collapses a triangle onto no surviving
+  Geometric error is certified against the original pre-weld source. A weld that collapses a triangle onto no surviving
   face is refused. The exact-seam rule between output tiles is unchanged. The
   weld is progress steps `capture_weld` and `capture_weld_check`, charged in capture's memory bound
   (`capture_weld_bytes`) and declared scratch. Without the options, output is

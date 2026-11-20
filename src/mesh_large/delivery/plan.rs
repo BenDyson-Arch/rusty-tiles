@@ -337,8 +337,6 @@ pub(crate) struct Builder<'s, S: Sink> {
     lookahead: Option<(ProxyRow, Aabb)>,
     recovery: Option<Recovery>,
     bypassed: usize,
-    /// Added to every published geometric error (a welded source's largest displacement).
-    weld_error: f64,
 }
 
 fn child_axes(axes: [u32; 3], slot: u8) -> [u32; 3] {
@@ -377,24 +375,6 @@ impl<'s, S: Sink> Builder<'s, S> {
             lookahead: None,
             recovery: None,
             bypassed: 0,
-            weld_error: 0.,
-        }
-    }
-
-    /// Charge `error` (finite, at least 0) into every published geometric error: a leaf's
-    /// and a coarse tile's error each become the next f64 above their sum, so the charge is
-    /// never rounded away and the order between them is kept.
-    pub(crate) fn with_weld_error(mut self, error: f64) -> Self {
-        self.weld_error = error;
-        self
-    }
-
-    /// `error` with the weld term charged.
-    fn charged(&self, error: f64) -> f64 {
-        if self.weld_error > 0. {
-            (error + self.weld_error).next_up()
-        } else {
-            error
         }
     }
 
@@ -498,7 +478,7 @@ impl<'s, S: Sink> Builder<'s, S> {
             axes,
             tile,
             extent,
-            error: self.charged(row.geometry_error),
+            error: row.geometry_error,
             height: 0,
             implicit: false,
             leaf: Some(Box::new(row)),
@@ -554,7 +534,7 @@ impl<'s, S: Sink> Builder<'s, S> {
             let key = (frame.first, self.next_rank, frame.depth);
             match next {
                 Some((row, bounds)) if (row.first, row.end, row.depth) == key => {
-                    if self.charged(row.geometric_error) < children_error {
+                    if row.geometric_error < children_error {
                         return Err(bad(format!(
                             "proxy {} has a geometric error below its children's",
                             row.uri
@@ -573,7 +553,7 @@ impl<'s, S: Sink> Builder<'s, S> {
                         && row.depth < frame.depth
                         && !recovery_omitted =>
                 {
-                    chain_error = Some(self.charged(row.geometric_error));
+                    chain_error = Some(row.geometric_error);
                     chain = Some(Box::new(row.clone()));
                     // Where it cannot be spliced the cell repeats that payload, so its box
                     // holds the payload's bounds too (as a coarse tile's own box does).
@@ -662,7 +642,7 @@ impl<'s, S: Sink> Builder<'s, S> {
         let height = 1 + frame.children.iter().map(|c| c.height).max().unwrap();
         let diagonal = tile.diagonal();
         let error = match (&proxy, chain_error) {
-            (Some(row), _) => self.charged(row.geometric_error),
+            (Some(row), _) => row.geometric_error,
             (None, Some(error)) if error >= children_error => error,
             (None, Some(_)) => {
                 return Err(JobError::new(
