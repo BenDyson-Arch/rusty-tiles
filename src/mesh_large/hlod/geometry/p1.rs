@@ -77,7 +77,7 @@ fn fits(vertices: usize, faces: usize, rows: usize) -> bool {
 /// `collapse::SiteWork`) and its refused checks by reason (`refusedBy`, `collapse::Stats::why`),
 /// and the faces of a proposal the contraction fold guard refused, by rule (`guardRefused`,
 /// in `folds::Refusal` order) and how many of them have a Steiner corner (`guardSteiner`).
-#[derive(Clone, Copy, Debug, serde::Serialize)]
+#[derive(Clone, Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct Report {
     pub outcome: &'static str,
@@ -99,6 +99,10 @@ pub(crate) struct Report {
     pub refused_by: [[u64; 13]; 2],
     pub guard_refused: [[u64; 6]; 2],
     pub guard_steiner: [u64; 2],
+    /// The border vertices the last pass left when it stalled (D keeps them instead);
+    /// empty otherwise. Not a record field.
+    #[serde(skip)]
+    pub stuck: Vec<Key>,
 }
 
 impl Report {
@@ -125,6 +129,15 @@ impl Report {
         report
     }
 
+    /// What `attempt` reports when its passes leave `stuck` (D's control).
+    #[cfg(test)]
+    pub(crate) fn stalled_on(faces: usize, stuck: Vec<Key>) -> Self {
+        let mut report = Self::new("stalled", faces);
+        report.passes = 2;
+        report.stuck = stuck;
+        report
+    }
+
     fn new(outcome: &'static str, faces: usize) -> Self {
         Self {
             outcome,
@@ -141,6 +154,7 @@ impl Report {
             refused_by: [[0; 13]; 2],
             guard_refused: [[0; 6]; 2],
             guard_steiner: [0; 2],
+            stuck: Vec::new(),
         }
     }
 
@@ -171,6 +185,10 @@ pub(crate) enum Run {
     /// (`Report::exhausted_first_pass`).
     #[cfg(test)]
     Exhausted,
+    /// Test: the record of a pass that left every border vertex it must remove
+    /// (`Report::stalled_on`), D's control (`Mutation::KeepAt`).
+    #[cfg(test)]
+    Stalled,
 }
 
 impl From<bool> for Run {
@@ -389,7 +407,7 @@ pub(super) fn attempt(
             prob.owns_segment = Some(&owns_segment);
             prob.owns_face = Some(&owns_face);
         }
-        let (out, stats, added) = collapse::simplify_added(&prob);
+        let (out, stats, added, left) = collapse::simplify_left(&prob);
         if let Some(e) = failure.borrow_mut().take() {
             return Err(e);
         }
@@ -405,6 +423,12 @@ pub(super) fn attempt(
             } else {
                 "noProposal"
             };
+            if !stats.exhausted && !stats.cancelled {
+                report.stuck = left
+                    .iter()
+                    .filter_map(|&v| m.keys.get(v as usize).copied())
+                    .collect();
+            }
             continue;
         };
         report.outcome = "noProposal";

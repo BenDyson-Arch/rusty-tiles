@@ -1463,6 +1463,13 @@ pub(crate) fn simplify(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats) {
 /// `simplify`, also returning Steiner vertices (ids from `p.positions.len()` on) and the
 /// removed vertex each replaced.
 pub(crate) fn simplify_added(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats, Added) {
+    let (out, stats, added, _) = simplify_left(p);
+    (out, stats, added)
+}
+
+/// `simplify_added`, also returning the removal vertices the pass left (`Class::Remove`,
+/// still live), in id order: the border vertices D may keep instead.
+pub(crate) fn simplify_left(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats, Added, Vec<u32>) {
     let n = p.positions.len();
     let mut st = State::new(p);
     let mut nb = Vec::new();
@@ -1675,7 +1682,10 @@ pub(crate) fn simplify_added(p: &Problem<'_>) -> (Option<Vec<[u32; 3]>>, Stats, 
     st.stats.exhausted = st.exhausted();
     st.stats.cancelled = st.cancelled.get();
     let ok = !st.stats.exhausted && st.removes_left == 0 && out.len() <= p.target.max(p.limit);
-    (ok.then_some(out), st.stats, st.added)
+    let left: Vec<u32> = (0..id(n))
+        .filter(|&v| !st.dead[v as usize] && matches!(st.class[v as usize], Class::Remove(_)))
+        .collect();
+    (ok.then_some(out), st.stats, st.added, left)
 }
 
 /// Keys helper for callers.

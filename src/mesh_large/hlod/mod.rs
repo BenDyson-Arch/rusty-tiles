@@ -674,6 +674,12 @@ pub(crate) struct HlodReport {
     /// Every cell where P1 ran, in walk order (`P1Record`); reported in the diagnostics.
     #[serde(skip)]
     pub p1_records: Vec<P1Record>,
+    /// D: border vertices cells kept (splitting their chords), and cells built again with
+    /// their chords' final splits; reported in the diagnostics.
+    #[serde(skip)]
+    pub kept_vertices: u64,
+    #[serde(skip)]
+    pub rebuilt_cells: u64,
     /// Content-less cells (omitted coarse tiles), by cell depth, and of them the sources:
     /// cells whose exact interface (or topology plain simplification cannot reduce) needs
     /// more triangles than the cap. Includes propagation and pass-through cells. A declared
@@ -791,6 +797,9 @@ pub struct HlodDiagnostics {
     pub last_resort_records: Vec<LastResortRecord>,
     /// Every cell where P1 ran, built or omitted (`P1Record`).
     pub p1_records: Vec<P1Record>,
+    /// D: border vertices kept, and cells built again with their chords' final splits.
+    pub kept_vertices: u64,
+    pub rebuilt_cells: u64,
     pub jobs: u64,
     /// Whole-process user+system CPU seconds of the stage (incidence, walk, encoding).
     pub cpu_seconds: Option<f64>,
@@ -853,6 +862,7 @@ pub(crate) struct HlodInput<'a> {
 }
 
 /// One closed frame (a parent whose subtree has been read), in postorder.
+#[derive(Clone)]
 struct Closed {
     id: u64,
     seq: u64,
@@ -924,8 +934,132 @@ struct Frame {
 
 /// A finished parent: its built geometry, or the complete bounded frontier retained
 /// after omission. An empty vector means that recovery input is unavailable.
-type Done = Result<(Vec<TileGeometry>, Finished, appearance::Timing), JobError>;
-type HeldDone = Result<(Vec<store::spill::Held>, Finished, appearance::Timing), JobError>;
+type Done = Result<(Vec<TileGeometry>, Finished, appearance::Timing, Kept), JobError>;
+
+/// D (keep a stuck border vertex): what a cell's build kept and holds for the walk. `sites`:
+/// the border vertices its keep-and-retry rounds kept (empty unless its whole ladder failed
+/// and P1 then built with them); `local`: the splits of its own chords its build used;
+/// `children`: its inputs, held until every co-owner of its chords has built, in case a
+/// co-owner's kept vertex splits one of them and the cell must build again.
+#[derive(Default)]
+pub(crate) struct Kept {
+    pub sites: Vec<borders::Site>,
+    pub local: borders::Overlay,
+    pub children: Vec<TileGeometry>,
+}
+
+/// Keep-and-retry rounds of a cell whose whole ladder failed (D): each keeps the border
+/// vertices P1's last pass left and runs P1 again.
+const KEEP_ROUNDS: usize = 4;
+type HeldDone = Result<(Vec<store::spill::Held>, Finished, appearance::Timing, Kept), JobError>;
+
+/// Children a built cell holds for a possible second build (D) sit in `ready` under its
+/// walk id with this bit set, so the spill manager may move them to disk like any input.
+const HOLD: u64 = 1 << 63;
+
+/// The walk's D state (`Kept`). A cell's first build may keep stuck border vertices (its
+/// sites); a chord's final splits are those of every site its co-owners kept, so a built
+/// cell waits until every co-owner of its chords has built (or never builds), and builds
+/// again only when its chords' final splits differ from those it built with.
+#[derive(Default)]
+struct KeepWalk {
+    /// Border nodes whose first build is done, or that never build: pass-through cells
+    /// and cells omitted for an omitted child.
+    resolved: std::collections::HashSet<u64>,
+    /// Every kept site of a resolved cell, by depth.
+    sites: BTreeMap<u32, std::collections::BTreeSet<borders::Site>>,
+    /// Final splits, every depth: later builds read their chords' splits and the finer
+    /// displacement of relieved chords here.
+    overlay: borders::Overlay,
+    /// Cells by walk id, from their spawn until their result is final.
+    spawned: HashMap<u64, Closed>,
+    /// Built cells waiting for their chords' co-owners, by walk id.
+    waiting: BTreeMap<u64, Waiting>,
+    /// Cells to build again with their final splits (no keep rounds), and those building.
+    rebuilds: Vec<u64>,
+    rebuilding: std::collections::HashSet<u64>,
+    /// Results now final, in the order they became so, for the walk to publish.
+    released: Vec<(
+        u64,
+        u64,
+        Vec<store::spill::Held>,
+        Finished,
+        appearance::Timing,
+    )>,
+    /// Report: vertices kept, and cells built again.
+    kept_vertices: u64,
+    rebuilt: u64,
+}
+
+/// A built cell waiting for its chords' co-owners (`KeepWalk`).
+struct Waiting {
+    node: u64,
+    co_owners: Vec<u64>,
+    /// The splits of its own chords its build used.
+    local: borders::Overlay,
+    geometry: Vec<store::spill::Held>,
+    row: Finished,
+    timing: appearance::Timing,
+}
+
+/// D: decide every waiting cell whose co-owners have all resolved: its chords' final splits
+/// (from every site on them, `Borders::split`) join the overlay; when they are the splits
+/// its build used, its result is final (released) and its held children dropped, else it
+/// builds again with them.
+fn settle_keep(
+    k: &mut KeepWalk,
+    borders: &borders::Borders,
+    ready: &mut HashMap<u64, Vec<store::spill::Held>>,
+) -> Result<(), JobError> {
+    let due: Vec<u64> = k
+        .waiting
+        .iter()
+        .filter(|(_, w)| w.co_owners.iter().all(|n| k.resolved.contains(n)))
+        .map(|(&id, _)| id)
+        .collect();
+    for id in due {
+        let w = k.waiting.remove(&id).unwrap();
+        let closed = k
+            .spawned
+            .get(&id)
+            .ok_or_else(|| state("a waiting cell was never spawned"))?;
+        let depth = closed.key.depth;
+        let own: std::collections::BTreeSet<u64> =
+            borders.own_segments(closed.key)?.into_iter().collect();
+        let mine: std::collections::BTreeSet<borders::Site> = k
+            .sites
+            .get(&depth)
+            .map(|s| {
+                s.iter()
+                    .filter(|x| own.contains(&x.segment))
+                    .copied()
+                    .collect()
+            })
+            .unwrap_or_default();
+        let (splits, _) = if mine.is_empty() {
+            (borders::Overlay::default(), Vec::new())
+        } else {
+            borders.split(
+                &BTreeMap::from([(depth, mine)]),
+                borders::Overlay::default(),
+            )?
+        };
+        let same = splits.splits_at(depth) == w.local.splits_at(depth);
+        k.overlay.merge(&splits);
+        let _ = w.node;
+        if same {
+            ready.remove(&(HOLD | id));
+            let seq = closed.seq;
+            k.spawned.remove(&id);
+            k.released.push((id, seq, w.geometry, w.row, w.timing));
+        } else {
+            k.rebuilds.push(id);
+            k.rebuilding.insert(id);
+            k.rebuilt += 1;
+        }
+    }
+    Ok(())
+}
 
 #[derive(Clone, Copy, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -1265,6 +1399,8 @@ pub(crate) fn produce(
     diagnostics.declared_tiles = report.declared_tiles.clone();
     diagnostics.last_resort_records = report.last_resort_records.clone();
     diagnostics.p1_records = report.p1_records.clone();
+    diagnostics.kept_vertices = report.kept_vertices;
+    diagnostics.rebuilt_cells = report.rebuilt_cells;
     diagnostics.omitted_proxies = report.omitted_proxies;
     diagnostics.omission_sources = report.omission_sources;
     diagnostics.omitted_by_depth = report.omitted_by_depth.clone();
@@ -1288,6 +1424,8 @@ pub(crate) fn produce(
             "last_resort_stages": diagnostics.last_resort_stages,
             "last_resort_records": diagnostics.last_resort_records,
             "p1_records": diagnostics.p1_records,
+            "kept_vertices": diagnostics.kept_vertices,
+            "rebuilt_cells": diagnostics.rebuilt_cells,
             "fold_faces": diagnostics.fold_faces,
             "scratch_peak_bytes": diagnostics.stage_scratch_peak_bytes,
             "scratch_bound_bytes": diagnostics.stage_scratch_bound_bytes,
@@ -1852,19 +1990,57 @@ fn prepare(
     }))
 }
 
+/// The cell `Mutation::KeepAt(depth)` stalls: the first at that depth.
+#[cfg(test)]
+fn keep_at(closed: &Closed, depth: u32) -> bool {
+    closed.key.depth == depth && closed.key.first == 0
+}
+
+/// Whether P1 runs for `closed` (in tests, `KeepAt`'s cell stalls in its first build).
+fn p1_run(mutation: Mutation, closed: &Closed, keep: bool) -> geometry::p1::Run {
+    #[cfg(test)]
+    if let Mutation::KeepAt(d, _) = mutation {
+        if keep && keep_at(closed, d) {
+            return geometry::p1::Run::Stalled;
+        }
+    }
+    let _ = (closed, keep);
+    mutation.p1()
+}
+
+/// A parent's triangle target before the hard cap: half its only leaf child, or, at the
+/// first four depths, three quarters of the cap (D11 scale-gate budget: payload room for
+/// appearance); a failed target still gets the hard-cap attempt.
+fn keep_target(closed: &Closed, children: &[TileGeometry], cap: usize) -> usize {
+    if closed.single_leaf {
+        children[0].triangles.len().div_ceil(2).min(cap)
+    } else if closed.key.depth <= 3 {
+        (cap * 3 / 4).max(1)
+    } else {
+        cap
+    }
+}
+
 /// One parent: geometry, error, appearance, encoding, the pre-publication check and its
 /// member. Topology eligibility may query source geometry for a rejected proposal.
 /// An omitted parent runs no appearance work and publishes no S2 measurement.
+///
+/// `overlay`: the splits (D) the cell builds with (the walk's final ones for its depth, or
+/// none of its depth in its first build); `keep`: whether a failed ladder may keep stuck
+/// border vertices (its first build only).
 fn build_tile(
     job: &Job<'_, '_>,
     closed: &Closed,
     children: Vec<TileGeometry>,
     audit: Option<&audit::Writer<'_>>,
+    overlay: &borders::Overlay,
+    keep: bool,
 ) -> Done {
     let (captured, settings, check) = (job.input.captured, &job.input.settings, job.check);
-    let contract = job
+    let mut kept = Kept::default();
+    let mut contract = job
         .borders
-        .contract(closed.key, 6 * settings.cap)?
+        .contract_with(closed.key, 6 * settings.cap, overlay)?
         .filter(|c| c.minimum_triangles() <= settings.cap);
     let recovery = closed
         .recover
@@ -1879,21 +2055,13 @@ fn build_tile(
     let mut query = job.source.query(captured, closed.key)?;
     let mut nearest = error::Nearest::with_steps(settings.nearest_steps);
     let mut outcome = if let Some(contract) = &contract {
-        let half = if closed.single_leaf {
-            children[0].triangles.len().div_ceil(2).min(settings.cap)
-        } else if closed.key.depth <= 3 {
-            // D11 scale-gate budget: reserve payload room for appearance at the first
-            // four depths. A failed target still gets the unchanged hard-cap attempt.
-            (settings.cap * 3 / 4).max(1)
-        } else {
-            settings.cap
-        };
+        let half = keep_target(closed, &children, settings.cap);
         let outcome = geometry::build_parent(
             closed.key,
             &children,
             &[half, settings.cap],
             contract,
-            &|k| job.borders.mapping(closed.key.depth, k),
+            &|k| job.borders.mapping_with(closed.key.depth, k, overlay),
             &captured.lattice,
             &mut |built| {
                 if settings.mutation == Mutation::DropSegment {
@@ -1916,6 +2084,7 @@ fn build_tile(
                 let refuse_below = match settings.mutation {
                     Mutation::RefuseBuilds(k) => Some(k),
                     Mutation::P1Unfit | Mutation::P1Exhausted => Some(4),
+                    Mutation::KeepAt(d, _) if keep_at(closed, d) => Some(u8::MAX),
                     _ => None,
                 };
                 #[cfg(test)]
@@ -1967,7 +2136,7 @@ fn build_tile(
             settings.mutation.last_resorts(),
             // Reused calls write no audit records: reuse only without the audit sidecar.
             settings.mutation.reuse() && audit.is_none(),
-            settings.mutation.p1(),
+            p1_run(settings.mutation, closed, keep),
         )?;
         // Replayed calls' S2 searches, as if they had run (read only after this point).
         nearest.stats.add(outcome.reused.search);
@@ -1985,6 +2154,87 @@ fn build_tile(
             retry: None,
         }
     };
+    // D: a cell whose whole ladder failed keeps the border vertices P1 could not remove,
+    // splitting its chords there, for up to `KEEP_ROUNDS` rounds of P1 alone.
+    if keep && outcome.built.is_none() && !closed.recover && settings.mutation.keep_stuck() {
+        if let Some(base) = &contract {
+            let (key, depth, cap) = (closed.key, closed.key.depth, settings.cap);
+            let caps = [keep_target(closed, &children, cap), cap];
+            let mut stuck = outcome
+                .p1
+                .as_ref()
+                .map(|r| r.stuck.clone())
+                .unwrap_or_default();
+            let mut sites: std::collections::BTreeSet<borders::Site> = Default::default();
+            let mut found = None;
+            for _ in 0..KEEP_ROUNDS {
+                let before = sites.len();
+                for (_, site) in job.borders.locate(key, &stuck)? {
+                    if let Ok(site) = site {
+                        sites.insert(site);
+                    }
+                }
+                if sites.len() == before {
+                    break;
+                }
+                let wanted = BTreeMap::from([(depth, sites.clone())]);
+                let (trial, dropped) = job.borders.split(&wanted, overlay.clone())?;
+                for (_, site) in dropped {
+                    sites.remove(&site);
+                }
+                let Some(c) = job
+                    .borders
+                    .contract_with(key, 6 * cap, &trial)?
+                    .filter(|c| c.minimum_triangles() <= cap)
+                else {
+                    break;
+                };
+                let mut candidate = None;
+                let (built, report) = geometry::p1_on(
+                    key,
+                    &children,
+                    &caps,
+                    &c,
+                    &|k| job.borders.mapping_with(depth, k, &trial),
+                    &captured.lattice,
+                    &mut |built| {
+                        let before = std::mem::take(&mut nearest.stats);
+                        let prepared = prepare(job, built, &c, &mut query, &mut nearest);
+                        built.search = std::mem::replace(&mut nearest.stats, before);
+                        nearest.stats.add(built.search);
+                        candidate = prepared?;
+                        Ok(candidate.is_some())
+                    },
+                    check,
+                )?;
+                if let Some(b) = built {
+                    found = Some((c, trial, b, report, candidate));
+                    break;
+                }
+                stuck = report.stuck;
+            }
+            let _ = base;
+            if let Some((c, trial, b, report, candidate)) = found {
+                outcome.attempted_topology.add(b.topology);
+                if let Some(audit) = audit {
+                    topology_attempts += 1;
+                    published_topology_attempt =
+                        Some(audit.topology_attempt(&b, topology_attempts, true)?);
+                }
+                outcome.retry = Some(geometry::Retry {
+                    resort: "p1",
+                    primary_contraction_failed: outcome.contraction_failed,
+                    root_competition: false,
+                });
+                outcome.built = Some(b);
+                outcome.p1 = Some(report);
+                prepared = candidate;
+                contract = Some(c);
+                kept.sites = sites.into_iter().collect();
+                kept.local = trial;
+            }
+        }
+    }
     #[cfg(test)]
     if settings.mutation.omit_recovery_input() && closed.key.first == 0 && closed.key.depth == 1 {
         outcome.built = None;
@@ -2079,7 +2329,7 @@ fn build_tile(
         } else {
             Vec::new()
         };
-        return Ok((frontier, omitted, appearance::Timing::default()));
+        return Ok((frontier, omitted, appearance::Timing::default(), kept));
     };
     // A3: how far apart the layers of its folds lie, against its children (reported).
     let fold_separation = if built.last_resort_stage >= 2 || closed.folds_below {
@@ -2121,7 +2371,8 @@ fn build_tile(
     let comparison =
         certify::Comparison::new(closed.key, captured, retained, &children, job.check)?;
     let reference_cpu = error::elapsed(reference_start);
-    drop(children);
+    // Held for the walk (D), in case a co-owner's kept vertex splits one of its chords.
+    kept.children = children;
     built.change = Default::default();
     built.controls = Default::default();
     let tile = &built.geometry;
@@ -2314,6 +2565,7 @@ fn build_tile(
         vec![geometry],
         Finished::Row(Box::new(row)),
         appearance.timing,
+        kept,
     ))
 }
 
@@ -2345,7 +2597,7 @@ fn tally(report: &mut HlodReport, row: &HlodRow) {
     report.protected_faces += u64::from(row.protected_faces);
     report.retries += u64::from(row.retries);
     report.last_resort_tiles += u64::from(row.last_resort);
-    if let Some(p1) = row.p1 {
+    if let Some(p1) = row.p1.clone() {
         report.p1_records.push(P1Record {
             first: row.first,
             depth: row.encoded_depth,
@@ -2512,7 +2764,7 @@ fn walk(
         .max(settings.cap as u64)
         .saturating_mul(8);
     let job_peak = std::cell::Cell::new(0u64);
-    let mut timings = appearance::Timing::default();
+    let timings = std::cell::RefCell::new(appearance::Timing::default());
     let jobs = usize::try_from(plan.jobs.max(1)).map_err(|_| resource("jobs overflow"))?;
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(jobs)
@@ -2550,6 +2802,7 @@ fn walk(
     // Each built cell's interval on its worker, for the walk's worker use (#343).
     let mut spans: Vec<utilisation::CellSpan> = Vec::new();
     let pool_started = std::time::Instant::now();
+    let keep = std::cell::RefCell::new(KeepWalk::default());
     let outcome = pool.in_place_scope(|scope| -> Result<(), JobError> {
         type Message = (u64, u64, HeldDone, Option<utilisation::CellSpan>);
         let (sender, receiver) = mpsc::channel::<Message>();
@@ -2566,10 +2819,94 @@ fn walk(
         let stage = input.stage;
         // Spawn every pending parent whose children are ready, in postorder, while workers
         // and the ledger admit its job.
+        // One parent job on a worker: `overlay` holds the splits it builds with, and `keep`
+        // whether a failed ladder may keep stuck border vertices (a first build only).
+        let launch = |closed: Closed,
+                      children: Vec<TileGeometry>,
+                      overlay: borders::Overlay,
+                      keep: bool,
+                      job_lease: crate::mesh_large::resources::Lease,
+                      inflight: &mut usize| {
+            let sender = sender.clone();
+            *inflight += 1;
+            scope.spawn(move |_| {
+                let (id, seq) = (closed.id, closed.seq);
+                let (depth, start) = (closed.key.depth, std::time::Instant::now());
+                let done = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let mut built = build_tile(job, &closed, children, audit, &overlay, keep)?;
+                    // Reloaded inputs remain charged if failure returns the frontier, or
+                    // when they are held for a second build (D). Resident inputs already own
+                    // their leases. A successful output takes only its own part of the
+                    // existing job admission.
+                    let mut lease = job_lease;
+                    for tile in built.0.iter_mut().chain(built.3.children.iter_mut()) {
+                        let held = tile.check_charge()?;
+                        if tile.lease.is_none() {
+                            tile.lease = Some(lease.split(held).ok_or_else(|| {
+                                state("returned frontier exceeds its job admission")
+                            })?);
+                        }
+                    }
+                    Ok(built)
+                }))
+                .unwrap_or_else(|_| Err(state("HLOD worker panicked")));
+                let done = done.map(|(tiles, row, timing, kept)| {
+                    (
+                        tiles
+                            .into_iter()
+                            .map(store::spill::Held::Resident)
+                            .collect(),
+                        row,
+                        timing,
+                        kept,
+                    )
+                });
+                let span = utilisation::CellSpan {
+                    depth,
+                    start,
+                    end: std::time::Instant::now(),
+                };
+                let _ = sender.send((id, seq, done, Some(span)));
+            });
+        };
         let spawn = |pending: &mut Vec<Closed>,
                      ready: &mut HashMap<u64, Vec<store::spill::Held>>,
                      inflight: &mut usize|
          -> Result<(), JobError> {
+            // D: cells building again with their chords' final splits go first.
+            while *inflight < jobs {
+                let Some(&id) = keep.borrow().rebuilds.first() else {
+                    break;
+                };
+                let job_lease = loop {
+                    if let Some(lease) = ledger.try_lease(job_bytes, 0) {
+                        break Some(lease);
+                    }
+                    if !spill.borrow_mut().spill_one(ready)? {
+                        break None;
+                    }
+                };
+                let Some(job_lease) = job_lease else {
+                    return Ok(());
+                };
+                let (closed, overlay) = {
+                    let mut k = keep.borrow_mut();
+                    k.rebuilds.remove(0);
+                    let closed = k
+                        .spawned
+                        .get(&id)
+                        .cloned()
+                        .ok_or_else(|| state("a cell to build again was never spawned"))?;
+                    (closed, k.overlay.clone())
+                };
+                let children: Vec<TileGeometry> = ready
+                    .remove(&(HOLD | id))
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|g| g.load())
+                    .collect::<Result<_, JobError>>()?;
+                launch(closed, children, overlay, false, job_lease, inflight);
+            }
             let mut i = 0;
             while i < pending.len() && *inflight < jobs {
                 if !pending[i].children.iter().all(|c| ready.contains_key(c)) {
@@ -2630,10 +2967,16 @@ fn walk(
                         root_search: None,
                         p1: None,
                     };
+                    keep.borrow_mut().spawned.insert(closed.id, closed.clone());
                     let _ = sender.send((
                         closed.id,
                         closed.seq,
-                        Ok((retained, omitted, appearance::Timing::default())),
+                        Ok((
+                            retained,
+                            omitted,
+                            appearance::Timing::default(),
+                            Kept::default(),
+                        )),
                         None,
                     ));
                     continue;
@@ -2679,45 +3022,62 @@ fn walk(
                     .flat_map(|c| ready.remove(c).unwrap())
                     .map(|g| g.load())
                     .collect::<Result<_, JobError>>()?;
-                let sender = sender.clone();
-                *inflight += 1;
-                scope.spawn(move |_| {
-                    let (id, seq) = (closed.id, closed.seq);
-                    let (depth, start) = (closed.key.depth, std::time::Instant::now());
-                    let done = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        let mut built = build_tile(job, &closed, children, audit)?;
-                        // Reloaded inputs remain charged if failure returns the frontier.
-                        // Resident inputs already own their leases. A successful output
-                        // takes only its own part of the existing job admission.
-                        let mut lease = job_lease;
-                        for tile in &mut built.0 {
-                            let held = tile.check_charge()?;
-                            if tile.lease.is_none() {
-                                tile.lease = Some(lease.split(held).ok_or_else(|| {
-                                    state("returned frontier exceeds its job admission")
-                                })?);
-                            }
-                        }
-                        Ok(built)
-                    }))
-                    .unwrap_or_else(|_| Err(state("HLOD worker panicked")));
-                    let done = done.map(|(tiles, row, timing)| {
-                        (
-                            tiles
-                                .into_iter()
-                                .map(store::spill::Held::Resident)
-                                .collect(),
-                            row,
-                            timing,
-                        )
-                    });
-                    let span = utilisation::CellSpan {
-                        depth,
-                        start,
-                        end: std::time::Instant::now(),
-                    };
-                    let _ = sender.send((id, seq, done, Some(span)));
-                });
+                keep.borrow_mut().spawned.insert(closed.id, closed.clone());
+                let view = keep.borrow().overlay.without_depth(closed.key.depth);
+                launch(closed, children, view, true, job_lease, inflight);
+            }
+            Ok(())
+        };
+        // Publish a final result: the walk's bookkeeping, its geometry for the parent and
+        // its row for postorder writing.
+        let finish = |id: u64,
+                      seq: u64,
+                      geometry: Vec<store::spill::Held>,
+                      row: Finished,
+                      timing: appearance::Timing,
+                      ready: &mut HashMap<u64, Vec<store::spill::Held>>,
+                      finished_rows: &mut BTreeMap<u64, Finished>|
+         -> Result<(), JobError> {
+            match &row {
+                Finished::Row(r) => {
+                    if r.carries_folds {
+                        carriers.borrow_mut().insert(id);
+                    } else {
+                        carriers.borrow_mut().remove(&id);
+                    }
+                }
+                Finished::Omitted { .. } => {
+                    omitted_ids.borrow_mut().insert(id);
+                }
+            }
+            {
+                let mut t = timings.borrow_mut();
+                t.surface += timing.surface;
+                t.charts += timing.charts;
+                t.query += timing.query;
+                t.sample += timing.sample;
+                t.encode += timing.encode;
+            }
+            ready.insert(id, geometry);
+            #[cfg(test)]
+            if settings.mutation.force_spill() {
+                while spill.borrow_mut().spill_one(ready)? {}
+            }
+            finished_rows.insert(seq, row);
+            Ok(())
+        };
+        // D: settle the waiting cells whose co-owners have all resolved, and publish what
+        // became final.
+        let drain = |ready: &mut HashMap<u64, Vec<store::spill::Held>>,
+                     finished_rows: &mut BTreeMap<u64, Finished>|
+         -> Result<(), JobError> {
+            let released = {
+                let mut k = keep.borrow_mut();
+                settle_keep(&mut k, job.borders, ready)?;
+                std::mem::take(&mut k.released)
+            };
+            for (id, seq, geometry, row, timing) in released {
+                finish(id, seq, geometry, row, timing, ready, finished_rows)?;
             }
             Ok(())
         };
@@ -2736,30 +3096,61 @@ fn walk(
                 .map_err(|_| state("HLOD worker ended without a result"))?;
             *inflight -= 1;
             spans.extend(span);
-            let (geometry, row, timing) = done?;
-            match &row {
-                Finished::Row(r) => {
-                    if r.carries_folds {
-                        carriers.borrow_mut().insert(id);
-                    } else {
-                        carriers.borrow_mut().remove(&id);
+            let (geometry, row, timing, kept) = done?;
+            {
+                let mut k = keep.borrow_mut();
+                if k.rebuilding.remove(&id) {
+                    // A second build is final; the inputs it held go with it.
+                    k.spawned.remove(&id);
+                    k.released.push((id, seq, geometry, row, timing));
+                } else {
+                    // A first build: the cell resolves for its chords' co-owners.
+                    let closed = k
+                        .spawned
+                        .get(&id)
+                        .cloned()
+                        .ok_or_else(|| state("a finished cell was never spawned"))?;
+                    let node = job.borders.node_id(closed.key)?;
+                    k.resolved.insert(node);
+                    k.kept_vertices += kept.sites.len() as u64;
+                    if !kept.sites.is_empty() {
+                        k.sites
+                            .entry(closed.key.depth)
+                            .or_default()
+                            .extend(kept.sites.iter().copied());
+                    }
+                    match row {
+                        Finished::Omitted { .. } => {
+                            k.spawned.remove(&id);
+                            k.released.push((id, seq, geometry, row, timing));
+                        }
+                        Finished::Row(_) => {
+                            let co_owners = job.borders.co_owners(closed.key)?;
+                            if !kept.children.is_empty() {
+                                ready.insert(
+                                    HOLD | id,
+                                    kept.children
+                                        .into_iter()
+                                        .map(store::spill::Held::Resident)
+                                        .collect(),
+                                );
+                            }
+                            k.waiting.insert(
+                                id,
+                                Waiting {
+                                    node,
+                                    co_owners,
+                                    local: kept.local,
+                                    geometry,
+                                    row,
+                                    timing,
+                                },
+                            );
+                        }
                     }
                 }
-                Finished::Omitted { .. } => {
-                    omitted_ids.borrow_mut().insert(id);
-                }
             }
-            timings.surface += timing.surface;
-            timings.charts += timing.charts;
-            timings.query += timing.query;
-            timings.sample += timing.sample;
-            timings.encode += timing.encode;
-            ready.insert(id, geometry);
-            #[cfg(test)]
-            if settings.mutation.force_spill() {
-                while spill.borrow_mut().spill_one(ready)? {}
-            }
-            finished_rows.insert(seq, row);
+            drain(ready, finished_rows)?;
             spawn(pending, ready, inflight)
         };
         // Write finished rows in postorder once their published depth is final.
@@ -2865,7 +3256,7 @@ fn walk(
                 };
                 let contract = job
                     .borders
-                    .contract(key, 6 * job.input.settings.cap)?
+                    .contract_with(key, 6 * job.input.settings.cap, &keep.borrow().overlay)?
                     .ok_or_else(|| state("published tile has no bounded contract"))?;
                 row.border_epsilon = contract
                     .certificates
@@ -2929,6 +3320,15 @@ fn walk(
                         Some(parent) => adopt(parent, only, kinds, publish),
                         None => p.done = true,
                     }
+                    // A pass-through cell never builds: its chords' co-owners need not wait.
+                    let node = job.borders.node_id(TileKey {
+                        first: frame.node.first,
+                        end: frame.node.end,
+                        depth: frame.node.depth(),
+                        leaf_begin: 0,
+                        leaf_end: 0,
+                    })?;
+                    keep.borrow_mut().resolved.insert(node);
                     *passed += 1;
                     return Ok(());
                 }
@@ -3003,6 +3403,7 @@ fn walk(
                         &mut publish,
                         passed,
                     )?;
+                    drain(&mut ready, &mut finished_rows)?;
                     flush(&mut finished_rows, &mut publish, &mut written)?;
                     spawn(&mut pending, &mut ready, &mut inflight)?;
                 }
@@ -3070,8 +3471,20 @@ fn walk(
                     passed,
                 )?;
             }
+            drain(&mut ready, &mut finished_rows)?;
             spawn(&mut pending, &mut ready, &mut inflight)?;
-            while !pending.is_empty() || inflight > 0 {
+            let unsettled = |k: &KeepWalk| !k.waiting.is_empty() || !k.rebuilds.is_empty();
+            while !pending.is_empty() || inflight > 0 || unsettled(&keep.borrow()) {
+                if inflight == 0 {
+                    drain(&mut ready, &mut finished_rows)?;
+                    spawn(&mut pending, &mut ready, &mut inflight)?;
+                    if inflight == 0 && pending.is_empty() {
+                        if unsettled(&keep.borrow()) {
+                            return Err(state("a built cell waits for co-owners that never built"));
+                        }
+                        break;
+                    }
+                }
                 receive(&mut pending, &mut ready, &mut inflight, &mut finished_rows)?;
                 flush(&mut finished_rows, &mut publish, &mut written)?;
             }
@@ -3094,6 +3507,9 @@ fn walk(
     });
     let pool_ended = std::time::Instant::now();
     outcome?;
+    let keep = keep.into_inner();
+    report.kept_vertices = keep.kept_vertices;
+    report.rebuilt_cells = keep.rebuilt;
     let workers = u32::try_from(jobs).unwrap_or(u32::MAX);
     let utilisation = utilisation::measure(workers, pool_started, pool_ended, &spans);
     report.pass_through = passed;
@@ -3113,7 +3529,7 @@ fn walk(
         .map_err(|e| JobError::io("finish coarse rows", rows_path, e))?;
     Ok((
         ledger.peak(),
-        timings,
+        timings.into_inner(),
         spill.into_inner().stats(),
         utilisation,
     ))

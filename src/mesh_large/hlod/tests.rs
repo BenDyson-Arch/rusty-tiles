@@ -7326,3 +7326,44 @@ fn published_root_covers_an_original_edge_in_the_delivered_glb() {
         String::from_utf8_lossy(&result.stderr)
     );
 }
+
+/// D: a cell whose whole ladder fails keeps the border vertices P1 could not remove,
+/// splitting the chords it shares; the co-owners of those chords build again with the same
+/// pieces, so the archive validates with exact seams. Without keeping them the same cell is
+/// omitted.
+#[test]
+fn a_stalled_cell_keeps_its_border_vertices() {
+    let work = tempfile::tempdir().unwrap();
+    // A flat sheet: cell seams run along grid lines, so the shared chords remove the
+    // collinear border points between their ends.
+    let source = grid(
+        (32, 32),
+        (0., 100.),
+        (0., 100.),
+        &|_, _| 0.,
+        [0.4, 0.5, 0.3, 1.],
+    );
+    let input = write_gltf(&work.path().join("src"), &[source]);
+    let run = |keep| Run {
+        leaf_triangles: 64,
+        cap: 100,
+        mutation: Mutation::KeepAt(1, keep),
+        budget: Some(4 << 30),
+        ..s2_run()
+    };
+    let diagnostics = |dir: &Path| -> Value {
+        let resources: Value =
+            serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
+        resources["hlod"]["diagnostics"].clone()
+    };
+    let dir = stage(&input, &work.path().join("keep"), &run(true)).unwrap();
+    let d = diagnostics(&dir);
+    assert!(d["kept_vertices"].as_u64().unwrap() > 0, "{d}");
+    assert!(d["rebuilt_cells"].as_u64().unwrap() > 0, "{d}");
+    assert_eq!(d["omitted_proxies"], 0, "{d}");
+    published_and_valid("kept border vertices", &dir, work.path());
+    let control = stage(&input, &work.path().join("omit"), &run(false)).unwrap();
+    let c = diagnostics(&control);
+    assert_eq!(c["kept_vertices"], 0, "{c}");
+    assert!(c["omitted_proxies"].as_u64().unwrap() > 0, "{c}");
+}

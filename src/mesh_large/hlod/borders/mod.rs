@@ -5,6 +5,10 @@
 mod curve;
 mod disk;
 mod graph;
+mod split;
+#[cfg(test)]
+use split::Refused;
+pub(crate) use split::{Overlay, Site};
 pub(super) fn memory_need(sorter: SortConfig) -> u64 {
     sorter.memory_bound::<InterfaceRow>()
         + sorter.memory_bound::<disk::Words<7>>()
@@ -474,10 +478,10 @@ impl Borders {
             leaf_begin: 0,
             leaf_end: 0,
         };
-        let Some(a) = self.own_contract(key(depth), 6 * cap)? else {
+        let Some(a) = self.own_contract(key(depth), 6 * cap, &Overlay::default())? else {
             return Ok(false);
         };
-        let Some(b) = self.own_contract(key(depth + 1), 6 * cap)? else {
+        let Some(b) = self.own_contract(key(depth + 1), 6 * cap, &Overlay::default())? else {
             return Ok(false);
         };
         Ok(a.interface
@@ -1106,7 +1110,18 @@ impl Borders {
         key: TileKey,
         limit: usize,
     ) -> Result<Option<Contract>, JobError> {
-        let Some(mut contract) = self.own_contract(key, limit)? else {
+        self.contract_with(key, limit, &Overlay::default())
+    }
+
+    /// `contract` with the kept vertices of `overlay` (D): a split segment is published as
+    /// its pieces. A chain member's segments are never split (`Refused::Chain`).
+    pub(super) fn contract_with(
+        &self,
+        key: TileKey,
+        limit: usize,
+        overlay: &Overlay,
+    ) -> Result<Option<Contract>, JobError> {
+        let Some(mut contract) = self.own_contract(key, limit, overlay)? else {
             return Ok(None);
         };
         // Chain members are consecutive in the frozen tree's preorder.
@@ -1121,7 +1136,7 @@ impl Borders {
                 break;
             }
             if depth != key.depth {
-                contract.relief_floor = contract.relief_floor.max(self.relief_floor(n)?);
+                contract.relief_floor = contract.relief_floor.max(self.relief_floor(n, overlay)?);
             }
         }
         Ok(Some(contract))
@@ -1129,13 +1144,14 @@ impl Borders {
 
     /// One node's relief floor (A1): 8 x its largest relieved certificate's own plus finer
     /// certified displacement.
-    fn relief_floor(&self, n: [u64; 8]) -> Result<f64, JobError> {
+    fn relief_floor(&self, n: [u64; 8], overlay: &Overlay) -> Result<f64, JobError> {
         let (mut at, mut floor) = (n[6], 0f64);
         while at != NONE {
             let link = self.refs.get(at)?;
             let s = self.segments.get(link[1])?;
             if s[0] != s[1] && s[11] > 0 {
-                floor = floor.max(8. * (f64::from_bits(s[6]) + f64::from_bits(s[10])));
+                let finer = f64::from_bits(s[10]).max(overlay.finer(n[2] as u32, s[0], s[1]));
+                floor = floor.max(8. * (f64::from_bits(s[6]) + finer));
             }
             at = link[0];
         }
@@ -1149,14 +1165,33 @@ impl Borders {
         Ok(self.source.nodes.get(self.source.node(key)?)?[7])
     }
 
-    /// The contract of `key`'s own node.
-    fn own_contract(&self, key: TileKey, limit: usize) -> Result<Option<Contract>, JobError> {
+    /// The contract of `key`'s own node, with `overlay`'s splits of its segments (D). The
+    /// relief floor also covers every piece of a split segment, relieved or not, and a
+    /// relieved chord's finer displacement includes every finer split on its arc.
+    fn own_contract(
+        &self,
+        key: TileKey,
+        limit: usize,
+        overlay: &Overlay,
+    ) -> Result<Option<Contract>, JobError> {
         let n = self.source.nodes.get(self.source.node(key)?)?;
-        if n[7] > limit as u64 {
+        // Each split adds its extra pieces to the linked items.
+        let mut extra = 0u64;
+        if !overlay.is_empty() {
+            let mut at = n[6];
+            while at != NONE {
+                let link = self.refs.get(at)?;
+                if let Some(pieces) = overlay.pieces(key.depth, link[1]) {
+                    extra += pieces.len() as u64 - 1;
+                }
+                at = link[0];
+            }
+        }
+        if n[7] + extra > limit as u64 {
             return Ok(None);
         }
         let mut at = n[6];
-        let count = n[7] as usize;
+        let count = (n[7] + extra) as usize;
         let mut interface = Vec::with_capacity(3 * count);
         let mut certificates = Vec::with_capacity(count);
         let mut terminal_vertices = Vec::with_capacity(2 * count);
@@ -1164,48 +1199,53 @@ impl Borders {
         let mut relief_floor = 0f64;
         while at != NONE {
             let link = self.refs.get(at)?;
-            let s = self.segments.get(link[1])?;
-            let va = self.source.vertices.get(s[0])?;
-            let vb = self.source.vertices.get(s[1])?;
-            let a = [va[0] as u32, va[1] as u32, va[2] as u32];
-            let b = [vb[0] as u32, vb[1] as u32, vb[2] as u32];
-            for (p, v) in [(a, va), (b, vb)] {
-                if v[7] as u32 <= key.depth {
-                    terminal_vertices.push(p);
+            let stored = self.segments.get(link[1])?;
+            let split = overlay.pieces(key.depth, link[1]);
+            for &s in split.unwrap_or(std::slice::from_ref(&stored)) {
+                let va = self.source.vertices.get(s[0])?;
+                let vb = self.source.vertices.get(s[1])?;
+                let a = [va[0] as u32, va[1] as u32, va[2] as u32];
+                let b = [vb[0] as u32, vb[1] as u32, vb[2] as u32];
+                for (p, v) in [(a, va), (b, vb)] {
+                    if v[7] as u32 <= key.depth {
+                        terminal_vertices.push(p);
+                    }
+                    holders.push(Holders {
+                        key: p,
+                        lo: self.source.owners.get(v[3])?[0] as u32,
+                        hi: self.source.owners.get(v[4] - 1)?[0] as u32,
+                    });
                 }
-                holders.push(Holders {
-                    key: p,
-                    lo: self.source.owners.get(v[3])?[0] as u32,
-                    hi: self.source.owners.get(v[4] - 1)?[0] as u32,
-                });
-            }
-            let lo = self.source.owners.get(s[8])?[0] as u32;
-            let hi = self.source.owners.get(s[9] - 1)?[0] as u32;
-            for p in [a, b] {
-                interface.push(InterfaceRow::new(key.leaf_begin, p, p, lo, hi));
-            }
-            if a != b {
-                interface.push(InterfaceRow::new(
-                    key.leaf_begin,
-                    a.min(b),
-                    a.max(b),
-                    lo,
-                    hi,
-                ));
-                let edge = self.source.edges.get(s[2])?;
-                certificates.push(Certificate {
-                    endpoints: [a, b],
-                    chain: [self.source.key(edge[0])?, self.source.key(edge[1])?],
-                    origin: self.source.key(s[3])?,
-                    first: s[4],
-                    end: s[5],
-                    epsilon: f64::from_bits(s[6]),
-                    terminal_lock: edge[6] <= u64::from(key.depth),
-                    step: s[11] as u32,
-                });
-                if s[11] > 0 {
-                    relief_floor =
-                        relief_floor.max(8. * (f64::from_bits(s[6]) + f64::from_bits(s[10])));
+                let lo = self.source.owners.get(s[8])?[0] as u32;
+                let hi = self.source.owners.get(s[9] - 1)?[0] as u32;
+                for p in [a, b] {
+                    interface.push(InterfaceRow::new(key.leaf_begin, p, p, lo, hi));
+                }
+                if a != b {
+                    interface.push(InterfaceRow::new(
+                        key.leaf_begin,
+                        a.min(b),
+                        a.max(b),
+                        lo,
+                        hi,
+                    ));
+                    let edge = self.source.edges.get(s[2])?;
+                    certificates.push(Certificate {
+                        endpoints: [a, b],
+                        chain: [self.source.key(edge[0])?, self.source.key(edge[1])?],
+                        origin: self.source.key(s[3])?,
+                        first: s[4],
+                        end: s[5],
+                        epsilon: f64::from_bits(s[6]),
+                        terminal_lock: edge[6] <= u64::from(key.depth),
+                        step: s[11] as u32,
+                    });
+                    // A split piece always floors G (its bound may pass the stored chord's); a
+                    // relieved chord's finer displacement includes finer splits on its arc.
+                    if s[11] > 0 || split.is_some() {
+                        let finer = f64::from_bits(s[10]).max(overlay.finer(key.depth, s[0], s[1]));
+                        relief_floor = relief_floor.max(8. * (f64::from_bits(s[6]) + finer));
+                    }
                 }
             }
             at = link[0];
@@ -1364,12 +1404,26 @@ impl Borders {
         depth: u32,
         key: Key,
     ) -> Result<Option<(Key, Key, f64, u8)>, JobError> {
+        self.mapping_with(depth, key, &Overlay::default())
+    }
+
+    /// `mapping` with the kept vertices of `overlay` (D): a vertex on a split arc maps to
+    /// its piece.
+    pub(super) fn mapping_with(
+        &self,
+        depth: u32,
+        key: Key,
+        overlay: &Overlay,
+    ) -> Result<Option<(Key, Key, f64, u8)>, JobError> {
         let Some(vertex) = self.source.vertex(key)? else {
             return Ok(None);
         };
-        let m = self
-            .maps
-            .get(u64::from(depth) * self.source.vertices.len + vertex)?;
+        let m = match overlay.map(depth, vertex) {
+            Some(m) => m,
+            None => self
+                .maps
+                .get(u64::from(depth) * self.source.vertices.len + vertex)?,
+        };
         Ok(Some((
             self.source.key(m[0])?,
             self.source.key(m[1])?,
@@ -1828,6 +1882,68 @@ mod tests {
         let middle = borders.mapping(1, points[3]).unwrap().unwrap();
         assert_eq!((middle.0, middle.1), (points[2], points[4]));
         assert_eq!(middle.2, 0.5);
+        // D: keeping the tail's middle vertex splits that chord, the same for both owners.
+        let (left_key, right_key) = (tile(0, 2, 1, 0, 2), tile(2, 4, 1, 2, 4));
+        let site = borders.locate(left_key, &[points[3]]).unwrap()[0]
+            .1
+            .unwrap();
+        assert_eq!(
+            borders.locate(right_key, &[points[3]]).unwrap()[0].1,
+            Ok(site)
+        );
+        assert_eq!(
+            borders.locate(left_key, &[points[2]]).unwrap()[0].1,
+            Err(Refused::NotOnChord),
+            "a retained endpoint is no stuck vertex"
+        );
+        let sites = BTreeMap::from([(1, std::collections::BTreeSet::from([site]))]);
+        let (overlay, dropped) = borders.split(&sites, Overlay::default()).unwrap();
+        assert!(dropped.is_empty());
+        assert_eq!(overlay.kept().collect::<Vec<_>>(), vec![(1, points[3])]);
+        let left_kept = borders
+            .contract_with(left_key, 100, &overlay)
+            .unwrap()
+            .unwrap();
+        let right_kept = borders
+            .contract_with(right_key, 100, &overlay)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(&left_kept.certificates).unwrap(),
+            serde_json::to_value(&right_kept.certificates).unwrap()
+        );
+        assert_eq!(left_kept.certificates.len(), left.certificates.len() + 1);
+        assert!(left_kept
+            .interface
+            .iter()
+            .any(|r| r.is_vertex() && r.a == points[3]));
+        // Both pieces are single source edges, certified exactly.
+        assert!(left_kept
+            .certificates
+            .iter()
+            .filter(|c| c.endpoints.contains(&points[3]))
+            .all(|c| c.epsilon == 0. && c.end - c.first == 1));
+        let kept = borders
+            .mapping_with(1, points[3], &overlay)
+            .unwrap()
+            .unwrap();
+        assert_eq!((kept.0, kept.1), (points[3], points[3]));
+        assert_eq!(
+            borders.co_owners(left_key).unwrap(),
+            vec![borders.node_id(right_key).unwrap()]
+        );
+        // Without the overlay nothing changes.
+        assert_eq!(
+            serde_json::to_value(
+                &borders
+                    .contract_with(left_key, 100, &Overlay::default())
+                    .unwrap()
+                    .unwrap()
+                    .certificates
+            )
+            .unwrap(),
+            serde_json::to_value(&left.certificates).unwrap()
+        );
         let leaf = borders.contract(tile(1, 2, 2, 1, 2), 100).unwrap().unwrap();
         assert_eq!(leaf.certificates.len(), 2);
         assert_eq!(leaf.terminal_vertices.len(), 4);
@@ -1988,7 +2104,9 @@ mod tests {
                 let r = borders.source.nodes.get(id).unwrap();
                 let key = tile(r[0], r[1], r[2] as u32, r[3] as u32, r[4] as u32);
                 assert_eq!(borders.node_id(key).unwrap(), id);
-                let full = borders.own_contract(key, limit).unwrap();
+                let full = borders
+                    .own_contract(key, limit, &Overlay::default())
+                    .unwrap();
                 let Some(full) = full else {
                     assert!(
                         n > limit as u64,
