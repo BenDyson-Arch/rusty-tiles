@@ -232,12 +232,14 @@ pub(crate) fn scratch_need(captured: &FullCaptured, config: &TreeConfig) -> Opti
     let n = captured.triangles.len();
     let sorter = config.sorter(1);
     interfaces::memory_backed_need(n, sorter)?.checked_add(borders::scratch_need(
-        n.checked_mul(6)?,
-        n.checked_mul(3)?,
-        n.checked_mul(3)?,
-        captured.tree.stats.nodes,
-        captured.tree.stats.leaves,
-        captured.tree.stats.height.saturating_sub(1),
+        borders::ScratchCounts {
+            rows: n.checked_mul(6)?,
+            points: n.checked_mul(3)?,
+            segments: n.checked_mul(3)?,
+            nodes: captured.tree.stats.nodes,
+            leaves: captured.tree.stats.leaves,
+            height: captured.tree.stats.height.saturating_sub(1),
+        },
         sorter,
     )?)
 }
@@ -301,25 +303,7 @@ pub(crate) fn forecast(
         });
     }
     let ledger = super::scratch::ScratchLedger::new(&captured.scratch, stats.scratch.walk, &admit);
-    let border_lease = ledger.admit(
-        Borders::COMPONENT,
-        borders::scratch_need(
-            stats.rows,
-            stats.shared_points,
-            stats.shared_segments,
-            captured.tree.stats.nodes,
-            captured.tree.stats.leaves,
-            captured.tree.stats.height - 1,
-            sorter,
-        )
-        .ok_or_else(|| {
-            JobError::new(
-                JobErrorKind::ResourceLimit,
-                "shared-border scratch bound overflows",
-            )
-        })?,
-    )?;
-    let borders = Borders::build(
+    let (borders, border_lease) = Borders::build(
         &captured.scratch,
         sorter,
         &captured.tree.nodes,
@@ -330,9 +314,19 @@ pub(crate) fn forecast(
             &captured.corner_depths,
             &captured.lattice,
         )?,
-        captured.tree.stats.per_depth[0].maximum_extent,
-        settings.mutation.relief_cap(cap),
-        &border_lease,
+        (
+            captured.tree.stats.per_depth[0].maximum_extent,
+            settings.mutation.relief_cap(cap),
+            borders::ScratchCounts {
+                rows: stats.rows,
+                points: stats.shared_points,
+                segments: stats.shared_segments,
+                nodes: captured.tree.stats.nodes,
+                leaves: captured.tree.stats.leaves,
+                height: captured.tree.stats.height - 1,
+            },
+        ),
+        &ledger,
         check,
     )?;
     drop(source_open_ends);

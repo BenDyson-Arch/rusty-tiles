@@ -1217,6 +1217,21 @@ at scale. The bake reports the two files' combined peak length in
 `diagnostics.hlod.source_index_stored_bytes` and their raw upper bound in
 `diagnostics.hlod.scratch_components["s2-source-index"]`.
 
+The shared borders (`s1b-shared-borders`) are admitted twice under one name. Their
+graph is built under a bound from the incidence pass's counts. Once it is built,
+that admission is released, and the borders are admitted once more, with free
+space preflighted, for everything they hold through the walk:
+- the graph as built;
+- every depth's vertex maps (24 bytes per vertex per depth);
+- the segments and owner references each depth may emit (at most one segment per
+  edge or vertex that spans more than one cell at that depth, and its owner run
+  in references);
+- one level's temporaries, the largest over the levels.
+
+A bake without the space is refused there, before the first level, never during
+the walk. `scratch_components["s1b-shared-borders"]` reports the larger of the
+two admissions.
+
 The run also reserves output-side space for leaf staging, archive staging and a
 replaced destination: three copies of 119 bytes per triangle (a conservative
 estimate; measured archives are about 47) plus the encoded image bytes. Once

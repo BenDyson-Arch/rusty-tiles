@@ -1071,20 +1071,9 @@ pub(crate) fn produce(
         diagnostics.incidence_scratch.walk,
         &admit,
     );
-    let border_lease = ledger.admit(
-        borders::Borders::COMPONENT,
-        borders::scratch_need(
-            stats.rows,
-            stats.shared_points,
-            stats.shared_segments,
-            captured.tree.stats.nodes,
-            captured.tree.stats.leaves,
-            captured.tree.stats.height - 1,
-            input.config.sorter(1),
-        )
-        .ok_or_else(|| resource("shared-border scratch bound overflows"))?,
-    )?;
-    let borders = borders::Borders::build(
+    // The borders admit their own scratch: the build, then once the graph is built,
+    // everything they will hold through the walk (`Borders::build`).
+    let (borders, border_lease) = borders::Borders::build(
         &captured.scratch,
         input.config.sorter(1),
         &captured.tree.nodes,
@@ -1095,9 +1084,19 @@ pub(crate) fn produce(
             &captured.corner_depths,
             &captured.lattice,
         )?,
-        captured.tree.stats.per_depth[0].maximum_extent,
-        settings.mutation.relief_cap(settings.cap),
-        &border_lease,
+        (
+            captured.tree.stats.per_depth[0].maximum_extent,
+            settings.mutation.relief_cap(settings.cap),
+            borders::ScratchCounts {
+                rows: stats.rows,
+                points: stats.shared_points,
+                segments: stats.shared_segments,
+                nodes: captured.tree.stats.nodes,
+                leaves: captured.tree.stats.leaves,
+                height: captured.tree.stats.height - 1,
+            },
+        ),
+        &ledger,
         check,
     )?;
     drop(source_open_ends);
@@ -1496,12 +1495,14 @@ fn memory_backed_need(
         .and_then(|b| b.checked_add(source_index::scratch_need(n)?))
         .and_then(|b| {
             b.checked_add(borders::scratch_need(
-                n.checked_mul(6)?,
-                n.checked_mul(3)?,
-                n.checked_mul(3)?,
-                captured.tree.stats.nodes,
-                captured.tree.stats.leaves,
-                captured.tree.stats.height - 1,
+                borders::ScratchCounts {
+                    rows: n.checked_mul(6)?,
+                    points: n.checked_mul(3)?,
+                    segments: n.checked_mul(3)?,
+                    nodes: captured.tree.stats.nodes,
+                    leaves: captured.tree.stats.leaves,
+                    height: captured.tree.stats.height - 1,
+                },
                 config.sorter(1),
             )?)
         })

@@ -21,6 +21,17 @@ use crate::{
 /// positives only cost an exact lookup.
 pub(super) const FILTER_WORDS: usize = 1 << 17;
 
+/// Upper bounds on the levels' emission over all depths ([`Source::level_bounds`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct LevelBounds {
+    /// Segments, summed over depths.
+    pub(super) segments: u64,
+    /// Owner references, summed over depths.
+    pub(super) refs: u64,
+    /// The most edges external at any one depth (one level's ordered arc).
+    pub(super) active: u64,
+}
+
 pub(super) struct Source {
     /// key x/y/z, owner first/end, incident head/count, minimum terminal leaf depth
     /// (bit 32: source open end; bits 40..48: face retention depth + 1).
@@ -434,6 +445,59 @@ impl Source {
     }
     pub(super) fn external(&self, begin: u64, end: u64, depth: u32) -> Result<bool, JobError> {
         Ok(self.owner(begin, depth)? != self.owner(end - 1, depth)?)
+    }
+
+    /// Upper bounds on what the levels emit, from the graph alone (`Borders::build`). At
+    /// each depth a level walks the edges and vertices that are external there (owners in
+    /// more than one cell): it emits at most one segment per such edge (each chord spans at
+    /// least one edge of its chain) and one point segment per such vertex, and each segment
+    /// references at most its chain's owner run, which no edge of the chain exceeds. External
+    /// at a depth implies external at every finer one, so each item is walked from the finest
+    /// depth until it is internal. An item's run ends are read once: [`Self::external`] at
+    /// depth `d` compares their leaves' ancestors at `d`.
+    pub(super) fn level_bounds(
+        &self,
+        check: &(dyn Fn() -> Result<(), JobError> + Sync),
+    ) -> Result<LevelBounds, JobError> {
+        let mut active = vec![0u64; self.depth as usize + 1];
+        let mut bounds = LevelBounds::default();
+        let ancestors = |begin: u64, end: u64| -> Result<[[u64; 33]; 2], JobError> {
+            Ok([
+                self.leaves.get(self.owners.get(begin)?[0])?,
+                self.leaves.get(self.owners.get(end - 1)?[0])?,
+            ])
+        };
+        for i in 0..self.edges.len {
+            if i.is_multiple_of(4096) {
+                check()?;
+            }
+            let e = self.edges.get(i)?;
+            let [a, b] = ancestors(e[2], e[3])?;
+            for d in (0..=self.depth).rev() {
+                if a[1 + d as usize] == b[1 + d as usize] {
+                    break;
+                }
+                active[d as usize] += 1;
+                bounds.segments += 1;
+                bounds.refs += e[3] - e[2];
+            }
+        }
+        for i in 0..self.vertices.len {
+            if i.is_multiple_of(4096) {
+                check()?;
+            }
+            let v = self.vertices.get(i)?;
+            let [a, b] = ancestors(v[3], v[4])?;
+            for d in (0..=self.depth).rev() {
+                if a[1 + d as usize] == b[1 + d as usize] {
+                    break;
+                }
+                bounds.segments += 1;
+                bounds.refs += v[4] - v[3];
+            }
+        }
+        bounds.active = active.into_iter().max().unwrap_or(0);
+        Ok(bounds)
     }
     pub(super) fn owner_list(
         &self,

@@ -25,7 +25,7 @@ use self::{
 };
 use super::{
     interfaces::{InterfaceRow, Key},
-    scratch::ComponentLease,
+    scratch::{ComponentLease, ScratchLedger},
     store::TileKey,
 };
 use crate::{
@@ -35,41 +35,117 @@ use crate::{
 };
 use std::collections::BTreeMap;
 
-/// Persistent bound for graph, ownership, source arcs, level correspondence and contracts.
-/// Counts are source interface counts, not an assumed manifold/valence bound. The source
-/// item sort is a separate transient peak. Height is bounded by the admitted tree (<=32).
-pub(super) fn scratch_need(
-    rows: u64,
-    vertices: u64,
-    edges: u64,
-    nodes: u64,
-    leaves: u64,
-    height: u32,
-    sorter: SortConfig,
-) -> Option<u64> {
-    let h = u64::from(height) + 1;
-    let persistent = rows
-        .checked_mul(8 + 36)?
-        .checked_add(vertices.checked_mul(64)?)?
-        .checked_add(edges.checked_mul(56 + 40)?)?
-        .checked_add(nodes.checked_mul(64)?)?
-        .checked_add(leaves.checked_mul(264)?)?
-        .checked_add(
-            h.checked_mul(
-                vertices
-                    .checked_mul(104)?
-                    .checked_add(edges.checked_mul(96)?)?
-                    .checked_add(rows.checked_mul(16)?)?,
-            )?,
-        )?;
+fn resource(message: &str) -> JobError {
+    JobError::new(crate::JobErrorKind::ResourceLimit, message)
+}
+
+/// Bytes per record of each store: `Disk<N>` words (8 bytes each) and the leaf rows.
+const VERTEX: u64 = 64;
+/// An edge, its finer relief (2 words) and its level relief (3 words).
+const EDGE: u64 = 56 + 16 + 24;
+const OWNER: u64 = 8;
+const NODE: u64 = 64;
+const LEAF: u64 = 264;
+const LEAF_ROW: u64 = 36;
+const MAP: u64 = 24;
+const SEGMENT: u64 = 96;
+const REF: u64 = 16;
+
+/// Counts the borders' scratch is declared from: the incidence pass's rows, shared points and
+/// shared segments, and the frozen tree's nodes, leaves and deepest depth.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct ScratchCounts {
+    pub rows: u64,
+    pub points: u64,
+    pub segments: u64,
+    pub nodes: u64,
+    pub leaves: u64,
+    pub height: u32,
+}
+
+/// The graph's persistent stores and the relief state ([`Borders::bytes`] before any level).
+fn graph_bytes(rows: u64, vertices: u64, edges: u64, nodes: u64, leaves: u64) -> Option<u64> {
+    rows.checked_mul(LEAF_ROW + OWNER)?
+        .checked_add(vertices.checked_mul(VERTEX)?)?
+        .checked_add(edges.checked_mul(EDGE)?)?
+        .checked_add(nodes.checked_mul(NODE)?)?
+        .checked_add(leaves.checked_mul(LEAF)?)
+}
+
+/// Before the graph exists: its stores from the incidence counts, the row sort through its
+/// stream and the build's transients (edge keys and adjacency).
+fn build_need(counts: ScratchCounts, sorter: SortConfig) -> Option<u64> {
+    let ScratchCounts {
+        rows,
+        points: vertices,
+        segments: edges,
+        nodes,
+        leaves,
+        ..
+    } = counts;
     let sort = config::sort_spill::<disk::Words<7>>(rows, sorter)?;
-    persistent
+    graph_bytes(rows, vertices, edges, nodes, leaves)?
         .checked_add(sort.finish_peak)?
         .checked_add(sort.stream_slack)?
         .checked_add(edges.checked_mul(72 + 8 + 96)?)?
         .checked_add(nodes.checked_mul(8)?)?
-        .checked_add(vertices.checked_mul(24)?)
-        .and_then(|v| v.checked_add(1 << 20))
+        .checked_add(vertices.checked_mul(24)?)?
+        .checked_add(1 << 20)
+}
+
+/// The level stage beside the graph: every depth's vertex maps, the segments and references
+/// all levels may emit ([`graph::LevelBounds`]), and one level's temporaries, the largest
+/// over levels (live edges and vertices, point contacts and the ordered arc, at most two
+/// entries per external edge and two per chain); they are released after each level.
+fn levels_bytes(
+    vertices: u64,
+    edges: u64,
+    nodes: u64,
+    depths: u64,
+    bounds: graph::LevelBounds,
+) -> Option<u64> {
+    let temporaries = edges
+        .checked_mul(8)?
+        .checked_add(vertices.checked_mul(24)?)?
+        .checked_add(nodes.checked_mul(8)?)?
+        .checked_add(bounds.active.checked_mul(4 * 24)?)?;
+    vertices
+        .checked_mul(depths)?
+        .checked_mul(MAP)?
+        .checked_add(bounds.segments.checked_mul(SEGMENT)?)?
+        .checked_add(bounds.refs.checked_mul(REF)?)?
+        .checked_add(temporaries)
+}
+
+/// Worst case of the borders' two admissions ([`Borders::build`]), for plans made before the
+/// incidence pass and the graph exist (memory-backed scratch, `mesh-inspect`): the build, or
+/// the graph with every edge and vertex external at every depth and every row referenced
+/// at every depth.
+pub(super) fn scratch_need(counts: ScratchCounts, sorter: SortConfig) -> Option<u64> {
+    let depths = u64::from(counts.height) + 1;
+    let worst = graph::LevelBounds {
+        segments: counts
+            .points
+            .checked_add(counts.segments)?
+            .checked_mul(depths)?,
+        refs: counts.rows.checked_mul(depths)?,
+        active: counts.segments,
+    };
+    let levels = graph_bytes(
+        counts.rows,
+        counts.points,
+        counts.segments,
+        counts.nodes,
+        counts.leaves,
+    )?
+    .checked_add(levels_bytes(
+        counts.points,
+        counts.segments,
+        counts.nodes,
+        depths,
+        worst,
+    )?)?;
+    Some(build_need(counts, sorter)?.max(levels))
 }
 
 #[derive(Clone, Debug, Default, serde::Serialize)]
@@ -153,6 +229,9 @@ pub(super) struct Borders {
     edge_finer: Disk<2>,
     /// Per source edge, this level: certified displacement, step and depth + 1.
     edge_level: Disk<3>,
+    /// Test seam: the emission bounds the borders were admitted with.
+    #[cfg(test)]
+    bounds: graph::LevelBounds,
     relief: Vec<ReliefLevel>,
 }
 
@@ -263,28 +342,61 @@ impl Borders {
         clippy::too_many_arguments,
         reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
     )]
-    pub(super) fn build(
+    /// The borders of the frozen tree, and their scratch admission, which the walk holds
+    /// until it drops them.
+    ///
+    /// The borders admit their scratch twice, under one name. Before the graph exists, the
+    /// build is admitted from the incidence counts ([`build_need`]). Once it is built, that
+    /// admission is released and the borders are admitted once more, with free space
+    /// preflighted, for everything they will hold: the graph as built and every level's
+    /// emission, bounded from the graph ([`graph::Source::level_bounds`]). A shortfall is
+    /// refused there, before any level runs; nothing is admitted later.
+    pub(super) fn build<'l, 'a>(
         scratch: &Scratch,
         sorter: SortConfig,
         nodes: &Sequence<NodeRecord>,
         rows: impl Iterator<Item = Result<InterfaceRow, crate::spill::SpillError>>,
         open_ends: impl Iterator<Item = Result<super::interfaces::KeyRecord, crate::spill::SpillError>>,
         faces: impl Iterator<Item = Result<[Key; 3], JobError>>,
-        extent: f64,
-        cap: usize,
-        lease: &ComponentLease<'_, '_>,
+        (extent, cap, counts): (f64, usize, ScratchCounts),
+        ledger: &'l ScratchLedger<'a>,
         check: &(dyn Fn() -> Result<(), JobError> + Sync),
-    ) -> Result<Self, JobError> {
+    ) -> Result<(Self, ComponentLease<'l, 'a>), JobError> {
+        let overflow = || resource("shared-border scratch bound overflows");
+        let building = ledger.admit(
+            Self::COMPONENT,
+            build_need(counts, sorter).ok_or_else(overflow)?,
+        )?;
         let mut source = Source::build(
             scratch,
             sorter,
             nodes,
             rows,
             open_ends,
-            &|| lease.charge(0),
+            &|| building.charge(0),
             check,
         )?;
         source.retain_faces(faces, check)?;
+        let bounds = source.level_bounds(check)?;
+        let need = graph_bytes(
+            source.owners.len.max(source.leaf_rows.len()),
+            source.vertices.len,
+            source.edges.len,
+            source.nodes.len,
+            source.leaves.len,
+        )
+        .and_then(|graph| {
+            graph.checked_add(levels_bytes(
+                source.vertices.len,
+                source.edges.len,
+                source.nodes.len,
+                u64::from(source.depth) + 1,
+                bounds,
+            )?)
+        })
+        .ok_or_else(overflow)?;
+        drop(building);
+        let lease = ledger.admit(Self::COMPONENT, need)?;
         let mut borders = Self {
             maps: Disk::new(scratch, "border-maps")?,
             segments: Disk::new(scratch, "border-segments")?,
@@ -294,6 +406,8 @@ impl Borders {
             edge_finer: Disk::new(scratch, "border-relief-finer")?,
             edge_level: Disk::new(scratch, "border-relief-level")?,
             relief: vec![ReliefLevel::default(); source.depth as usize + 1],
+            #[cfg(test)]
+            bounds,
             source,
         };
         if borders.source.edges.len > 0 {
@@ -332,7 +446,7 @@ impl Borders {
         borders.segments.flush()?;
         borders.refs.flush()?;
         lease.charge(borders.bytes())?;
-        Ok(borders)
+        Ok((borders, lease))
     }
     /// Test builds: an external vertex retained at a depth is retained one level finer
     /// (nested endpoints), and face retention keeps its vertex at and below its depth.
@@ -364,16 +478,15 @@ impl Borders {
         super::audit::bound(self.refs.len, self.source.nodes.len, source_triangle_depths)
     }
     fn bytes(&self) -> u64 {
-        self.source.vertices.len * 64
-            + self.source.edges.len * 56
-            + self.source.owners.len * 8
-            + self.source.nodes.len * 64
-            + self.source.leaves.len * 264
-            + self.source.leaf_rows.len() * 36
-            + self.maps.len * 24
-            + self.segments.len * 96
-            + self.refs.len * 16
-            + self.source.edges.len * 40
+        self.source.vertices.len * VERTEX
+            + self.source.edges.len * EDGE
+            + self.source.owners.len * OWNER
+            + self.source.nodes.len * NODE
+            + self.source.leaves.len * LEAF
+            + self.source.leaf_rows.len() * LEAF_ROW
+            + self.maps.len * MAP
+            + self.segments.len * SEGMENT
+            + self.refs.len * REF
     }
     pub(super) fn leaf_rows(&self) -> &Sequence<InterfaceRow> {
         &self.source.leaf_rows
@@ -1226,6 +1339,39 @@ mod tests {
         eprintln!("CONTRACT CONSTRUCTION: links={limit}, peak={peak}, charge={charge}");
         assert!(peak as u64 <= charge);
     }
+    /// The borders' scratch, temporaries included, never passes what they were admitted.
+    /// The emission stays within its bounds, and the borders' scratch, temporaries
+    /// included, within their admission.
+    fn within_admission(
+        scratch: &Scratch,
+        before: u64,
+        lease: &ComponentLease<'_, '_>,
+        borders: &Borders,
+    ) {
+        let peak = scratch.stage_peak_bytes().saturating_sub(before);
+        assert!(peak <= lease.bytes(), "{peak} past {}", lease.bytes());
+        assert!(
+            borders.segments.len <= borders.bounds.segments
+                && borders.refs.len <= borders.bounds.refs,
+            "{} segments and {} references past {:?}",
+            borders.segments.len,
+            borders.refs.len,
+            borders.bounds
+        );
+    }
+
+    /// Counts for the build admission of small test graphs (the test ledger admits all).
+    fn test_counts() -> ScratchCounts {
+        ScratchCounts {
+            rows: 1 << 20,
+            points: 1 << 20,
+            segments: 1 << 20,
+            nodes: 1 << 10,
+            leaves: 1 << 10,
+            height: 31,
+        }
+    }
+
     #[test]
     fn large_source_scratch_admission_is_checked_and_incidence_bounded() {
         let sorter = SortConfig {
@@ -1238,17 +1384,32 @@ mod tests {
         for n in [500_000_000u64, 1_000_000_000] {
             // The production caller's worst-case interface counts, with a full-height
             // tree. The envelope covers all persistent levels and the external sort.
-            let need =
-                scratch_need(6 * n, 3 * n, 3 * n, 2 * n / 8192, n / 8192, 31, sorter).unwrap();
+            let need = scratch_need(
+                ScratchCounts {
+                    rows: 6 * n,
+                    points: 3 * n,
+                    segments: 3 * n,
+                    nodes: 2 * n / 8192,
+                    leaves: n / 8192,
+                    height: 31,
+                },
+                sorter,
+            )
+            .unwrap();
             assert!((20_000 * n..=32_768 * n).contains(&need));
         }
         for field in 0..5 {
             let mut counts = [1; 5];
             counts[field] = u64::MAX;
-            assert!(scratch_need(
-                counts[0], counts[1], counts[2], counts[3], counts[4], 31, sorter,
-            )
-            .is_none());
+            let counts = ScratchCounts {
+                rows: counts[0],
+                points: counts[1],
+                segments: counts[2],
+                nodes: counts[3],
+                leaves: counts[4],
+                height: 31,
+            };
+            assert!(scratch_need(counts, sorter).is_none());
         }
     }
 
@@ -1317,21 +1478,21 @@ mod tests {
             let row_count = rows.len() as u64;
             let height = exponent + 1;
             let ledger = ScratchLedger::new(&scratch, scratch.live_bytes(), &|_| Ok(()));
-            let need = scratch_need(row_count, r + 1, r, 4 * r - 1, 2 * r, height, sorter).unwrap();
-            let lease = ledger.admit(Borders::COMPONENT, need).unwrap();
-            let borders = Borders::build(
+            scratch.begin_stage();
+            let before = scratch.live_bytes();
+            let (borders, lease) = Borders::build(
                 &scratch,
                 sorter,
                 &tree,
                 rows.into_iter().map(Ok),
                 std::iter::empty(),
                 std::iter::empty(),
-                4096.,
-                super::super::TRIANGLE_CAP,
-                &lease,
+                (4096., super::super::TRIANGLE_CAP, test_counts()),
+                &ledger,
                 &|| Ok(()),
             )
             .unwrap();
+            within_admission(&scratch, before, &lease, &borders);
             let node = borders
                 .source
                 .node(TileKey {
@@ -1476,20 +1637,21 @@ mod tests {
         rows.sort_unstable();
         let faces: Vec<[Key; 3]> = leaves.iter().flatten().copied().collect();
         let ledger = ScratchLedger::new(&scratch, scratch.live_bytes(), &|_| Ok(()));
-        let lease = ledger.admit(Borders::COMPONENT, 8 << 20).unwrap();
-        let borders = Borders::build(
+        scratch.begin_stage();
+        let before = scratch.live_bytes();
+        let (borders, lease) = Borders::build(
             &scratch,
             sorter,
             &tree,
-            rows.into_iter().map(Ok),
+            rows.clone().into_iter().map(Ok),
             std::iter::empty(),
-            faces.into_iter().map(Ok),
-            4096.,
-            super::super::TRIANGLE_CAP,
-            &lease,
+            faces.clone().into_iter().map(Ok),
+            (4096., super::super::TRIANGLE_CAP, test_counts()),
+            &ledger,
             &|| Ok(()),
         )
         .unwrap();
+        within_admission(&scratch, before, &lease, &borders);
         let cell_a = borders
             .contract(
                 TileKey {
@@ -1509,6 +1671,40 @@ mod tests {
         for v in [&l[1], &l[3]] {
             assert!(points.contains(v), "{v:?} contracted away: {points:?}");
         }
+        drop((borders, lease));
+        // Too little space once the graph is built: refused at that admission, the second
+        // and last, before any level runs; the build's admission is released.
+        let admissions = std::sync::atomic::AtomicU64::new(0);
+        let refuse_second = |_: u64| {
+            use std::sync::atomic::Ordering::Relaxed;
+            if admissions.fetch_add(1, Relaxed) + 1 == 2 {
+                return Err(JobError::new(
+                    crate::JobErrorKind::ResourceLimit,
+                    "no space",
+                ));
+            }
+            Ok(())
+        };
+        let base = scratch.live_bytes();
+        let ledger = ScratchLedger::new(&scratch, base, &refuse_second);
+        let error = Borders::build(
+            &scratch,
+            sorter,
+            &tree,
+            rows.into_iter().map(Ok),
+            std::iter::empty(),
+            faces.into_iter().map(Ok),
+            (4096., super::super::TRIANGLE_CAP, test_counts()),
+            &ledger,
+            &|| Ok(()),
+        )
+        .err()
+        .expect("the post-graph admission is refused");
+        assert_eq!(error.kind(), crate::JobErrorKind::ResourceLimit);
+        assert!(error.to_string().contains("no space"), "{error}");
+        assert_eq!(admissions.load(std::sync::atomic::Ordering::Relaxed), 2);
+        // Nothing stays admitted: the build's lease was released before the refused one.
+        assert_eq!(ledger.bound(), base);
     }
     #[test]
     fn all_owners_share_certified_chords_and_terminal_leaves_stay_exact() {
@@ -1568,20 +1764,21 @@ mod tests {
         }
         rows.sort_unstable();
         let ledger = ScratchLedger::new(&scratch, scratch.live_bytes(), &|_| Ok(()));
-        let lease = ledger.admit(Borders::COMPONENT, 8 << 20).unwrap();
-        let borders = Borders::build(
+        scratch.begin_stage();
+        let before = scratch.live_bytes();
+        let (borders, lease) = Borders::build(
             &scratch,
             sorter,
             &tree,
             rows.iter().copied().map(Ok),
             std::iter::empty(),
             std::iter::empty(),
-            4096.,
-            super::super::TRIANGLE_CAP,
-            &lease,
+            (4096., super::super::TRIANGLE_CAP, test_counts()),
+            &ledger,
             &|| Ok(()),
         )
         .unwrap();
+        within_admission(&scratch, before, &lease, &borders);
         let tile = |first, end, depth, leaf_begin, leaf_end| TileKey {
             first,
             end,
@@ -1623,22 +1820,24 @@ mod tests {
             .unwrap()
             .interface
             .is_empty());
-        drop(borders);
+        drop((borders, lease));
         // A nonshared source boundary meeting point 2 can complete a hole through
         // the straight tail. Its separate open chain retains an interior witness.
-        let pinned = Borders::build(
+        scratch.begin_stage();
+        let before = scratch.live_bytes();
+        let (pinned, lease) = Borders::build(
             &scratch,
             sorter,
             &tree,
             rows.into_iter().map(Ok),
             [Ok(super::super::interfaces::KeyRecord(points[2]))].into_iter(),
             std::iter::empty(),
-            4096.,
-            super::super::TRIANGLE_CAP,
-            &lease,
+            (4096., super::super::TRIANGLE_CAP, test_counts()),
+            &ledger,
             &|| Ok(()),
         )
         .unwrap();
+        within_admission(&scratch, before, &lease, &pinned);
         let middle = pinned.mapping(1, points[3]).unwrap().unwrap();
         assert_eq!((middle.0, middle.1), (points[3], points[3]));
         assert_eq!(
@@ -1711,20 +1910,21 @@ mod tests {
         }
         rows.sort_unstable();
         let ledger = ScratchLedger::new(&scratch, scratch.live_bytes(), &|_| Ok(()));
-        let lease = ledger.admit(Borders::COMPONENT, 8 << 20).unwrap();
-        let borders = Borders::build(
+        scratch.begin_stage();
+        let before = scratch.live_bytes();
+        let (borders, lease) = Borders::build(
             &scratch,
             sorter,
             &tree,
             rows.into_iter().map(Ok),
             std::iter::empty(),
             std::iter::empty(),
-            4096.,
-            cap,
-            &lease,
+            (4096., cap, test_counts()),
+            &ledger,
             &|| Ok(()),
         )
         .unwrap();
+        within_admission(&scratch, before, &lease, &borders);
         read(&borders)
     }
 
