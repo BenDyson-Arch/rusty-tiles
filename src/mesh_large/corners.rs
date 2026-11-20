@@ -15,12 +15,13 @@ use super::{
     full::CornerDepth,
     phases::{Step, StepProgress},
     records::{Bounds, NodeKind, NodeRecord, TriangleRecord},
+    tasks::{run, Ran},
 };
 use crate::{
     spill::{ExternalSorter, Layout, Record, Scratch, Sequence, SequenceWriter},
     JobError, JobErrorKind,
 };
-use rayon::prelude::*;
+use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 
 /// Occupancy mask resolution per axis of a leaf's box.
 const SIDE: usize = 16;
@@ -324,7 +325,7 @@ impl Record for Candidate {
         rank[..5].copy_from_slice(&bytes[12..17]);
         Self {
             position: std::array::from_fn(|a| {
-                u32::from_le_bytes(bytes[4 * a..4 * a + 4].try_into().unwrap())
+                u32::from_le_bytes(crate::spill::field(bytes, 4 * a))
             }),
             rank: u64::from_le_bytes(rank),
             corner: bytes[17] & 3,
@@ -360,6 +361,40 @@ impl Record for RankDepth {
     }
 }
 
+/// Triangles per chunk: at least eight chunks per worker when the triangles allow.
+fn chunk_size(triangles: u64, jobs: usize) -> u64 {
+    (triangles / (jobs.max(1) as u64 * 8)).clamp(1, CHUNK_TRIANGLES)
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Test seam: leaves whose chunk read fails, each after the given delay.
+    pub(crate) static FAIL_LEAVES: std::cell::RefCell<Vec<(usize, std::time::Duration)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Test seam: the first leaf of each wave of the join over leaves of these triangle counts.
+#[cfg(test)]
+pub(crate) fn wave_starts(leaf_triangles: &[u64], jobs: usize) -> Vec<usize> {
+    let mut first = 0;
+    let leaves: Vec<Leaf> = leaf_triangles
+        .iter()
+        .map(|&n| {
+            first += n;
+            Leaf {
+                first: first - n,
+                end: first,
+                depth: 0,
+                bounds: Bounds::EMPTY,
+            }
+        })
+        .collect();
+    chunks(&leaves, chunk_size(first, jobs))
+        .chunks(jobs.max(1))
+        .map(|wave| wave[0].start)
+        .collect()
+}
+
 /// Leaf chunks of about `size` triangles each (at least one leaf).
 fn chunks(leaves: &[Leaf], size: u64) -> Vec<std::ops::Range<usize>> {
     let mut chunks = Vec::new();
@@ -376,22 +411,33 @@ fn chunks(leaves: &[Leaf], size: u64) -> Vec<std::ops::Range<usize>> {
     chunks
 }
 
-/// Runs `task` over `chunks` on `pool`, a wave of `wave` chunks at a time, handing each
-/// result to `sink` in chunk order. `progress` checks between waves; tasks check the run's
-/// stop themselves.
+/// Runs `task` over `chunks` on up to `workers` capture tasks ([`run`]), a wave of `wave`
+/// chunks at a time, handing each result to `sink` in chunk order. The calling thread runs
+/// `poll` while they work; tasks stop at their stop flag and the run's stop themselves. When
+/// a chunk fails, the wave's chunks run again in order on the calling thread, so the first
+/// failing chunk's error is reported, whatever order the workers met the failures in.
 fn in_waves<T: Send>(
-    pool: &rayon::ThreadPool,
+    workers: usize,
     chunks: &[std::ops::Range<usize>],
     wave: usize,
-    task: impl Fn(std::ops::Range<usize>) -> Result<T, JobError> + Sync,
+    poll: &mut dyn FnMut() -> Result<(), JobError>,
+    task: impl Fn(std::ops::Range<usize>, &AtomicBool) -> Result<T, JobError> + Sync,
     mut sink: impl FnMut(&std::ops::Range<usize>, T) -> Result<(), JobError>,
 ) -> Result<(), JobError> {
     for wave in chunks.chunks(wave.max(1)) {
-        let done: Vec<T> = pool.install(|| {
-            wave.par_iter()
-                .map(|range| task(range.clone()))
-                .collect::<Result<_, _>>()
-        })?;
+        let done = match run(wave.len(), workers, poll, |i, stop| {
+            task(wave[i].clone(), stop)
+        })? {
+            Ran::All(done) => done,
+            Ran::Failed(error) => {
+                let stop = AtomicBool::new(false);
+                for range in wave {
+                    poll()?;
+                    task(range.clone(), &stop)?;
+                }
+                return Err(error);
+            }
+        };
         for (range, result) in wave.iter().zip(done) {
             sink(range, result)?;
         }
@@ -438,47 +484,57 @@ pub(super) fn corner_depths<T: Corners>(
     }
     // One unit per triangle for each of the mask, candidate and write passes.
     progress.begin(Step::CornerDepths, count.saturating_mul(3))?;
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(jobs.max(1))
-        .thread_name(|i| format!("rusty-tiles-corners-{i}"))
-        .build()
-        .map_err(|e| JobError::new(JobErrorKind::ResourceLimit, format!("corner pool: {e}")))?;
-    let size = (count / (jobs.max(1) as u64 * 8)).clamp(1, CHUNK_TRIANGLES);
-    let chunks = chunks(&leaves, size);
+    let chunks = chunks(&leaves, chunk_size(count, jobs));
     // One chunk per worker per wave ([`wave_bytes`]).
     let wave = jobs.max(1);
     let buffer = config.sort.buffer_bytes;
+    #[cfg(test)]
+    let fail = FAIL_LEAVES.with(|f| f.borrow().clone());
     // Reads a chunk's leaves, one leaf's triangles at a time, checking the run's stop.
-    let read =
-        |range: &std::ops::Range<usize>, each: &mut LeafVisit<'_, T>| -> Result<(), JobError> {
-            let (first, end) = (leaves[range.start].first, leaves[range.end - 1].end);
-            let mut reader = triangles.range(first, end, buffer)?;
-            let mut leaf = Vec::new();
-            for i in range.clone() {
-                crate::test_hooks::pace("mesh.corner-candidates");
-                scratch.check_stop()?;
-                leaf.clear();
-                for _ in leaves[i].first..leaves[i].end {
-                    leaf.push(
-                        reader
-                            .next()
-                            .transpose()?
-                            .ok_or_else(|| invariant("triangles end before the leaves"))?,
-                    );
-                }
-                each(i, &leaf)?;
+    let read = |range: &std::ops::Range<usize>,
+                stop: &AtomicBool,
+                each: &mut LeafVisit<'_, T>|
+     -> Result<(), JobError> {
+        let (first, end) = (leaves[range.start].first, leaves[range.end - 1].end);
+        let mut reader = triangles.range(first, end, buffer)?;
+        let mut leaf = Vec::new();
+        for i in range.clone() {
+            crate::test_hooks::pace("mesh.corner-candidates");
+            if stop.load(Relaxed) {
+                return Err(JobError::new(
+                    JobErrorKind::Cancelled,
+                    "corner join stopped",
+                ));
             }
-            Ok(())
-        };
+            scratch.check_stop()?;
+            #[cfg(test)]
+            if let Some(&(_, delay)) = fail.iter().find(|f| f.0 == i) {
+                std::thread::sleep(delay);
+                return Err(invariant(&format!("injected failure at leaf {i}")));
+            }
+            leaf.clear();
+            for _ in leaves[i].first..leaves[i].end {
+                leaf.push(
+                    reader
+                        .next()
+                        .transpose()?
+                        .ok_or_else(|| invariant("triangles end before the leaves"))?,
+                );
+            }
+            each(i, &leaf)?;
+        }
+        Ok(())
+    };
     // Masks.
     let mut masks = Vec::with_capacity(leaves.len());
     in_waves(
-        &pool,
+        jobs,
         &chunks,
         wave,
-        |range| {
+        &mut || progress.check(),
+        |range, stop| {
             let mut out = Vec::with_capacity(range.len());
-            read(&range, &mut |i, triangles| {
+            read(&range, stop, &mut |i, triangles| {
                 let mut mask = [0u64; MASK_WORDS];
                 for p in triangles.iter().flat_map(Corners::positions) {
                     let bit = mask_bit(&leaves[i].bounds, p)
@@ -504,13 +560,14 @@ pub(super) fn corner_depths<T: Corners>(
     let mut candidates =
         ExternalSorter::<Candidate>::new(scratch, config.sorter(jobs))?.observed(progress);
     in_waves(
-        &pool,
+        jobs,
         &chunks,
         wave,
-        |range| {
+        &mut || progress.check(),
+        |range, stop| {
             let mut out = Vec::new();
             let mut corners: Vec<([u32; 3], u64, u8)> = Vec::new();
-            read(&range, &mut |i, triangles| {
+            read(&range, stop, &mut |i, triangles| {
                 let leaf = &leaves[i];
                 corners.clear();
                 for (rank, t) in (leaf.first..).zip(triangles) {
@@ -540,7 +597,6 @@ pub(super) fn corner_depths<T: Corners>(
             progress.advance(count + leaves[range.end - 1].end)
         },
     )?;
-    drop(pool);
     // Join: every candidate deeper than its position's least depth is patched to it.
     let mut patches =
         ExternalSorter::<RankDepth>::new(scratch, config.sorter(jobs))?.observed(progress);
