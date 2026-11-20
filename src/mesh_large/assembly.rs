@@ -644,7 +644,9 @@ pub(super) fn decode_chunks<T: Send>(
 }
 
 /// [`decode_chunks`] for a native frame: the chunks in order on the calling thread, paced as
-/// [`run`] paces its tasks, with `poll` as each task's `check`.
+/// [`run`] paces its tasks, with `poll` as each task's `check`. A decode task checks at its
+/// chunk's first vertex (chunks start at multiples of 4,096), so `poll` runs there once, not
+/// also before the task.
 fn decode_inline<T>(
     frame: &mut SourceFrame,
     chunks: std::ops::Range<usize>,
@@ -653,7 +655,6 @@ fn decode_inline<T>(
 ) -> Result<Ran<T>> {
     let mut found = Vec::with_capacity(chunks.len());
     for chunk in chunks {
-        poll()?;
         crate::test_hooks::pace("mesh.capture-task");
         let mut polled = None;
         let result = task(chunk, frame, &mut || {
@@ -2167,7 +2168,7 @@ mod tests {
             }
             Ok(chunk)
         };
-        // Chunk 0 takes a poll and 10 checks; chunk 1 a poll (the 12th) and fails at its 3rd.
+        // Each chunk's 10 checks are its polls: chunk 1 fails at its 5th, the 15th poll.
         let mut polls = 0;
         let error = decode_inline(
             &mut SourceFrame::Local,

@@ -6912,6 +6912,231 @@ fn coarse_decode_charge_follows_the_largest_encoded_image() {
     }
 }
 
+/// A snap-boundary adversary. A coarse sheet meets a patch sixteen times denser along a
+/// seam, so leaves of different depths share corners and those snap at the shallower leaf's
+/// step. Every coordinate is a multiple of 2^-7, so corners sit on half lattice steps (ties)
+/// and on leaf box faces. A copy far from the origin adds f32 rounding of canonical values.
+fn snap_sheet() -> Vec<Mesh> {
+    let ridge = |x: f32, z: f32| (x * 8.).round() / 128. + (z * 4.).floor() / 64.;
+    let colour = [0.5, 0.5, 0.5, 1.];
+    vec![
+        grid((16, 16), (0., 64.), (0., 64.), &ridge, colour),
+        grid((256, 256), (64., 80.), (0., 16.), &ridge, colour),
+        grid((32, 32), (4096., 4160.), (0., 64.), &ridge, colour),
+    ]
+}
+
+/// A named mesh fixture with its leaf size and an optional subset and weld.
+type Fixture = (
+    &'static str,
+    Vec<Mesh>,
+    u64,
+    Option<crate::mesh_large::MeshSubset>,
+    Option<crate::mesh_large::MeshWeld>,
+);
+
+/// [`sheet`] as a triangle soup: each triangle with its own three vertices, jittered by up
+/// to 2 mm, so a weld of 1 cm merges them back (to each class's lowest-index position).
+fn soup_sheet() -> Vec<Mesh> {
+    sheet()
+        .into_iter()
+        .map(|m| {
+            let mut out = Mesh {
+                positions: Vec::new(),
+                indices: Vec::new(),
+                color: m.color,
+            };
+            for (i, &v) in m.indices.iter().enumerate() {
+                let p = m.positions[v as usize];
+                let jitter = |k: usize| ((i * 7 + k * 13) % 5) as f32 * 0.0005 - 0.001;
+                out.indices.push(out.positions.len() as u32);
+                out.positions
+                    .push([p[0] + jitter(0), p[1] + jitter(1), p[2] + jitter(2)]);
+            }
+            out
+        })
+        .collect()
+}
+
+/// Triangles of [`sheet`].
+fn sheet_triangles() -> u64 {
+    sheet().iter().map(|m| m.indices.len() as u64 / 3).sum()
+}
+
+/// The incidence pass sorts only the items another leaf may hold. Its rows, open-edge
+/// endpoints and counts equal sorting every item, for 1, 2, 3 and 8 item workers, on every
+/// mesh fixture (seams, T-junctions, books, collinear and coincident sheets, packed leaves
+/// and synthetic depths, mixed densities) and the snap-boundary sheet, in snapped and float
+/// profiles. On the larger fixtures the filter sorts fewer items than every one.
+#[test]
+fn incidence_filter_matches_sorting_every_item() {
+    use crate::mesh_large::{
+        config::{Jobs, TreeConfig},
+        full,
+        hlod::interfaces::{self, SORTED_ITEMS, SORT_EVERY_ITEM},
+        phases::StepProgress,
+    };
+    let bbox = crate::mesh_large::MeshSubset::bbox(&[10., -80., 70., -20.]).unwrap();
+    let weld = crate::mesh_large::MeshWeld::new(0.01).unwrap();
+    let fixtures: Vec<Fixture> = vec![
+        ("sheet", sheet(), 64, None, None),
+        // A few large leaves: fewer chunks than 64 workers.
+        ("sheet_large_leaves", sheet(), 1024, None, None),
+        ("t_junction", t_junction(), 16, None, None),
+        ("book", book(), 16, None, None),
+        ("collinear", collinear(), 16, None, None),
+        ("back_to_back", back_to_back(), 16, None, None),
+        ("thin_islands", thin_islands(), 64, None, None),
+        ("cluster", cluster(), 64, None, None),
+        ("packed", packed(), 16, None, None),
+        ("jagged_sheet", jagged_sheet(), 64, None, None),
+        (
+            "back_to_back_mismatched",
+            back_to_back_mismatched(),
+            16,
+            None,
+            None,
+        ),
+        ("triple_stack", triple_stack(), 16, None, None),
+        ("fin", fin(), 16, None, None),
+        ("closed_box", closed_box(), 16, None, None),
+        ("noisy_sheet", noisy_sheet(), 64, None, None),
+        ("snap_sheet", snap_sheet(), 64, None, None),
+        // A subset bake: only the triangles whose centroid lies in the box are kept.
+        ("sheet_bbox", sheet(), 64, Some(bbox), None),
+        // A welded bake: positions within the epsilon are merged before capture.
+        ("soup_sheet_weld", soup_sheet(), 64, None, Some(weld)),
+    ];
+    let work = tempfile::tempdir().unwrap();
+    let mut fewer_chunks_than_workers = false;
+    for (name, meshes, leaf_triangles, subset, weld) in fixtures {
+        let input = write_gltf(&work.path().join(name), &meshes);
+        for profile in [Profile::Balanced, Profile::Quality] {
+            let mut config = TreeConfig::new(profile).with_leaf_triangles(leaf_triangles);
+            config.jobs = Jobs::Fixed(NonZeroUsize::new(1).unwrap());
+            config.subset = subset.clone();
+            config.weld = weld;
+            let captured = full::capture(&input, &config, &mut || Ok(())).unwrap();
+            // The options took effect: a strict subset, a weld that moved positions.
+            if let Some(report) = &captured.report.subset {
+                assert!(
+                    captured.triangles.len() < sheet_triangles(),
+                    "{name}: {report:?}"
+                );
+            }
+            if let Some(report) = &captured.report.weld {
+                assert!(
+                    report.merged_vertices + report.moved_vertices > 0,
+                    "{name}: {report:?}"
+                );
+            }
+            let pass = |workers: usize, every: bool| {
+                SORT_EVERY_ITEM.with(|e| e.set(every));
+                let (rows, stats, ends) = interfaces::build(
+                    &captured.scratch,
+                    interfaces::Sorters::uniform(config.sorter(1)),
+                    &captured.tree.nodes,
+                    &captured.triangles,
+                    &captured.corner_depths,
+                    &captured.lattice,
+                    &captured.leaf_index,
+                    workers,
+                    &|_| Ok(()),
+                    StepProgress::silent(),
+                )
+                .unwrap();
+                SORT_EVERY_ITEM.with(|e| e.set(false));
+                let rows: Vec<_> = rows.map(Result::unwrap).collect();
+                let ends: Vec<_> = ends.reader().unwrap().map(Result::unwrap).collect();
+                let sorted = SORTED_ITEMS.with(std::cell::Cell::get);
+                ((rows, serde_json::to_value(stats).unwrap(), ends), sorted)
+            };
+            let (every, all) = pass(1, true);
+            assert_eq!(all, every.1["items"].as_u64().unwrap(), "{name}");
+            let mut fewest = u64::MAX;
+            // 64 workers: more than the chunks of the smaller fixtures.
+            for workers in [1, 2, 3, 8, 64] {
+                let (filtered, sorted) = pass(workers, false);
+                assert!(filtered == every, "{name} {profile:?} at {workers} workers");
+                fewest = fewest.min(sorted);
+            }
+            if matches!(
+                name,
+                "sheet" | "snap_sheet" | "noisy_sheet" | "jagged_sheet"
+            ) {
+                assert!(fewest < all, "{name} {profile:?}: {fewest} of {all} sorted");
+            }
+            // Chunks never outnumber leaves: 64 workers exceed this fixture's chunks.
+            fewer_chunks_than_workers |= captured.tree.stats.leaves < 64;
+        }
+    }
+    assert!(fewer_chunks_than_workers);
+}
+
+/// A failure in a later wave is reported for the first failing leaf in DFS order, whatever
+/// order the workers met the failures in. Every leaf from the start of the second wave on
+/// fails: that first leaf after a delay, every later one at once, so a later leaf of the
+/// same wave fails first in time.
+#[test]
+fn incidence_reports_the_first_failing_leaf_in_order() {
+    use crate::mesh_large::{
+        config::{Jobs, TreeConfig},
+        full,
+        hlod::interfaces::{self, FAIL_LEAVES},
+        phases::StepProgress,
+        records::NodeKind,
+    };
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("sheet"), &sheet());
+    let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(16);
+    config.jobs = Jobs::Fixed(NonZeroUsize::new(1).unwrap());
+    let captured = full::capture(&input, &config, &mut || Ok(())).unwrap();
+    let sizes: Vec<u64> = captured
+        .tree
+        .nodes
+        .reader()
+        .unwrap()
+        .map(Result::unwrap)
+        .filter(|n| n.kind == NodeKind::Leaf)
+        .map(|n| n.end - n.first)
+        .collect();
+    let leaves = u32::try_from(sizes.len()).unwrap();
+    for workers in [1, 2, 4] {
+        let waves = interfaces::wave_starts(&sizes, workers);
+        assert!(waves.len() > 2, "{workers} workers: {waves:?}");
+        let first = u32::try_from(waves[1]).unwrap();
+        FAIL_LEAVES.with(|f| {
+            *f.borrow_mut() = (first..leaves)
+                .map(|leaf| {
+                    let delay = if leaf == first { 200 } else { 0 };
+                    (leaf, std::time::Duration::from_millis(delay))
+                })
+                .collect();
+        });
+        let error = interfaces::build(
+            &captured.scratch,
+            interfaces::Sorters::uniform(config.sorter(1)),
+            &captured.tree.nodes,
+            &captured.triangles,
+            &captured.corner_depths,
+            &captured.lattice,
+            &captured.leaf_index,
+            workers,
+            &|_| Ok(()),
+            StepProgress::silent(),
+        )
+        .err()
+        .expect("injected failures");
+        FAIL_LEAVES.with(|f| f.borrow_mut().clear());
+        assert!(
+            error
+                .to_string()
+                .contains(&format!("injected failure at leaf {first}")),
+            "{workers} workers: {error}"
+        );
+    }
+}
+
 /// Tile-592 class: a real simplification leaves the nearest delivered surface
 /// too far from an interior point of an original edge. Price that point against
 /// every triangle of the packaged root, separately from the producer.

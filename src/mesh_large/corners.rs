@@ -60,7 +60,7 @@ pub(crate) fn grid_levels(nodes: &Sequence<NodeRecord>) -> (Vec<usize>, usize) {
             bounds: n.bounds,
         })
         .collect();
-    let grid = Grid::new(&leaves);
+    let grid = Grid::new(&leaves, &mut || Ok(())).unwrap();
     let mut listed = vec![0; grid.levels.len()];
     for (i, level) in grid.levels.iter().enumerate() {
         let mut ids = level.ids.clone();
@@ -111,13 +111,22 @@ fn mask_bit(bounds: &Bounds, p: [f32; 3]) -> Option<usize> {
         if !(min <= p[axis] && p[axis] <= max) {
             return None;
         }
-        let extent = f64::from(max) - f64::from(min);
-        if extent > 0. {
-            let x = ((f64::from(p[axis]) - f64::from(min)) / extent * SIDE as f64).floor();
-            cell[axis] = (x.max(0.) as usize).min(SIDE - 1);
-        }
+        cell[axis] = axis_cell(min, max, f64::from(p[axis]));
     }
     Some(cell[0] + SIDE * (cell[1] + SIDE * cell[2]))
+}
+
+/// The mask cell along one axis of a box `[min, max]` holding `x`. Non-decreasing in `x`
+/// (correctly rounded arithmetic, then a floor), so the cells of the points of an interval lie
+/// between the cells of its ends.
+fn axis_cell(min: f32, max: f32, x: f64) -> usize {
+    let extent = f64::from(max) - f64::from(min);
+    if extent > 0. {
+        let x = ((x - f64::from(min)) / extent * SIDE as f64).floor();
+        (x.max(0.) as usize).min(SIDE - 1)
+    } else {
+        0
+    }
 }
 
 /// Uniform grids over the leaves' boxes, each eight times coarser than the one below: a box
@@ -141,7 +150,10 @@ struct Level {
 const COARSER_LEVELS: usize = 2;
 
 impl Grid {
-    fn new(leaves: &[Leaf]) -> Self {
+    fn new(
+        leaves: &[Leaf],
+        check: &mut dyn FnMut() -> Result<(), JobError>,
+    ) -> Result<Self, JobError> {
         let mut all = Bounds::EMPTY;
         for leaf in leaves {
             all.union(&leaf.bounds);
@@ -174,15 +186,17 @@ impl Grid {
             if members.is_empty() {
                 break;
             }
+            check()?;
             let (level, larger) = Level::new(leaves, &members, origin, side, dims_at(side));
             levels.push(level);
             members = larger;
             side *= 8.;
         }
-        Self {
+        check()?;
+        Ok(Self {
             levels,
             huge: members,
-        }
+        })
     }
 
     /// The leaves whose box may hold `p`.
@@ -398,7 +412,7 @@ pub(super) fn corner_depths<T: Corners>(
     config: &TreeConfig,
     jobs: usize,
     progress: &StepProgress<'_>,
-) -> Result<Sequence<CornerDepth>, JobError> {
+) -> Result<(Sequence<CornerDepth>, LeafIndex), JobError> {
     let count = triangles.len();
     let mut leaves = Vec::new();
     for node in nodes.reader()? {
@@ -482,7 +496,7 @@ pub(super) fn corner_depths<T: Corners>(
         },
     )?;
     let index = Index {
-        grid: Grid::new(&leaves),
+        grid: Grid::new(&leaves, &mut || progress.check())?,
         leaves: &leaves,
         masks,
     };
@@ -557,18 +571,22 @@ pub(super) fn corner_depths<T: Corners>(
         config.sort.buffer_bytes,
         Layout::FULL,
     )?;
+    let mut least_depths = Vec::with_capacity(leaves.len());
     for leaf in &leaves {
+        let mut least = leaf.depth;
         for rank in leaf.first..leaf.end {
             let mut depths = [leaf.depth; 3];
             while let Some(patch) = patches.next_if(|p| p.as_ref().is_ok_and(|p| p.rank == rank)) {
                 let patch = patch?;
                 depths[patch.corner as usize] = patch.depth;
+                least = least.min(patch.depth);
             }
             writer.push(&CornerDepth { depths })?;
             if rank % 4096 == 0 {
                 progress.advance(2 * count + rank)?;
             }
         }
+        least_depths.push(least);
         let stuck = match patches.peek() {
             Some(Ok(p)) => p.rank < leaf.end,
             Some(Err(_)) => true,
@@ -586,7 +604,163 @@ pub(super) fn corner_depths<T: Corners>(
     }
     let written = writer.finish()?;
     progress.end()?;
-    Ok(written)
+    let Index { masks, .. } = index;
+    Ok((
+        written,
+        LeafIndex {
+            masks,
+            least_depths,
+        },
+    ))
+}
+
+/// What the corner join leaves for the incidence pass, per leaf in DFS order: its occupancy
+/// mask and the least welded depth of its corners (the coarsest lattice step they snap to).
+pub(crate) struct LeafIndex {
+    masks: Vec<[u64; MASK_WORDS]>,
+    least_depths: Vec<u8>,
+}
+
+impl LeafIndex {
+    /// Resident bytes per leaf.
+    pub(crate) const LEAF_BYTES: u64 = (std::mem::size_of::<[u64; MASK_WORDS]>() + 1) as u64;
+
+    pub(crate) fn len(&self) -> usize {
+        self.masks.len()
+    }
+
+    pub(crate) fn bytes(&self) -> u64 {
+        self.len() as u64 * Self::LEAF_BYTES
+    }
+
+    /// Test seam: each leaf's least welded depth.
+    #[cfg(test)]
+    pub(crate) fn least_depths(&self) -> &[u8] {
+        &self.least_depths
+    }
+}
+
+/// Bytes per leaf of [`Holders`] beside the [`LeafIndex`] it borrows: the leaf's box, its
+/// reach, and its grid entries (at most [`LARGE_SPAN`] ids, and about eight cell offsets).
+pub(crate) const HOLDERS_LEAF_BYTES: u64 = (std::mem::size_of::<Leaf>()
+    + std::mem::size_of::<f64>()
+    + LARGE_SPAN * std::mem::size_of::<u32>()
+    + 8 * std::mem::size_of::<usize>()) as u64;
+
+/// Which leaves may hold a point that their corners reach once snapped.
+///
+/// A leaf's corner `q` of welded depth `d` is published at `c = canonical(q, d)`: on each
+/// axis `k·s` for the lattice step `s` of `d` and `k = round(q / s)`, with no rounding (a
+/// power-of-two `s` below `q`'s f32 spacing divides `q`, so `c = q`; otherwise `k·s` is a
+/// multiple of `s` within `s / 2` of `q`, which f32 holds). So `|c - q| <= s / 2 <= reach`,
+/// the half step of the leaf's least welded depth (steps shrink with depth). In float
+/// profiles `c` equals `q` and the reach is zero.
+///
+/// A leaf holding `c` therefore has a corner in its box within `reach` of `c`: its box grown
+/// by `reach` holds `c`, and its mask has a set cell between the cells of `c - reach` and
+/// `c + reach`. Both tests stay conservative in floating point: rounding is monotone, so
+/// `q >= c - reach` gives `q >= fl(c - reach)`, grown boxes are rounded outward to f32, and
+/// mask cells are monotone in the coordinate. A leaf failing either test does not hold `c`.
+pub(crate) struct Holders<'a> {
+    leaves: Vec<Leaf>,
+    /// Half the lattice step of each leaf's least welded depth; zero in float profiles,
+    /// where the canonical value equals the source value.
+    half_steps: Vec<f64>,
+    grid: Grid,
+    index: &'a LeafIndex,
+}
+
+impl<'a> Holders<'a> {
+    /// The holders over `boxes` (each leaf's box, in DFS order) and `steps[d]`, the lattice
+    /// step of depth `d` (`None` in float profiles).
+    pub(crate) fn new(
+        index: &'a LeafIndex,
+        boxes: &[Bounds],
+        steps: Option<&[f32]>,
+        check: &mut dyn FnMut() -> Result<(), JobError>,
+    ) -> Result<Self, JobError> {
+        if boxes.len() != index.len() || index.least_depths.len() != index.len() {
+            return Err(invariant("leaf masks do not match the leaves"));
+        }
+        let mut leaves = Vec::with_capacity(boxes.len());
+        let mut half_steps = Vec::with_capacity(boxes.len());
+        let mut grown = Vec::with_capacity(boxes.len());
+        for (i, bounds) in boxes.iter().enumerate() {
+            if i % 4096 == 0 {
+                check()?;
+            }
+            // Half a power-of-two step: exact in f32.
+            let half = match steps {
+                Some(steps) => {
+                    let step = steps
+                        .get(usize::from(index.least_depths[i]))
+                        .ok_or_else(|| invariant("leaf depth outside the lattice"))?;
+                    step / 2.
+                }
+                None => 0.,
+            };
+            let leaf = Leaf {
+                first: 0,
+                end: 0,
+                depth: 0,
+                bounds: *bounds,
+            };
+            // The grown box, rounded outward: every canonical value of the leaf lies inside
+            // it. A rounded f32 sum is within half a unit of the exact one, so one step
+            // outward bounds it.
+            let mut out = *bounds;
+            for axis in 0..3 {
+                out.min[axis] = (bounds.min[axis] - half).next_down();
+                out.max[axis] = (bounds.max[axis] + half).next_up();
+            }
+            grown.push(Leaf {
+                bounds: out,
+                ..leaf
+            });
+            leaves.push(leaf);
+            half_steps.push(f64::from(half));
+        }
+        Ok(Self {
+            grid: Grid::new(&grown, check)?,
+            leaves,
+            half_steps,
+            index,
+        })
+    }
+
+    /// Whether a leaf other than `own` may hold the canonical point `c`.
+    pub(crate) fn other(&self, own: u32, c: [f32; 3]) -> bool {
+        self.grid
+            .near(c)
+            .any(|i| i != own && self.may_hold(i as usize, c))
+    }
+
+    /// Whether leaf `i` has an occupied mask cell within its reach of `c`.
+    fn may_hold(&self, i: usize, c: [f32; 3]) -> bool {
+        let bounds = &self.leaves[i].bounds;
+        let mut lo = [0; 3];
+        let mut hi = [0; 3];
+        for axis in 0..3 {
+            let x = f64::from(c[axis]);
+            let reach = self.half_steps[i];
+            let (min, max) = (bounds.min[axis], bounds.max[axis]);
+            let (from, to) = (x - reach, x + reach);
+            if to < f64::from(min) || from > f64::from(max) {
+                return false;
+            }
+            lo[axis] = axis_cell(min, max, from.max(f64::from(min)));
+            hi[axis] = axis_cell(min, max, to.min(f64::from(max)));
+        }
+        let mask = &self.index.masks[i];
+        (lo[2]..=hi[2]).any(|z| {
+            (lo[1]..=hi[1]).any(|y| {
+                (lo[0]..=hi[0]).any(|x| {
+                    let bit = x + SIDE * (y + SIDE * z);
+                    mask[bit / 64] & (1 << (bit % 64)) != 0
+                })
+            })
+        })
+    }
 }
 
 #[cfg(test)]
@@ -678,7 +852,7 @@ mod tests {
             bounds: point,
             ..leaves[0]
         });
-        let grid = Grid::new(&leaves);
+        let grid = Grid::new(&leaves, &mut || Ok(())).unwrap();
         // The finest level has about four cells per leaf; coarser ones fewer.
         assert!(grid.levels[0].offsets.len() <= leaves.len() * 8 + 2);
         assert!(grid
@@ -703,6 +877,150 @@ mod tests {
         for leaf in &leaves {
             assert!(grid.near(leaf.bounds.min).count() > 0);
             assert!(grid.near(leaf.bounds.max).count() > 0);
+        }
+    }
+
+    /// Every leaf publishing a canonical point is found by the holders, whichever other leaf
+    /// asks. Corners sit on half lattice steps (ties), on mask-cell and box faces, at -0 and
+    /// +0, far from the origin and in flat boxes, at every welded depth from their leaf's
+    /// least to its own; in snapped and float profiles. The filter is also sensitive: points
+    /// only the asking leaf holds are often refused.
+    #[test]
+    fn holders_find_every_leaf_holding_a_canonical_point() {
+        use super::super::{config::Profile, leaves::geometry::LatticePlan};
+        let mut state = 0x2545_f491_4f6c_dd1du64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        for profile in [Profile::Balanced, Profile::Quality] {
+            for offset in [0f32, 3000.] {
+                let source = Bounds {
+                    min: [offset - 600.; 3],
+                    max: [offset + 600.; 3],
+                };
+                let extents = [1200., 300., 75., 19., 5., 1.25];
+                let lattice = LatticePlan::new(profile, source, &extents).unwrap();
+                let steps = lattice.steps().to_vec();
+                let mut boxes = Vec::new();
+                let mut corners: Vec<Vec<([f32; 3], u8)>> = Vec::new();
+                for leaf in 0..80 {
+                    let own = 1 + (next() % 5) as u8;
+                    let least = (next() % u64::from(own + 1)) as u8;
+                    let s = steps[usize::from(least)];
+                    // A box on the coarse lattice, some of it flat, near its neighbours.
+                    let origin: [f32; 3] =
+                        std::array::from_fn(|_| offset + (next() % 64) as f32 * s - 32. * s);
+                    let size: [f32; 3] = std::array::from_fn(|a| {
+                        if leaf % 7 == 0 && a == 1 {
+                            0.
+                        } else {
+                            (1 + next() % 6) as f32 * s * 1.5
+                        }
+                    });
+                    let mut list = Vec::new();
+                    let depth = |next: &mut dyn FnMut() -> u64| {
+                        least + (next() % u64::from(own - least + 1)) as u8
+                    };
+                    // Box corners, then points on mask-cell faces and half-step ties.
+                    for corner in 0..8 {
+                        let p = std::array::from_fn(|a| {
+                            origin[a] + if corner >> a & 1 == 1 { size[a] } else { 0. }
+                        });
+                        list.push((p, if corner == 0 { least } else { depth(&mut next) }));
+                    }
+                    for _ in 0..24 {
+                        let p = std::array::from_fn(|a| {
+                            let j = (next() % 17) as f32;
+                            match next() % 3 {
+                                0 => origin[a] + size[a] * j / 16.,
+                                1 => {
+                                    let t = steps[(next() % steps.len() as u64) as usize];
+                                    let k = ((size[a] / t).floor() as u64).max(1);
+                                    (origin[a] + (next() % k) as f32 * t + t / 2.)
+                                        .min(origin[a] + size[a])
+                                }
+                                _ => origin[a] + size[a] * (next() % 1000) as f32 / 999.,
+                            }
+                        });
+                        list.push((p, depth(&mut next)));
+                    }
+                    if offset == 0. && leaf % 5 == 0 {
+                        list.push(([-0., 0., -0.], depth(&mut next)));
+                        list.push(([0., -0., 0.], depth(&mut next)));
+                    }
+                    let mut bounds = Bounds::EMPTY;
+                    for (p, _) in &list {
+                        bounds.include(*p);
+                    }
+                    boxes.push(bounds);
+                    corners.push(list);
+                }
+                let masks = boxes
+                    .iter()
+                    .zip(&corners)
+                    .map(|(bounds, list)| {
+                        let mut mask = [0u64; MASK_WORDS];
+                        for (p, _) in list {
+                            let bit = mask_bit(bounds, *p).unwrap();
+                            mask[bit / 64] |= 1 << (bit % 64);
+                        }
+                        mask
+                    })
+                    .collect();
+                let least_depths = corners
+                    .iter()
+                    .map(|list| list.iter().map(|c| c.1).min().unwrap())
+                    .collect();
+                let index = LeafIndex {
+                    masks,
+                    least_depths,
+                };
+                let snapped = lattice.snapped().then_some(&steps[..]);
+                let holders = Holders::new(&index, &boxes, snapped, &mut || Ok(())).unwrap();
+                let held: Vec<Vec<[u32; 3]>> = corners
+                    .iter()
+                    .map(|list| {
+                        list.iter()
+                            .map(|&(q, ell)| {
+                                let c = lattice.canonical(q, ell).unwrap();
+                                // The canonical value moves at most half its step, exactly.
+                                let half = if lattice.snapped() {
+                                    f64::from(steps[usize::from(ell)]) / 2.
+                                } else {
+                                    0.
+                                };
+                                for a in 0..3 {
+                                    assert!((f64::from(c[a]) - f64::from(q[a])).abs() <= half);
+                                }
+                                c.map(f32::to_bits)
+                            })
+                            .collect()
+                    })
+                    .collect();
+                let (mut refused, mut lonely) = (0, 0);
+                for (b, points) in held.iter().enumerate() {
+                    for c in points {
+                        let holders_of: Vec<usize> =
+                            (0..held.len()).filter(|&l| held[l].contains(c)).collect();
+                        for asking in [0, b, (b + 1) % held.len(), held.len() - 1] {
+                            let other = holders.other(asking as u32, c.map(f32::from_bits));
+                            if holders_of.iter().any(|&l| l != asking) {
+                                assert!(other, "{profile:?} {offset}: leaf {b} holds {c:?}");
+                            } else {
+                                lonely += 1;
+                                refused += usize::from(!other);
+                            }
+                        }
+                    }
+                }
+                assert!(
+                    refused * 4 > lonely,
+                    "{profile:?} {offset}: {refused} of {lonely}"
+                );
+            }
         }
     }
 }

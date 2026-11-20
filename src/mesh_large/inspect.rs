@@ -870,10 +870,9 @@ fn run(run: Run<'_>) -> Result<(InspectReport, InspectDiagnostics), JobError> {
     let ceiling = budget
         .ceiling(super::config::available_memory())
         .saturating_sub(charged);
-    let fixed = c
-        .memory
-        .owned_metadata_bytes
-        .saturating_add(c.memory.geometry.document_bytes)
+    // Captured metadata, the source document and the leaves' occupancy masks.
+    let fixed = captured
+        .resident_bytes()
         .saturating_add(RESERVE_BYTES)
         .saturating_add(forecast::interval_bytes(stats.internal));
     let topology_base = topology::memory_need(sorter);
