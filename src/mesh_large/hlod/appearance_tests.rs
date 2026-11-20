@@ -839,7 +839,14 @@ fn a_4_gib_plan_for_8192_sources_admits_two_coarse_jobs() {
         (info.width, info.height, info.encoded_bytes) = (8192, 8192, 24_000_000);
     }
     let budget = MemoryBudget::resolve(Some(4 << 30)).unwrap();
-    let plan = super::plan(&captured, &config, &budget, &super::Settings::default()).unwrap();
+    let plan = super::plan(
+        &captured,
+        &config,
+        &budget,
+        &super::Settings::default(),
+        None,
+    )
+    .unwrap();
     assert_eq!(
         plan.ceiling_bytes,
         4 << 30,
@@ -855,11 +862,14 @@ fn a_4_gib_plan_for_8192_sources_admits_two_coarse_jobs() {
     assert_eq!((shared - chain) / (plan.job_bytes + decode), 1, "{plan:?}");
 }
 
-/// A textured run plans the decode slot once: `decode_bytes` is the largest image's decode
+/// A textured run that decodes its sources (here without the leaf crop store, so without
+/// sparse chains) plans the decode slot once: `decode_bytes` is the largest image's decode
 /// working set, the stage minimum counts it once beside one job, and the walk's leases stay
-/// below the ledger less the slot (chain loads hold the slot, not a lease).
+/// below the ledger less the slot (chain loads hold the slot, not a lease). With the sparse
+/// chains the stage reserves no slot and no image cache.
 #[test]
 fn source_decode_is_reserved_once_for_the_stage() {
+    use crate::mesh_large::leaves::crop_store::DISABLED;
     let work = tempfile::tempdir().unwrap();
     let f = Fixture {
         edge: 256,
@@ -867,10 +877,17 @@ fn source_decode_is_reserved_once_for_the_stage() {
         material: json!({"pbrMetallicRoughness":{"baseColorTexture":{"index":0},"metallicRoughnessTexture":{"index":1},"metallicFactor":0.0}}),
         ..base_fixture()
     };
-    let dir = stage(
-        &write_fixture(&work.path().join("in"), &f),
-        &work.path().join("out"),
-    );
+    let input = write_fixture(&work.path().join("in"), &f);
+    let sparse = stage(&input, &work.path().join("sparse"));
+    let resources: Value =
+        serde_json::from_slice(&fs::read(sparse.join("resources.json")).unwrap()).unwrap();
+    let plan = &resources["hlod"]["plan"];
+    assert_eq!(plan["decode_bytes"], 0, "{plan}");
+    assert_eq!(plan["image_cache_bytes"], 0, "{plan}");
+    assert!(plan["sparse_index_bytes"].as_u64().unwrap() > 0, "{plan}");
+    DISABLED.with(|d| d.set(true));
+    let dir = stage(&input, &work.path().join("out"));
+    DISABLED.with(|d| d.set(false));
     let resources: Value =
         serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
     let plan = &resources["hlod"]["plan"];

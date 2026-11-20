@@ -867,13 +867,19 @@ fn run(
         let mut config = config.clone();
         config.memory_budget = Some(budget);
         let config = &config;
-        let plan = producer::stage_plan(config, &captured)?;
-        // HLOD admits its own stage against the declared budget before any leaf is built.
+        // Every leaf's source crops, planned before the stage's memory plan, which holds
+        // the crop store's index when the store is used.
+        let crop_check = || attempt.check();
+        let crop_progress = super::phases::StepProgress::new(&crop_check, phases.emitter());
+        let crops = producer::crop_plan(config, &captured, &crop_progress)?;
+        // HLOD admits its own stage against the declared budget before any leaf is built,
+        // with the sparse chains the crop store cuts for it when they fit.
         #[cfg(test)]
         let settings = &request.hlod;
         #[cfg(not(test))]
         let settings = &super::hlod::Settings::default();
-        let hlod = super::hlod::plan(&captured, config, &budget, settings)?;
+        let hlod_plan = |coarse| super::hlod::plan(&captured, config, &budget, settings, coarse);
+        let (plan, crops, hlod) = producer::settle(config, &captured, crops, &hlod_plan)?;
         let c = &captured.report;
         let capture_minimum = c
             .jobs
@@ -948,6 +954,7 @@ fn run(
                 settings,
             },
             &phases,
+            crops,
             &|| attempt.check(),
         )
         .map_err(refused)?;

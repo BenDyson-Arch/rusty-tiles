@@ -23,10 +23,14 @@ FILE_LIMIT = 1_000_000
 # Lowered 2026-11-13 to tree 21,000,000 and bench/ 8,500,000 once the validator
 # corpora were generated at test time (scripts/test_corpora.py): tree 19,653,540
 # bytes, bench/ 6,840,123.
-# Add 64 KiB for the continuous HLOD certificate, its conformance tests and
-# the Lean proofs of panel coverage and depth induction. Its measurements and
-# build artifacts live outside the tree. The bench and vendor limits still fit.
-BUDGETS = {"": 21_065_536, "bench/": 8_500_000}
+# Re-based 2026-11-20 to tree 23,100,000, about 1.1x the tree (21,033,237 bytes with
+# the sparse coarse chains): it grew about 1.4 MB of real code since 2026-11-13 (the
+# capture rework, mesh-inspect, the source weld, subset bakes, the run report, the
+# texture crop store and sparse chains). Re-based once rather than raised piecemeal; a
+# bench/ trim of generated results follows as a separate change. bench/ is unchanged.
+# The continuous HLOD certificate (its conformance tests and the Lean proofs) fits
+# inside this budget.
+BUDGETS = {"": 23_100_000, "bench/": 8_500_000}
 # Third-party source vendored for a shipped feature: one pinned upstream version,
 # replaced, never accumulated. Basis Universal v2.50 (vendor/README.md) is the
 # compiled include closure plus licences, 10,852,575 bytes, about 1.1x of headroom

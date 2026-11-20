@@ -598,9 +598,21 @@ fn load(
         rgba,
     };
     check()?;
+    let levels = chain_from(level, class, check)?;
+    let bytes = levels.iter().map(|l| l.rgba.len() as u64).sum::<u64>() + 4096;
+    Ok(Chain { levels, bytes })
+}
+
+/// The coarse stage's chain of a decoded source image: `level` and each halving down to
+/// 1x1 ([`super::sparse::chain_dims`] are its levels' dimensions).
+pub(crate) fn chain_from(
+    level: mips::Level,
+    class: mips::Class,
+    check: &dyn Fn() -> Result<(), JobError>,
+) -> Result<Vec<mips::Level>, JobError> {
     let mut levels = vec![level];
     loop {
-        let last = levels.last().expect("chain level");
+        let last = levels.last().ok_or_else(|| state("chain level"))?;
         if last.width == 1 && last.height == 1 {
             break;
         }
@@ -608,8 +620,7 @@ fn load(
         levels.push(next);
         check()?;
     }
-    let bytes = levels.iter().map(|l| l.rgba.len() as u64).sum::<u64>() + 4096;
-    Ok(Chain { levels, bytes })
+    Ok(levels)
 }
 
 fn wrap(i: i64, n: u32, mode: u32) -> usize {
@@ -720,33 +731,54 @@ pub(crate) fn sample_with(
     uv: [f32; 2],
     lod: f64,
 ) -> Result<[f64; 4], JobError> {
-    let chain = reader.chain;
-    let levels = &chain.levels;
-    let top = (levels.len() - 1) as f64;
+    let levels = &reader.chain.levels;
+    let readers = &mut reader.readers;
+    trilinear(
+        levels.len(),
+        |index| (levels[index].width, levels[index].height),
+        class,
+        sampler,
+        uv,
+        lod,
+        // Resident levels index their bytes directly, as develop's chains did; only
+        // spilled levels go through the tile reader.
+        |index, x, y| match levels[index].resident() {
+            Some(rgba) => {
+                let i = (y * levels[index].width as usize + x) * 4;
+                Ok([rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]])
+            }
+            None => readers[index].pixel(x, y),
+        },
+    )
+}
+
+/// The trilinear sample of a chain of `count` levels, level `index` being `dims(index)`
+/// with texels `texel(index, x, y)`, at `uv` and source level `lod`: the two levels
+/// around `lod` (clamped to the chain), each bilinear (nearest when magnifying with a
+/// nearest filter), blended linearly. Every chain representation samples through this.
+#[inline(always)]
+pub(crate) fn trilinear(
+    count: usize,
+    dims: impl Fn(usize) -> (u32, u32),
+    class: mips::Class,
+    sampler: crops::SourceSampler,
+    uv: [f32; 2],
+    lod: f64,
+    mut texel: impl FnMut(usize, usize, usize) -> Result<[u8; 4], JobError>,
+) -> Result<[f64; 4], JobError> {
+    let top = (count - 1) as f64;
     let l = if lod.is_finite() {
         lod.clamp(0., top)
     } else {
         0.
     };
     let a = l.floor() as usize;
-    let b = (a + 1).min(levels.len() - 1);
+    let b = (a + 1).min(count - 1);
     let f = l - a as f64;
     let nearest = l <= 0. && matches!(sampler.mag_filter, 9728);
     let mut fetch = |index: usize| -> Result<[f64; 4], JobError> {
-        let level = &levels[index];
-        let (w, h) = (level.width, level.height);
-        // Resident levels index their bytes directly, as develop's chains did; only
-        // spilled levels go through the tile reader.
-        match level.resident() {
-            Some(rgba) => bilinear(w, h, class, sampler, uv, nearest, |x, y| {
-                let i = (y * w as usize + x) * 4;
-                Ok([rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]])
-            }),
-            None => {
-                let reader = &mut reader.readers[index];
-                bilinear(w, h, class, sampler, uv, nearest, |x, y| reader.pixel(x, y))
-            }
-        }
+        let (w, h) = dims(index);
+        bilinear(w, h, class, sampler, uv, nearest, |x, y| texel(index, x, y))
     };
     let p = fetch(a)?;
     if b == a || f == 0. {
