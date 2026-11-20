@@ -680,6 +680,12 @@ pub(crate) struct HlodReport {
     pub kept_vertices: u64,
     #[serde(skip)]
     pub rebuilt_cells: u64,
+    /// D: the most built cells waiting for their chords' co-owners at once, and the most
+    /// triangles they held at once; reported in the diagnostics.
+    #[serde(skip)]
+    pub keep_peak_waiting: u64,
+    #[serde(skip)]
+    pub keep_peak_held_triangles: u64,
     /// Content-less cells (omitted coarse tiles), by cell depth, and of them the sources:
     /// cells whose exact interface (or topology plain simplification cannot reduce) needs
     /// more triangles than the cap. Includes propagation and pass-through cells. A declared
@@ -800,6 +806,10 @@ pub struct HlodDiagnostics {
     /// D: border vertices kept, and cells built again with their chords' final splits.
     pub kept_vertices: u64,
     pub rebuilt_cells: u64,
+    /// D: the most cells waiting for their chords' co-owners at once, and the most
+    /// triangles (outputs and children) they held at once.
+    pub keep_peak_waiting: u64,
+    pub keep_peak_held_triangles: u64,
     pub jobs: u64,
     /// Whole-process user+system CPU seconds of the stage (incidence, walk, encoding).
     pub cpu_seconds: Option<f64>,
@@ -956,6 +966,9 @@ type HeldDone = Result<(Vec<store::spill::Held>, Finished, appearance::Timing, K
 /// Children a built cell holds for a possible second build (D) sit in `ready` under its
 /// walk id with this bit set, so the spill manager may move them to disk like any input.
 const HOLD: u64 = 1 << 63;
+/// A built cell's own output while it waits for its chords' co-owners (D) sits in `ready`
+/// under its walk id with this bit set, spillable like its held children.
+const WAIT: u64 = 1 << 62;
 
 /// The walk's D state (`Kept`). A cell's first build may keep stuck border vertices (its
 /// sites); a chord's final splits are those of every site its co-owners kept, so a built
@@ -989,6 +1002,26 @@ struct KeepWalk {
     /// Report: vertices kept, and cells built again.
     kept_vertices: u64,
     rebuilt: u64,
+    /// Report: the most cells waiting at once, and the most triangles they held at once
+    /// (their own outputs and their children, resident or spilled).
+    peak_waiting: u64,
+    peak_held_triangles: u64,
+}
+
+impl KeepWalk {
+    /// Records the waiting cells' current hold in the report's peaks.
+    fn note_holds(&mut self, ready: &HashMap<u64, Vec<store::spill::Held>>) {
+        let triangles: u64 = self
+            .waiting
+            .keys()
+            .flat_map(|id| [HOLD | id, WAIT | id])
+            .filter_map(|k| ready.get(&k))
+            .flatten()
+            .map(store::spill::Held::triangles)
+            .sum();
+        self.peak_waiting = self.peak_waiting.max(self.waiting.len() as u64);
+        self.peak_held_triangles = self.peak_held_triangles.max(triangles);
+    }
 }
 
 /// A built cell waiting for its chords' co-owners (`KeepWalk`).
@@ -997,7 +1030,6 @@ struct Waiting {
     co_owners: Vec<u64>,
     /// The splits of its own chords its build used.
     local: borders::Overlay,
-    geometry: Vec<store::spill::Held>,
     row: Finished,
     timing: appearance::Timing,
 }
@@ -1047,11 +1079,12 @@ fn settle_keep(
         let same = splits.splits_at(depth) == w.local.splits_at(depth);
         k.overlay.merge(&splits);
         let _ = w.node;
+        let geometry = ready.remove(&(WAIT | id)).unwrap_or_default();
         if same {
             ready.remove(&(HOLD | id));
             let seq = closed.seq;
             k.spawned.remove(&id);
-            k.released.push((id, seq, w.geometry, w.row, w.timing));
+            k.released.push((id, seq, geometry, w.row, w.timing));
         } else {
             k.rebuilds.push(id);
             k.rebuilding.insert(id);
@@ -1401,6 +1434,8 @@ pub(crate) fn produce(
     diagnostics.p1_records = report.p1_records.clone();
     diagnostics.kept_vertices = report.kept_vertices;
     diagnostics.rebuilt_cells = report.rebuilt_cells;
+    diagnostics.keep_peak_waiting = report.keep_peak_waiting;
+    diagnostics.keep_peak_held_triangles = report.keep_peak_held_triangles;
     diagnostics.omitted_proxies = report.omitted_proxies;
     diagnostics.omission_sources = report.omission_sources;
     diagnostics.omitted_by_depth = report.omitted_by_depth.clone();
@@ -1426,6 +1461,8 @@ pub(crate) fn produce(
             "p1_records": diagnostics.p1_records,
             "kept_vertices": diagnostics.kept_vertices,
             "rebuilt_cells": diagnostics.rebuilt_cells,
+            "keep_peak_waiting": diagnostics.keep_peak_waiting,
+            "keep_peak_held_triangles": diagnostics.keep_peak_held_triangles,
             "fold_faces": diagnostics.fold_faces,
             "scratch_peak_bytes": diagnostics.stage_scratch_peak_bytes,
             "scratch_bound_bytes": diagnostics.stage_scratch_bound_bytes,
@@ -3135,17 +3172,18 @@ fn walk(
                                         .collect(),
                                 );
                             }
+                            ready.insert(WAIT | id, geometry);
                             k.waiting.insert(
                                 id,
                                 Waiting {
                                     node,
                                     co_owners,
                                     local: kept.local,
-                                    geometry,
                                     row,
                                     timing,
                                 },
                             );
+                            k.note_holds(ready);
                         }
                     }
                 }
@@ -3510,6 +3548,8 @@ fn walk(
     let keep = keep.into_inner();
     report.kept_vertices = keep.kept_vertices;
     report.rebuilt_cells = keep.rebuilt;
+    report.keep_peak_waiting = keep.peak_waiting;
+    report.keep_peak_held_triangles = keep.peak_held_triangles;
     let workers = u32::try_from(jobs).unwrap_or(u32::MAX);
     let utilisation = utilisation::measure(workers, pool_started, pool_ended, &spans);
     report.pass_through = passed;
