@@ -333,6 +333,8 @@ rusty-tiles preview --cesium target/preview-runtime/node_modules/cesium/Build/Ce
 
 Select at least one layer.
 
+The page lights the scene with a fixed sun from the north-west, 35° above the horizon at the scene's centre, so the view does not depend on the time of day.
+
 Preview is read-only and writes nothing, so stopping it needs no cleanup. It runs until signalled, for example with SIGTERM or Ctrl-C. Before binding, each selected directory and the Cesium directory are resolved to their real paths. Each must contain its manifest (`tileset.json`, `tilejson.json` or `Cesium.js`) as a regular file; otherwise the command exits 3 with `data`.
 
 The server answers only `GET` and `HEAD` for `/`, `/config.json` and regular files under a selected layer's route. A path below a route is decoded once; invalid UTF-8 returns 400. Any path that fails either of these rules returns 404:
