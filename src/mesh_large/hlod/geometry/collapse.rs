@@ -22,7 +22,7 @@ use super::super::{
 };
 use super::{
     embedding::{self, Point},
-    interface_points, Merged,
+    folds, interface_points, Merged,
 };
 use crate::JobError;
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
@@ -122,8 +122,9 @@ pub(crate) struct Stats {
     pub cancelled: bool,
     /// Steiner rescues refused, by the furthest test any position reached: 0 link not one
     /// simple path, 1 an arc end off the vertex's contraction, 2 chord edge exists or has no
-    /// licence, 3 no canonical private position, 4 orientation, 5 contact with another face.
-    pub steiner_why: [u64; 6],
+    /// licence, 3 no canonical private position, 4 orientation, 5 contact with another face,
+    /// 6 a moved face on a book edge (`State::books_hold`).
+    pub steiner_why: [u64; 7],
     /// Of `work`: units spent in the rescue rounds, and of those in Steiner rescues.
     pub rescue_work: u64,
     pub steiner_work: u64,
@@ -411,6 +412,121 @@ impl<'a> State<'a> {
     /// The guard's licence for directed edge `a -> b` between two shared points: its
     /// count in the contracted source (`Problem::shared`), or none when the source has the
     /// edge in neither direction and this cell owns the new segment (N1, stage 1).
+    /// Whether every edge a change touches still passes the contraction fold guard's book
+    /// rule (`folds::book_refused`, the guard's own predicate) once the change is made:
+    /// faces `gone` die, faces `changed` take new corners and faces `added` are created;
+    /// `pending` is a vertex the change adds (a Steiner vertex), with its position. An edge
+    /// between two shared points is the guard's shared-edge rule instead (the licences
+    /// above), unless it is a new segment this cell's seam owner licenses (stage 1), which
+    /// the guard treats as any other edge. Only an edge left with two or more faces in one
+    /// direction can be refused, so the rest cost a lookup each.
+    fn books_hold(
+        &self,
+        gone: &[u32],
+        changed: &[(u32, [u32; 3])],
+        added: &[[u32; 3]],
+        pending: Option<(u32, [f32; 3])>,
+    ) -> bool {
+        let mut delta: HashMap<(u32, u32), i32> = HashMap::default();
+        let mut bump = |t: [u32; 3], by: i32| {
+            for j in 0..3 {
+                *delta.entry((t[j], t[(j + 1) % 3])).or_default() += by;
+            }
+        };
+        for &f in gone {
+            bump(self.faces[f as usize], -1);
+        }
+        for &(f, g) in changed {
+            bump(self.faces[f as usize], -1);
+            bump(g, 1);
+        }
+        for &t in added {
+            bump(t, 1);
+        }
+        let after = |a: u32, b: u32| {
+            i64::from(self.dir.get(&(a, b)).copied().unwrap_or(0))
+                + i64::from(delta.get(&(a, b)).copied().unwrap_or(0))
+        };
+        let mut books: Vec<(u32, u32)> = delta
+            .keys()
+            .map(|&(a, b)| (a.min(b), a.max(b)))
+            .filter(|&(a, b)| after(a, b) >= 2 || after(b, a) >= 2)
+            .collect();
+        if books.is_empty() {
+            return true;
+        }
+        books.sort_unstable();
+        books.dedup();
+        let key_of = |v: u32| -> Key {
+            match pending {
+                Some((w, p)) if w == v => super::key(p),
+                _ => match self.p.keys.get(v as usize) {
+                    Some(&k) => k,
+                    None => super::key(self.added[v as usize - self.p.positions.len()].0),
+                },
+            }
+        };
+        let rewritten: HashMap<u32, [u32; 3]> = changed.iter().copied().collect();
+        let dead: HashSet<u32> = gone.iter().copied().collect();
+        for (x, y) in books {
+            if self.iface[x as usize]
+                && self.iface[y as usize]
+                && self.shared_licence(x, y).is_some()
+            {
+                continue;
+            }
+            let (kx, ky) = (key_of(x), key_of(y));
+            // The faces on x–y after the change: x's live faces and the rewritten ones (a
+            // rewritten face may newly hold x), then the added faces.
+            let mut seen: HashSet<u32> = HashSet::default();
+            let mut wings: Vec<(usize, Key, bool)> = Vec::new();
+            let mut wing = |t: [u32; 3]| {
+                let Some(j) = (0..3).find(|&j| {
+                    let (a, b) = (t[j], t[(j + 1) % 3]);
+                    (a, b) == (x, y) || (a, b) == (y, x)
+                }) else {
+                    return;
+                };
+                let (from, third) = (t[j], t[(j + 2) % 3]);
+                let d = usize::from(key_of(from) > key_of(if from == x { y } else { x }));
+                let original = self
+                    .src_face
+                    .get(&sorted(t))
+                    .is_some_and(|c| c[parity(t)] > 0);
+                wings.push((d, key_of(third), original));
+            };
+            let faces: Vec<u32> = self
+                .live_faces(x)
+                .chain(changed.iter().map(|&(f, _)| f))
+                .collect();
+            self.work.set(
+                self.work
+                    .get()
+                    .saturating_add(u64::try_from(faces.len()).unwrap_or(u64::MAX)),
+            );
+            for f in faces {
+                if dead.contains(&f) || !seen.insert(f) {
+                    continue;
+                }
+                wing(rewritten.get(&f).copied().unwrap_or(self.faces[f as usize]));
+            }
+            for &t in added {
+                wing(t);
+            }
+            // The guard orders the edge by key; direction 0 runs from the lesser key.
+            let edge = (kx.min(ky), kx.max(ky));
+            let counts = [0, 1].map(|d| wings.iter().filter(|w| w.0 == d).count() as u32);
+            let (lo, hi) = if kx < ky { (x, y) } else { (y, x) };
+            let source = [(lo, hi), (hi, lo)].map(|e| self.src_dir.get(&e).copied().unwrap_or(0));
+            if folds::book_refused(edge, counts, source, |d| {
+                wings.iter().filter(move |w| w.0 == d).map(|w| (w.1, w.2))
+            }) {
+                return false;
+            }
+        }
+        true
+    }
+
     fn shared_licence(&self, a: u32, b: u32) -> Option<u32> {
         let count = |a: u32, b: u32| match &self.p.shared {
             Some(shared) => shared.get(&(a, b)).copied().unwrap_or(0),
@@ -725,6 +841,30 @@ impl<'a> State<'a> {
                 return 11;
             }
         }
+        // The guard's book rule on every edge the collapse touches: a moved wing of a
+        // source book keeps the edge's counts but not its faces. Only an edge left with two
+        // or more faces in one direction can be refused, which `delta` shows at no cost.
+        let after = |e: &(u32, u32)| {
+            i64::from(self.dir.get(e).copied().unwrap_or(0))
+                + i64::from(delta.get(e).copied().unwrap_or(0))
+        };
+        if delta
+            .keys()
+            .any(|&(a, b)| after(&(a, b)) >= 2 || after(&(b, a)) >= 2)
+        {
+            let rewritten: Vec<(u32, [u32; 3])> = moved
+                .iter()
+                .map(|&f| {
+                    (
+                        f,
+                        self.faces[f as usize].map(|w| if w == u { v } else { w }),
+                    )
+                })
+                .collect();
+            if !self.books_hold(&shared, &rewritten, &[], None) {
+                return 10;
+            }
+        }
         0
     }
 
@@ -801,6 +941,9 @@ impl<'a> State<'a> {
             if now > self.src_dir.get(&(a, b)).copied().unwrap_or(0).max(1) {
                 return false;
             }
+        }
+        if !self.books_hold(&[], &[(f1, g1), (f2, g2)], &[], None) {
+            return false;
         }
         // apply
         self.changes += 1;
@@ -1099,8 +1242,20 @@ impl<'a> State<'a> {
                     })
             });
             if apart {
-                chosen = Some((ps, q));
-                break;
+                let rewritten: Vec<(u32, [u32; 3])> = star
+                    .iter()
+                    .map(|&f| {
+                        (
+                            f,
+                            self.faces[f as usize].map(|w| if w == r { sid } else { w }),
+                        )
+                    })
+                    .collect();
+                if self.books_hold(&[], &rewritten, &[bridge], Some((sid, ps))) {
+                    chosen = Some((ps, q));
+                    break;
+                }
+                stage = 6;
             }
         }
         let Some((ps32, psd)) = chosen else {
@@ -1697,6 +1852,122 @@ mod tests {
         }
     }
 
+    /// A source book: two faces use the interior edge p→q in the same direction (no face
+    /// uses q→p), and the third corner of one is r, a border vertex to be removed onto the
+    /// chord a–b. Collapsing r onto a or b keeps p→q's count at its source count but moves
+    /// that wing, which the contraction fold guard refuses (its book rule admits two
+    /// same-direction faces only unchanged, or with a reverse face and on distinct sides).
+    /// p, q and w are locked, as `problem` locks every free corner of a fold face; x is the
+    /// strip's free apex below the chord. Vertices: a, r, b, p, q, w, x.
+    /// Positions, triangles, classes and shared points of a collapse fixture.
+    type Fixture = (Vec<[f32; 3]>, Vec<[u32; 3]>, Vec<Class>, Vec<bool>);
+
+    fn moved_book_wing() -> Fixture {
+        (
+            vec![
+                [0., 0., 0.],
+                [1., 0., 0.],
+                [2., 0., 0.],
+                [1., 1., 0.],
+                [1., 1., 1.],
+                [1., 2., 0.],
+                [1., -1., 0.],
+            ],
+            vec![[0, 6, 1], [1, 6, 2], [3, 4, 1], [3, 4, 5]],
+            vec![
+                Class::Locked,
+                Class::Remove([0, 2]),
+                Class::Locked,
+                Class::Locked,
+                Class::Locked,
+                Class::Locked,
+                Class::Free,
+            ],
+            vec![true, false, true, false, false, false, false],
+        )
+    }
+
+    /// The contraction fold guard's refusals of `faces` (`folds::Refusal`) for the fixture
+    /// above: the parent contract is a, b and the chord a–b, the children's border the path
+    /// a, r, b, and r maps to the chord's middle (the guard licenses a–b from that path).
+    fn book_guard_refusals(
+        positions: &[[f32; 3]],
+        triangles: &[[u32; 3]],
+        faces: &[[u32; 3]],
+    ) -> Vec<u8> {
+        let k: Vec<Key> = positions.iter().map(|&p| key(p)).collect();
+        let row = |a: Key, b: Key| InterfaceRow::new(0, a.min(b), a.max(b), 0, 1);
+        let interface = vec![row(k[0], k[0]), row(k[2], k[2]), row(k[0], k[2])];
+        let previous = vec![
+            row(k[0], k[0]),
+            row(k[1], k[1]),
+            row(k[2], k[2]),
+            row(k[0], k[1]),
+            row(k[1], k[2]),
+        ];
+        let mut mapping = vec![None; positions.len()];
+        mapping[0] = Some((k[0], k[0], 0., 0));
+        mapping[2] = Some((k[2], k[2], 0., 0));
+        mapping[1] = Some((k[0], k[2], 0.5, 0));
+        super::super::folds::Source::for_contraction(
+            positions,
+            triangles,
+            &interface,
+            &previous,
+            [0, 1],
+            &mapping,
+        )
+        .refusals(positions, faces)
+    }
+
+    #[test]
+    fn a_book_wing_does_not_move() {
+        let (positions, triangles, class, shared) = moved_book_wing();
+        let keys: Vec<Key> = positions.iter().map(|&p| key(p)).collect();
+        // The source itself passes the guard.
+        assert!(book_guard_refusals(&positions, &triangles, &triangles)
+            .iter()
+            .all(|&r| r == 0));
+        // Collapsing r onto a keeps p→q at two faces and every other count licensed: the
+        // guard refuses exactly the moved wing (p, q, a) and its unchanged partner (both
+        // faces of the edge), by the book rule.
+        let collapsed = [[0, 6, 2], [3, 4, 0], [3, 4, 5]];
+        assert_eq!(
+            book_guard_refusals(&positions, &triangles, &collapsed),
+            vec![0, folds::Refusal::Book as u8, folds::Refusal::Book as u8]
+        );
+        let p = Problem {
+            positions: &positions,
+            triangles: &triangles,
+            class,
+            interface: shared.clone(),
+            segments: [(0, 2)].into_iter().collect(),
+            target: 1,
+            limit: 4,
+            min_cos: 0.,
+            owns_segment: None,
+            owns_face: None,
+            keys: &keys,
+            steiner: false,
+            snap: None,
+            protected: None,
+            shared: None,
+            work_limit: u64::MAX,
+            cancel: None,
+        };
+        let (out, stats) = simplify(&p);
+        if let Some(out) = &out {
+            let refusals = book_guard_refusals(&positions, &triangles, out);
+            assert!(
+                refusals.iter().all(|&r| r == 0),
+                "P1 proposed {out:?}, which the guard refuses: {refusals:?} ({stats:?})"
+            );
+        }
+        // Removing r needs the wing to move: r stays.
+        assert!(out.is_none(), "{out:?}");
+        assert_eq!(stats.removed_left, 1, "{stats:?}");
+    }
+
     fn up(positions: &[[f32; 3]], added: &[([f32; 3], u32)], f: [u32; 3]) -> f64 {
         let at = |v: u32| {
             let v = v as usize;
@@ -2160,7 +2431,8 @@ mod tests {
     impl State<'_> {
         /// The check as it was before the star cache, the probe and the target-side
         /// shortcuts: u's and v's stars and neighbours collected afresh, every moved face
-        /// tested in turn. Pure (no work charged, no cache), for the differential test.
+        /// tested in turn, and the fold guard's book rule on every touched edge
+        /// (`books_hold`, unfiltered). No cache, for the differential test.
         fn reference_check(&self, u: u32, v: u32) -> u8 {
             let star_u: Vec<u32> = self.live_faces(u).collect();
             let (shared, moved): (Vec<u32>, Vec<u32>) = star_u
@@ -2272,6 +2544,19 @@ mod tests {
                         return 11;
                     }
                 }
+            }
+            // The contraction fold guard's book rule (the one rule the check gained since).
+            let rewritten: Vec<(u32, [u32; 3])> = moved
+                .iter()
+                .map(|&f| {
+                    (
+                        f,
+                        self.faces[f as usize].map(|w| if w == u { v } else { w }),
+                    )
+                })
+                .collect();
+            if !self.books_hold(&shared, &rewritten, &[], None) {
+                return 10;
             }
             0
         }

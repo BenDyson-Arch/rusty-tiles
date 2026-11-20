@@ -421,28 +421,11 @@ impl Source {
             } else if (boundary && !changed_boundary) || self.policy.folds {
                 false
             } else {
-                (0..2).any(|d| {
-                    if counts[d] < 2 {
-                        return false;
-                    }
-                    // Child incidence is not automatically source multiplicity: a
-                    // child may have admitted a new, nonacute book spine. Only carry
-                    // its license unchanged; moving a wing must pass the side test
-                    // again, even when balanced 2/2 counts are unchanged.
-                    let unchanged = counts[d] <= source[d]
-                        && edges[at..end]
-                            .iter()
-                            .filter(|(_, (_, direction, _))| *direction == d as u8)
-                            .all(|&(_, (i, _, _))| original[i]);
-                    !unchanged
-                        && (counts[1 - d] == 0
-                            || !distinct_sides(
-                                edge,
-                                edges[at..end]
-                                    .iter()
-                                    .filter(|(_, (_, direction, _))| *direction == d as u8)
-                                    .map(|(_, (_, _, third))| key(positions[*third as usize])),
-                            ))
+                book_refused(edge, counts, source, |d| {
+                    edges[at..end]
+                        .iter()
+                        .filter(move |(_, (_, direction, _))| *direction == d as u8)
+                        .map(|&(_, (i, _, third))| (key(positions[third as usize]), original[i]))
                 })
             };
             if unsupported {
@@ -658,6 +641,34 @@ pub(super) fn contact_pins(
         }
     }
     pins
+}
+
+/// The guard's book rule for an edge it does not treat as a shared (boundary) edge:
+/// `edge` in key order, its face counts by direction (0: lesser key to greater) in the
+/// proposal and in the source, and `wings(d)`, the third corner and whether the face is a
+/// source face (in that orientation) of each proposal face using the edge in direction
+/// `d`. Refused when, in a direction holding two or more faces, they are not all unchanged
+/// source faces within the source's count, and either no face uses the edge the other way
+/// or the wings are not on pairwise distinct sides (`distinct_sides`). Shared by the
+/// guard (`Source::check`) and P1's collapse checks (`collapse`), which must admit only
+/// what the guard admits.
+pub(crate) fn book_refused<I: Iterator<Item = (Key, bool)>>(
+    edge: Edge,
+    counts: [u32; 2],
+    source: [u32; 2],
+    wings: impl Fn(usize) -> I,
+) -> bool {
+    (0..2).any(|d| {
+        if counts[d] < 2 {
+            return false;
+        }
+        // Child incidence is not automatically source multiplicity: a child may have
+        // admitted a new, nonacute book spine. Only carry its license unchanged; moving a
+        // wing must pass the side test again, even when balanced 2/2 counts are unchanged.
+        let unchanged = counts[d] <= source[d] && wings(d).all(|(_, original)| original);
+        !unchanged
+            && (counts[1 - d] == 0 || !distinct_sides(edge, wings(d).map(|(third, _)| third)))
+    })
 }
 
 fn distinct_sides(edge: Edge, thirds: impl Iterator<Item = Key>) -> bool {

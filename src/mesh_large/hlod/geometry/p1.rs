@@ -87,7 +87,7 @@ pub(crate) struct Report {
     pub work: [u64; 2],
     pub removals_left: [u64; 2],
     pub steiner: [u64; 2],
-    pub steiner_refused: [[u64; 6]; 2],
+    pub steiner_refused: [[u64; 7]; 2],
     /// Of `work`: units spent rescuing stuck removals, and of those in Steiner rescues.
     pub rescue_work: [u64; 2],
     pub steiner_work: [u64; 2],
@@ -134,7 +134,7 @@ impl Report {
             work: [0; 2],
             removals_left: [0; 2],
             steiner: [0; 2],
-            steiner_refused: [[0; 6]; 2],
+            steiner_refused: [[0; 7]; 2],
             rescue_work: [0; 2],
             steiner_work: [0; 2],
             site_work: [collapse::SiteWork::default(); 2],
