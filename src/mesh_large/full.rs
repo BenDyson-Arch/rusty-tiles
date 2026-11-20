@@ -2483,6 +2483,59 @@ pub(super) mod tests {
     /// for every worker count: a point shared by corners in nearly every leaf, slivers whose
     /// corners lie in far leaves' boxes, coincident triangles (one key: degenerate runs and
     /// packed octants) and keys unrelated to positions, so leaf boxes overlap everywhere.
+    /// A failure in a later wave of the corner join is reported for the first failing leaf
+    /// in leaf order: every leaf from the start of the second wave fails, that first one after
+    /// a delay and every later one at once, so a later leaf fails first in time.
+    #[test]
+    fn corner_join_reports_the_first_failing_leaf_in_order() {
+        use super::super::corners::{wave_starts, FAIL_LEAVES};
+        let dir = tempfile::tempdir().unwrap();
+        let input = fixture(dir.path(), 2000);
+        let mut config = config(dir.path());
+        config.leaf_triangles = 16;
+        config.jobs = Jobs::Fixed(NonZeroUsize::new(1).unwrap());
+        let captured = capture(&input, &config, &mut || Ok(())).unwrap();
+        let sizes: Vec<u64> = captured
+            .tree
+            .nodes
+            .reader()
+            .unwrap()
+            .map(Result::unwrap)
+            .filter(|n| n.kind == super::super::records::NodeKind::Leaf)
+            .map(|n| n.end - n.first)
+            .collect();
+        for jobs in [1, 2, 4] {
+            let waves = wave_starts(&sizes, jobs);
+            assert!(waves.len() > 2, "{jobs} jobs: {waves:?}");
+            let first = waves[1];
+            FAIL_LEAVES.with(|f| {
+                *f.borrow_mut() = (first..sizes.len())
+                    .map(|leaf| {
+                        let delay = if leaf == first { 200 } else { 0 };
+                        (leaf, std::time::Duration::from_millis(delay))
+                    })
+                    .collect();
+            });
+            let error = join_corner_depths(
+                &captured.scratch,
+                &captured.tree,
+                &captured.triangles,
+                &config,
+                jobs,
+                StepProgress::silent(),
+            )
+            .err()
+            .expect("injected failures");
+            FAIL_LEAVES.with(|f| f.borrow_mut().clear());
+            assert!(
+                error
+                    .to_string()
+                    .contains(&format!("injected failure at leaf {first}")),
+                "{jobs} jobs: {error}"
+            );
+        }
+    }
+
     #[test]
     fn corner_join_matches_the_weld_table_on_adversarial_trees() {
         let scratch = Scratch::create(None, 0).unwrap();

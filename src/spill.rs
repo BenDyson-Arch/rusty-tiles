@@ -36,6 +36,14 @@ pub(crate) use volume::{
 use crate::{JobError, JobErrorKind};
 use std::{fmt, io, path::PathBuf};
 
+/// The `N` bytes of an encoded record from `at`, for a fixed-width field's `from_le_bytes`.
+/// Panics, as slicing does, when the record is shorter: a codec bug, never input.
+pub(crate) fn field<const N: usize>(bytes: &[u8], at: usize) -> [u8; N] {
+    let mut out = [0; N];
+    out.copy_from_slice(&bytes[at..at + N]);
+    out
+}
+
 /// A fixed-size spill record with a platform-independent encoding.
 ///
 /// `Ord` is the sort order. Records that compare equal keep their input order, so producers that
