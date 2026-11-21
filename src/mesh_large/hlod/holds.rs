@@ -27,8 +27,8 @@ use std::collections::{HashMap, HashSet};
 /// One cell's planned hold: its rank and the end of its interval.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Interval {
-    pub rank: u64,
-    pub end: u64,
+    pub rank: usize,
+    pub end: usize,
 }
 
 #[derive(Debug, Default)]
@@ -57,9 +57,9 @@ impl Plan {
         // Postorder: by end, deeper first among cells sharing it (nested ones).
         let mut order: Vec<usize> = (0..cells.len()).collect();
         order.sort_unstable_by_key(|&i| (cells[i].1.end, std::cmp::Reverse(cells[i].1.depth)));
-        let mut rank = vec![0u64; cells.len()];
+        let mut rank = vec![0usize; cells.len()];
         for (r, &i) in order.iter().enumerate() {
-            rank[i] = r as u64;
+            rank[i] = r;
         }
         // Each cell's coarse parent: the nearest enclosing cell in preorder.
         let mut parent = vec![None; cells.len()];
@@ -84,8 +84,8 @@ impl Plan {
         // `S` and `R`, deepest cells first (children are deeper than their parent).
         let mut by_depth: Vec<usize> = (0..cells.len()).collect();
         by_depth.sort_unstable_by_key(|&i| std::cmp::Reverse(cells[i].1.depth));
-        let (mut spawn, mut release) = (rank.clone(), vec![0u64; cells.len()]);
-        let mut children = vec![0u64; cells.len()];
+        let (mut spawn, mut release) = (rank.clone(), vec![0usize; cells.len()]);
+        let mut children = vec![0usize; cells.len()];
         for level in by_depth.chunk_by(|&a, &b| cells[a].1.depth == cells[b].1.depth) {
             for &i in level {
                 spawn[i] = rank[i].max(children[i]);
@@ -169,9 +169,9 @@ fn admit(spans: &[Interval], ranks: usize, budget: u64) -> Vec<bool> {
     spans
         .iter()
         .map(|s| {
-            let ok = tree.max(s.rank as usize, s.end as usize) < budget;
+            let ok = tree.max(s.rank, s.end) < budget;
             if ok {
-                tree.add(s.rank as usize, s.end as usize);
+                tree.add(s.rank, s.end);
             }
             ok
         })
@@ -180,21 +180,18 @@ fn admit(spans: &[Interval], ranks: usize, budget: u64) -> Vec<bool> {
 
 /// The most intervals through one rank.
 fn peak(spans: &[Interval], ranks: usize) -> u64 {
-    let mut delta = vec![0i64; ranks + 1];
+    let (mut starts, mut ends) = (vec![0u64; ranks], vec![0u64; ranks]);
     for s in spans {
-        delta[s.rank as usize] += 1;
-        delta[s.end as usize + 1] -= 1;
+        starts[s.rank] += 1;
+        ends[s.end] += 1;
     }
-    let mut run = 0i64;
-    delta
-        .iter()
-        .map(|d| {
-            run += d;
-            run
-        })
-        .max()
-        .unwrap_or(0)
-        .max(0) as u64
+    let (mut run, mut most) = (0u64, 0u64);
+    for (s, e) in starts.iter().zip(&ends) {
+        run += s;
+        most = most.max(run);
+        run -= e;
+    }
+    most
 }
 
 /// Range add of one, range maximum (segment tree with lazy adds).
@@ -251,7 +248,7 @@ impl MaxAdd {
 mod tests {
     use super::*;
 
-    fn spans(v: &[(u64, u64)]) -> Vec<Interval> {
+    fn spans(v: &[(usize, usize)]) -> Vec<Interval> {
         v.iter()
             .map(|&(rank, end)| Interval { rank, end })
             .collect()
@@ -259,7 +256,7 @@ mod tests {
 
     /// The most admitted intervals through one rank, by brute force.
     fn load(spans: &[Interval], admitted: &[bool], ranks: usize) -> u64 {
-        (0..ranks as u64)
+        (0..ranks)
             .map(|r| {
                 spans
                     .iter()
@@ -292,8 +289,8 @@ mod tests {
             let ranks = 1 + next(60) as usize;
             let mut s: Vec<Interval> = (0..next(40))
                 .map(|_| {
-                    let rank = next(ranks as u64);
-                    let end = rank + next(ranks as u64 - rank);
+                    let rank = next(ranks as u64) as usize;
+                    let end = rank + next((ranks - rank) as u64) as usize;
                     Interval { rank, end }
                 })
                 .collect();

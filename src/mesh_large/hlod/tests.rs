@@ -7399,31 +7399,27 @@ fn the_hold_gate_keeps_any_schedule_within_the_budget() {
         x % m.max(1)
     };
     for _ in 0..300 {
-        let ranks = 2 + next(40);
+        let ranks = 2 + next(40) as usize;
         let mut cells: Vec<(u64, holds::Interval)> = Vec::new();
         for rank in 0..ranks {
             if next(4) > 0 {
-                let end = rank + next((ranks - rank).min(12));
-                cells.push((rank, holds::Interval { rank, end }));
+                let end = rank + next((ranks - rank).min(12) as u64) as usize;
+                cells.push((rank as u64, holds::Interval { rank, end }));
             }
         }
         let budget = next(5);
-        let plan = holds::Plan::from_intervals(&cells, ranks as usize, budget);
+        let plan = holds::Plan::from_intervals(&cells, ranks, budget);
         let mut k = KeepWalk::new(&plan);
-        let mut spawned = vec![false; ranks as usize];
+        let mut spawned = vec![false; ranks];
         let mut holding: Vec<u64> = Vec::new();
         loop {
-            let spawn: Vec<u64> = (0..ranks)
+            let spawn: Vec<u64> = (0..ranks as u64)
                 .filter(|&c| !spawned[c as usize] && k.gate_open(&plan, c))
                 .collect();
             let release: Vec<u64> = holding
                 .iter()
                 .copied()
-                .filter(|&h| {
-                    spawned[..=plan.holds(h).unwrap().end as usize]
-                        .iter()
-                        .all(|&s| s)
-                })
+                .filter(|&h| spawned[..=plan.holds(h).unwrap().end].iter().all(|&s| s))
                 .collect();
             if spawn.is_empty() && release.is_empty() {
                 assert!(spawned.iter().all(|&s| s) && holding.is_empty(), "stuck");

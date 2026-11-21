@@ -18,7 +18,7 @@ use crate::{
     mesh_large::hlod::{interfaces::Key, store::TileKey},
     JobError,
 };
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Why a stuck vertex cannot be kept (`Borders::locate`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
@@ -63,10 +63,10 @@ pub(crate) struct Split {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct Overlay {
     splits: BTreeMap<(u32, u64), Split>,
-    maps: HashMap<(u32, u64), [u64; 3]>,
+    maps: BTreeMap<(u32, u64), [u64; 3]>,
     /// (depth, lesser endpoint, greater endpoint) of a coarser chord: the largest bound of
     /// a finer split on its arc.
-    finer: HashMap<(u32, u64, u64), f64>,
+    finer: BTreeMap<(u32, u64, u64), f64>,
 }
 
 impl Overlay {
@@ -160,9 +160,9 @@ impl Borders {
                     TileKey {
                         first: n[0],
                         end: n[1],
-                        depth: n[2] as u32,
-                        leaf_begin: n[3] as u32,
-                        leaf_end: n[4] as u32,
+                        depth: narrow(n[2])?,
+                        leaf_begin: narrow(n[3])?,
+                        leaf_end: narrow(n[4])?,
                     },
                 ));
             }
@@ -173,7 +173,7 @@ impl Borders {
     /// The cell's own segments (stored references), as segment ids.
     pub(crate) fn own_segments(&self, key: TileKey) -> Result<Vec<u64>, JobError> {
         let n = self.source.nodes.get(self.source.node(key)?)?;
-        let mut out = Vec::with_capacity(n[7] as usize);
+        let mut out = Vec::with_capacity(usize::try_from(n[7]).unwrap_or(0));
         let mut at = n[6];
         while at != NONE {
             let link = self.refs.get(at)?;
@@ -238,7 +238,7 @@ impl Borders {
     /// walked from the chain's origin along its first edge through vertices of live degree
     /// two at its depth (every chain-interior vertex). With each vertex, the edge into it.
     fn arc(&self, s: &[u64; 12]) -> Result<Vec<u64>, JobError> {
-        let depth = s[7] as u32;
+        let depth = narrow(s[7])?;
         let (first, last) = (s[4], s[5]);
         let mut out = Vec::with_capacity(usize::try_from(last - first + 1).unwrap_or(0));
         let (mut at, mut edge) = (s[3], s[2]);
@@ -282,7 +282,7 @@ impl Borders {
     /// Whether any owner of the segment is in a pass-through chain: it publishes at
     /// another depth, or the next deeper cell publishes at it.
     fn in_chain(&self, s: &[u64; 12]) -> Result<bool, JobError> {
-        let depth = s[7] as u32;
+        let depth = narrow(s[7])?;
         let mut at = s[8];
         while at < s[9] {
             let owner = self.source.owner(at, depth)?;
@@ -388,10 +388,14 @@ impl Borders {
             for (segment, ordinals) in by_segment {
                 let s = self.segments.get(segment)?;
                 let arc = self.arc(&s)?;
-                let point = |i: u64| -> Result<[f32; 3], JobError> {
-                    self.source.point(arc[(i - s[4]) as usize])
+                let vertex = |i: u64| -> Result<u64, JobError> {
+                    usize::try_from(i - s[4])
+                        .ok()
+                        .and_then(|k| arc.get(k).copied())
+                        .ok_or_else(|| state("a split ordinal is off its arc"))
                 };
-                let tolerance = self.ladder.relief(depth, s[11] as u32);
+                let point = |i: u64| self.source.point(vertex(i)?);
+                let tolerance = self.ladder.relief(depth, narrow(s[11])?);
                 let mut cuts = vec![s[4], s[5]];
                 for ordinal in ordinals {
                     let at = cuts.partition_point(|&c| c < ordinal);
@@ -410,7 +414,6 @@ impl Borders {
                 if cuts.len() == 2 {
                     continue;
                 }
-                let vertex = |i: u64| arc[(i - s[4]) as usize];
                 let mut pieces = Vec::with_capacity(cuts.len() - 1);
                 let mut bound = 0f64;
                 let mut maps = Vec::new();
@@ -419,8 +422,8 @@ impl Borders {
                     let piece_bound = curve::certify(a, b, &mut |i| point(i))?;
                     bound = bound.max(piece_bound);
                     let mut row = s;
-                    row[0] = vertex(a);
-                    row[1] = vertex(b);
+                    row[0] = vertex(a)?;
+                    row[1] = vertex(b)?;
                     row[4] = a;
                     row[5] = b;
                     row[6] = piece_bound.to_bits();
@@ -429,13 +432,13 @@ impl Borders {
                         if i == s[4] || i == s[5] {
                             continue;
                         }
-                        let v = vertex(i);
+                        let v = vertex(i)?;
                         let map = if i == a || i == b {
                             [v, v, 0]
                         } else {
                             [
-                                vertex(a),
-                                vertex(b),
+                                vertex(a)?,
+                                vertex(b)?,
                                 ((i - a) as f64 / (b - a) as f64).to_bits(),
                             ]
                         };
@@ -446,14 +449,14 @@ impl Borders {
                 maps.dedup();
                 let kept: Vec<Key> = cuts[1..cuts.len() - 1]
                     .iter()
-                    .map(|&i| self.source.key(vertex(i)))
+                    .map(|&i| self.source.key(vertex(i)?))
                     .collect::<Result<_, _>>()?;
                 // Coarser chords over this arc: each kept vertex lies inside one at every
                 // coarser depth (it is not retained there).
                 let mut coarser = Vec::new();
                 for &i in &cuts[1..cuts.len() - 1] {
                     for d in 0..depth {
-                        let m = self.maps.get(u64::from(d) * n + vertex(i))?;
+                        let m = self.maps.get(u64::from(d) * n + vertex(i)?)?;
                         if m[0] != m[1] {
                             coarser.push((d, m[0].min(m[1]), m[0].max(m[1])));
                         }
@@ -476,4 +479,9 @@ impl Borders {
         }
         Ok((overlay, dropped))
     }
+}
+
+/// A border store value that is a `u32` by construction.
+fn narrow(v: u64) -> Result<u32, JobError> {
+    u32::try_from(v).map_err(|_| state("a border value exceeds u32"))
 }

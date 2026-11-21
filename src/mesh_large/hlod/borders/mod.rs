@@ -1150,7 +1150,11 @@ impl Borders {
             let link = self.refs.get(at)?;
             let s = self.segments.get(link[1])?;
             if s[0] != s[1] && s[11] > 0 {
-                let finer = f64::from_bits(s[10]).max(overlay.finer(n[2] as u32, s[0], s[1]));
+                let finer = f64::from_bits(s[10]).max(overlay.finer(
+                    u32::try_from(n[2]).map_err(|_| state("a border depth exceeds u32"))?,
+                    s[0],
+                    s[1],
+                ));
                 floor = floor.max(8. * (f64::from_bits(s[6]) + finer));
             }
             at = link[0];

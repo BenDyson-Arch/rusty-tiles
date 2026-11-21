@@ -393,7 +393,9 @@ mod tests {
     fn billion_scale_sibling_storage_depends_on_height_and_cap() {
         let at = |n| bound(n, n / 8192, 8192, 8192, 32, 4096).unwrap();
         assert_eq!(at(500_000_000), at(1_000_000_000));
-        assert!(at(1_000_000_000) < 8 << 30);
+        // The child window (under 8 GiB) and D's planned holds, as many tiles again.
+        assert!(at(1_000_000_000) < 16 << 30);
         assert_eq!(limit(32), 296);
+        assert_eq!(holds(32), 297 * 8 / 9);
     }
 }

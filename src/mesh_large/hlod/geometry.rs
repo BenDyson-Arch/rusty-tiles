@@ -1028,12 +1028,8 @@ fn oriented(t: &[u32; 3]) -> [u32; 3] {
     [t[k], t[(k + 1) % 3], t[(k + 2) % 3]]
 }
 /// P1 alone on `contract` (D's keep-and-retry rounds, `hlod::keep`): its proposal, set up
-/// as `build_parent` sets up P1's, if assessment accepts it, and P1's record (with the
+/// as `build_parent` sets up P1's (for the caller to assess), and P1's record (with the
 /// border vertices a stalled pass left).
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the same inputs as build_parent's P1 step"
-)]
 pub(crate) fn p1_on(
     tile: TileKey,
     children: &[TileGeometry],
@@ -1041,19 +1037,17 @@ pub(crate) fn p1_on(
     contract: &Contract,
     mapping: &BorderMap<'_>,
     lattice: &LatticePlan,
-    assess: &mut dyn FnMut(&mut Built) -> Result<bool, JobError>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<(Option<Built>, p1::Report), JobError> {
-    let (proposal, mut report) =
-        p1::attempt(tile, children, caps, contract, mapping, lattice, check)?;
-    let Some((stage, mut b)) = proposal else {
-        return Ok((None, report));
-    };
-    b.last_resort_stage = stage;
-    b.staged = stage > 0;
-    let accepted = assess(&mut b)?;
-    report.outcome = if accepted { "built" } else { "refused" };
-    Ok((accepted.then_some(b), report))
+    let (proposal, report) = p1::attempt(tile, children, caps, contract, mapping, lattice, check)?;
+    Ok((
+        proposal.map(|(stage, mut b)| {
+            b.last_resort_stage = stage;
+            b.staged = stage > 0;
+            b
+        }),
+        report,
+    ))
 }
 
 /// The children's border points the contract removes onto a chord (D's control: what a

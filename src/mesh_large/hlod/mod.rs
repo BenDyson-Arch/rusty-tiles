@@ -1033,7 +1033,7 @@ struct KeepWalk {
     /// Report: kept vertices on a chord whose other owner comes earlier in the walk.
     kept_after_co_owner: u64,
     /// Admitted holds not yet released, by the end of their interval (`holds::Plan`).
-    unreleased: std::collections::BTreeSet<(u64, u64)>,
+    unreleased: std::collections::BTreeSet<(usize, u64)>,
     /// Report: stuck vertices on sealed chords.
     sealed: u64,
 }
@@ -1113,7 +1113,10 @@ fn settle_keep(
         .map(|(&id, _)| id)
         .collect();
     for id in due {
-        let w = k.waiting.remove(&id).unwrap();
+        let w = k
+            .waiting
+            .remove(&id)
+            .ok_or_else(|| state("a settled cell is not waiting"))?;
         let closed = k
             .spawned
             .get(&id)
@@ -2318,24 +2321,32 @@ fn build_tile(
                 else {
                     break;
                 };
-                let mut candidate = None;
-                let (built, report) = geometry::p1_on(
+                let (proposal, mut report) = geometry::p1_on(
                     key,
                     &children,
                     &caps,
                     &c,
                     &|k| job.borders.mapping_with(depth, k, &trial),
                     &captured.lattice,
-                    &mut |built| {
+                    check,
+                )?;
+                let mut candidate = None;
+                let built = match proposal {
+                    Some(mut built) => {
                         let before = std::mem::take(&mut nearest.stats);
-                        let prepared = prepare(job, built, &c, &mut query, &mut nearest);
+                        let prepared = prepare(job, &mut built, &c, &mut query, &mut nearest);
                         built.search = std::mem::replace(&mut nearest.stats, before);
                         nearest.stats.add(built.search);
                         candidate = prepared?;
-                        Ok(candidate.is_some())
-                    },
-                    check,
-                )?;
+                        report.outcome = if candidate.is_some() {
+                            "built"
+                        } else {
+                            "refused"
+                        };
+                        candidate.is_some().then_some(built)
+                    }
+                    None => None,
+                };
                 if let Some(b) = built {
                     found = Some((c, trial, b, report, candidate));
                     break;
