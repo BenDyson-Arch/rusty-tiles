@@ -149,6 +149,27 @@ impl Overlay {
 }
 
 impl Borders {
+    /// Every coarse cell (not a leaf), by node id, with its key.
+    pub(crate) fn coarse_cells(&self) -> Result<Vec<(u64, TileKey)>, JobError> {
+        let mut out = Vec::new();
+        for id in 0..self.source.nodes.len {
+            let n = self.source.nodes.get(id)?;
+            if n[5] & 1 == 0 {
+                out.push((
+                    id,
+                    TileKey {
+                        first: n[0],
+                        end: n[1],
+                        depth: n[2] as u32,
+                        leaf_begin: n[3] as u32,
+                        leaf_end: n[4] as u32,
+                    },
+                ));
+            }
+        }
+        Ok(out)
+    }
+
     /// The cell's own segments (stored references), as segment ids.
     pub(crate) fn own_segments(&self, key: TileKey) -> Result<Vec<u64>, JobError> {
         let n = self.source.nodes.get(self.source.node(key)?)?;

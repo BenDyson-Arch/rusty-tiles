@@ -117,9 +117,10 @@ pub(crate) enum Mutation {
     NoKeep,
     /// The first cell at this depth (source rank 0) stalls (D's control): every build of its
     /// ladder is refused and P1 reports every border vertex it must remove as stuck, so it
-    /// builds only by keeping them (`hlod::Kept`), when the flag lets it keep them.
+    /// builds only by keeping them (`hlod::Kept`), when the flag lets it keep them. With a
+    /// budget, D's hold plan (`hlod::holds`) admits at most that many concurrent holds.
     #[cfg(test)]
-    KeepAt(u32, bool),
+    KeepAt(u32, bool, Option<u64>),
 }
 
 impl Mutation {
@@ -171,9 +172,18 @@ impl Mutation {
 
     /// Whether a cell whose whole ladder failed keeps the border vertices P1 could not
     /// remove (D, `hlod::Kept`). Only with P1.
+    /// D's budget of concurrent holds, when a test sets one (`KeepAt`).
+    pub(crate) fn hold_budget(self) -> Option<u64> {
+        #[cfg(test)]
+        if let Self::KeepAt(_, _, budget) = self {
+            return budget;
+        }
+        None
+    }
+
     pub(crate) fn keep_stuck(self) -> bool {
         #[cfg(test)]
-        if matches!(self, Self::NoKeep | Self::KeepAt(_, false)) {
+        if matches!(self, Self::NoKeep | Self::KeepAt(_, false, _)) {
             return false;
         }
         self.p1() == super::geometry::p1::Run::On

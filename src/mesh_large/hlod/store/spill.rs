@@ -36,7 +36,10 @@ pub(crate) fn bound(
     height: u32,
     allocation: u64,
 ) -> Option<u64> {
-    let limit = (limit(height) as u64 + 1) * super::super::recovery::INPUTS as u64;
+    // The walk's child window, and D's planned holds (`holds`): a cell's inputs and its
+    // own output.
+    let inputs = super::super::recovery::INPUTS as u64;
+    let limit = (limit(height) as u64 + 1) * inputs + holds(height) * (inputs + 1);
     let all = source_triangles.checked_add(nodes.checked_mul(cap)?)?;
     let triangles = all.min(limit.checked_mul(leaf_cap.max(cap))?);
     triangles
@@ -45,6 +48,12 @@ pub(crate) fn bound(
 }
 pub(crate) fn limit(height: u32) -> usize {
     8 * (height as usize + 1) + 32
+}
+/// D's budget of concurrent holds (`hlod::holds`): as many tiles as the child window
+/// (`limit`), each hold a cell's inputs and its own output.
+pub(crate) fn holds(height: u32) -> u64 {
+    let inputs = super::super::recovery::INPUTS as u64;
+    (limit(height) as u64 + 1) * inputs / (inputs + 1)
 }
 
 pub(crate) enum Held {
