@@ -7362,6 +7362,9 @@ fn a_stalled_cell_keeps_its_border_vertices() {
     assert!(d["rebuilt_cells"].as_u64().unwrap() > 0, "{d}");
     assert!(d["keep_peak_waiting"].as_u64().unwrap() > 0, "{d}");
     assert!(d["keep_peak_held_triangles"].as_u64().unwrap() > 0, "{d}");
+    // The stalled cell is its depth's first in the walk: no chord it splits has an
+    // earlier owner.
+    assert_eq!(d["kept_after_co_owner"], 0, "{d}");
     assert_eq!(d["omitted_proxies"], 0, "{d}");
     published_and_valid("kept border vertices", &dir, work.path());
     let control = stage(&input, &work.path().join("omit"), &run(false)).unwrap();

@@ -686,6 +686,9 @@ pub(crate) struct HlodReport {
     pub keep_peak_waiting: u64,
     #[serde(skip)]
     pub keep_peak_held_triangles: u64,
+    /// D: kept vertices on a chord whose other owner comes earlier in the walk.
+    #[serde(skip)]
+    pub kept_after_co_owner: u64,
     /// Content-less cells (omitted coarse tiles), by cell depth, and of them the sources:
     /// cells whose exact interface (or topology plain simplification cannot reduce) needs
     /// more triangles than the cap. Includes propagation and pass-through cells. A declared
@@ -810,6 +813,8 @@ pub struct HlodDiagnostics {
     /// triangles (outputs and children) they held at once.
     pub keep_peak_waiting: u64,
     pub keep_peak_held_triangles: u64,
+    /// D: kept vertices on a chord whose other owner comes earlier in the walk.
+    pub kept_after_co_owner: u64,
     pub jobs: u64,
     /// Whole-process user+system CPU seconds of the stage (incidence, walk, encoding).
     pub cpu_seconds: Option<f64>,
@@ -1006,6 +1011,8 @@ struct KeepWalk {
     /// (their own outputs and their children, resident or spilled).
     peak_waiting: u64,
     peak_held_triangles: u64,
+    /// Report: kept vertices on a chord whose other owner comes earlier in the walk.
+    kept_after_co_owner: u64,
 }
 
 impl KeepWalk {
@@ -1436,6 +1443,7 @@ pub(crate) fn produce(
     diagnostics.rebuilt_cells = report.rebuilt_cells;
     diagnostics.keep_peak_waiting = report.keep_peak_waiting;
     diagnostics.keep_peak_held_triangles = report.keep_peak_held_triangles;
+    diagnostics.kept_after_co_owner = report.kept_after_co_owner;
     diagnostics.omitted_proxies = report.omitted_proxies;
     diagnostics.omission_sources = report.omission_sources;
     diagnostics.omitted_by_depth = report.omitted_by_depth.clone();
@@ -1463,6 +1471,7 @@ pub(crate) fn produce(
             "rebuilt_cells": diagnostics.rebuilt_cells,
             "keep_peak_waiting": diagnostics.keep_peak_waiting,
             "keep_peak_held_triangles": diagnostics.keep_peak_held_triangles,
+            "kept_after_co_owner": diagnostics.kept_after_co_owner,
             "fold_faces": diagnostics.fold_faces,
             "scratch_peak_bytes": diagnostics.stage_scratch_peak_bytes,
             "scratch_bound_bytes": diagnostics.stage_scratch_bound_bytes,
@@ -3150,6 +3159,11 @@ fn walk(
                     let node = job.borders.node_id(closed.key)?;
                     k.resolved.insert(node);
                     k.kept_vertices += kept.sites.len() as u64;
+                    for site in &kept.sites {
+                        if job.borders.has_earlier_co_owner(closed.key, site.segment)? {
+                            k.kept_after_co_owner += 1;
+                        }
+                    }
                     if !kept.sites.is_empty() {
                         k.sites
                             .entry(closed.key.depth)
@@ -3550,6 +3564,7 @@ fn walk(
     report.rebuilt_cells = keep.rebuilt;
     report.keep_peak_waiting = keep.peak_waiting;
     report.keep_peak_held_triangles = keep.peak_held_triangles;
+    report.kept_after_co_owner = keep.kept_after_co_owner;
     let workers = u32::try_from(jobs).unwrap_or(u32::MAX);
     let utilisation = utilisation::measure(workers, pool_started, pool_ended, &spans);
     report.pass_through = passed;

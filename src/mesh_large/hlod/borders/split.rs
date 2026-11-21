@@ -170,21 +170,47 @@ impl Borders {
         let me = self.source.node(key)?;
         let mut out = BTreeSet::new();
         for id in self.own_segments(key)? {
-            let s = self.segments.get(id)?;
-            if s[0] == s[1] || s[5] == s[4] + 1 {
-                continue;
-            }
-            let mut at = s[8];
-            while at < s[9] {
-                let owner = self.source.owner(at, key.depth)?;
-                let n = self.source.nodes.get(owner)?;
-                if owner != me && n[5] & 1 == 0 {
-                    out.insert(owner);
-                }
-                at = super::graph::next_owner(&self.source.owners, at, s[9], n[4])?;
-            }
+            self.chord_owners(id, key.depth, me, &mut out)?;
         }
         Ok(out.into_iter().collect())
+    }
+
+    /// Whether a coarse owner of `key`'s own segment `segment` other than `key` comes
+    /// before it in the walk. Same-depth cells are disjoint, so node order (by first leaf)
+    /// is their postorder.
+    pub(crate) fn has_earlier_co_owner(
+        &self,
+        key: TileKey,
+        segment: u64,
+    ) -> Result<bool, JobError> {
+        let me = self.source.node(key)?;
+        let mut out = BTreeSet::new();
+        self.chord_owners(segment, key.depth, me, &mut out)?;
+        Ok(out.first().is_some_and(|&n| n < me))
+    }
+
+    /// The coarse owners at `depth` other than `me` of segment `id`, when it is a chord.
+    fn chord_owners(
+        &self,
+        id: u64,
+        depth: u32,
+        me: u64,
+        out: &mut BTreeSet<u64>,
+    ) -> Result<(), JobError> {
+        let s = self.segments.get(id)?;
+        if s[0] == s[1] || s[5] == s[4] + 1 {
+            return Ok(());
+        }
+        let mut at = s[8];
+        while at < s[9] {
+            let owner = self.source.owner(at, depth)?;
+            let n = self.source.nodes.get(owner)?;
+            if owner != me && n[5] & 1 == 0 {
+                out.insert(owner);
+            }
+            at = super::graph::next_owner(&self.source.owners, at, s[9], n[4])?;
+        }
+        Ok(())
     }
 
     /// The source vertices of a stored segment's arc, from its first to its last ordinal,
