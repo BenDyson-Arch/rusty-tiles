@@ -31,7 +31,6 @@ mod encode;
 pub(crate) mod error;
 pub(crate) mod forecast;
 mod geometry;
-mod holds;
 pub(crate) mod interfaces;
 pub(crate) mod recovery;
 mod root_competition;
@@ -687,19 +686,10 @@ pub(crate) struct HlodReport {
     pub keep_peak_waiting: u64,
     #[serde(skip)]
     pub keep_peak_held_triangles: u64,
-    /// D: kept vertices on a chord whose other owner comes earlier in the walk.
+    /// D: stuck vertices it did not keep because their chord has an owner under another
+    /// parent cell that comes earlier in the walk (`Borders::has_earlier_owner_elsewhere`).
     #[serde(skip)]
-    pub kept_after_co_owner: u64,
-    /// D's hold plan (`holds::Plan`): stuck vertices refused on sealed chords, cells not
-    /// admitted, the budget of concurrent holds and the least budget sealing nothing.
-    #[serde(skip)]
-    pub keep_sealed: u64,
-    #[serde(skip)]
-    pub keep_sealed_cells: u64,
-    #[serde(skip)]
-    pub keep_hold_budget: u64,
-    #[serde(skip)]
-    pub keep_plan_peak: u64,
+    pub keep_refused_earlier: u64,
     /// Content-less cells (omitted coarse tiles), by cell depth, and of them the sources:
     /// cells whose exact interface (or topology plain simplification cannot reduce) needs
     /// more triangles than the cap. Includes propagation and pass-through cells. A declared
@@ -824,14 +814,8 @@ pub struct HlodDiagnostics {
     /// triangles (outputs and children) they held at once.
     pub keep_peak_waiting: u64,
     pub keep_peak_held_triangles: u64,
-    /// D: kept vertices on a chord whose other owner comes earlier in the walk.
-    pub kept_after_co_owner: u64,
-    /// D's hold plan: stuck vertices refused on sealed chords, cells not admitted, the
-    /// budget of concurrent holds and the least budget sealing nothing.
-    pub keep_sealed: u64,
-    pub keep_sealed_cells: u64,
-    pub keep_hold_budget: u64,
-    pub keep_plan_peak: u64,
+    /// D: stuck vertices not kept because their chord has an earlier owner elsewhere.
+    pub keep_refused_earlier: u64,
     pub jobs: u64,
     /// Whole-process user+system CPU seconds of the stage (incidence, walk, encoding).
     pub cpu_seconds: Option<f64>,
@@ -970,16 +954,16 @@ type Done = Result<(Vec<TileGeometry>, Finished, appearance::Timing, Kept), JobE
 
 /// D (keep a stuck border vertex): what a cell's build kept and holds for the walk. `sites`:
 /// the border vertices its keep-and-retry rounds kept (empty unless its whole ladder failed
-/// and P1 then built with them); `local`: the splits of its own chords its build used;
-/// `children`: its inputs, held until every co-owner of its chords has built, in case a
-/// co-owner's kept vertex splits one of them and the cell must build again.
+/// and P1 then built with them); `local`: the splits its build read, its own chords' among
+/// them; `children`: its inputs, held until its siblings that share its chords have built,
+/// in case one's kept vertex splits a shared chord and the cell must build again.
 #[derive(Default)]
 pub(crate) struct Kept {
     pub sites: Vec<borders::Site>,
     pub local: borders::Overlay,
     pub children: Vec<TileGeometry>,
-    /// Stuck vertices it could not keep because their chord is sealed (`holds::Plan`).
-    pub sealed: u64,
+    /// Stuck vertices not kept: their chord has an earlier owner under another parent.
+    pub refused_earlier: u64,
 }
 
 /// Keep-and-retry rounds of a cell whose whole ladder failed (D): each keeps the border
@@ -990,14 +974,22 @@ type HeldDone = Result<(Vec<store::spill::Held>, Finished, appearance::Timing, K
 /// Children a built cell holds for a possible second build (D) sit in `ready` under its
 /// walk id with this bit set, so the spill manager may move them to disk like any input.
 const HOLD: u64 = 1 << 63;
-/// A built cell's own output while it waits for its chords' co-owners (D) sits in `ready`
+/// A built cell's own output while it waits for its sibling co-owners (D) sits in `ready`
 /// under its walk id with this bit set, spillable like its held children.
 const WAIT: u64 = 1 << 62;
 
 /// The walk's D state (`Kept`). A cell's first build may keep stuck border vertices (its
-/// sites); a chord's final splits are those of every site its co-owners kept, so a built
-/// cell waits until every co-owner of its chords has built (or never builds), and builds
-/// again only when its chords' final splits differ from those it built with.
+/// sites), but none on a chord with an owner under another parent that comes earlier in the
+/// walk (`Borders::has_earlier_owner_elsewhere`). So a chord's final splits are known once
+/// the owners in its earliest parent have built:
+/// - a built cell waits only for its siblings sharing its chords (its parent waits for
+///   them anyway), and builds again when its chords' final splits differ from those it
+///   built with;
+/// - a cell builds only once its co-owners under other parents that come before it are
+///   final, so its first build reads their splits.
+///
+/// Every wait points to the same parent or earlier in the walk, so none outlasts the
+/// walk's own order.
 #[derive(Default)]
 struct KeepWalk {
     /// Border nodes whose first build is done, or that never build: pass-through cells
@@ -1010,7 +1002,7 @@ struct KeepWalk {
     overlay: borders::Overlay,
     /// Cells by walk id, from their spawn until their result is final.
     spawned: HashMap<u64, Closed>,
-    /// Built cells waiting for their chords' co-owners, by walk id.
+    /// Built cells waiting for their sibling co-owners, by walk id.
     waiting: BTreeMap<u64, Waiting>,
     /// Cells to build again with their final splits (no keep rounds), and those building.
     rebuilds: Vec<u64>,
@@ -1030,48 +1022,18 @@ struct KeepWalk {
     /// (their own outputs and their children, resident or spilled).
     peak_waiting: u64,
     peak_held_triangles: u64,
-    /// Report: kept vertices on a chord whose other owner comes earlier in the walk.
-    kept_after_co_owner: u64,
-    /// Admitted holds not yet released, by the end of their interval (`holds::Plan`).
-    unreleased: std::collections::BTreeSet<(usize, u64)>,
-    /// Report: stuck vertices on sealed chords.
-    sealed: u64,
+    /// Report: stuck vertices on a chord with an earlier owner elsewhere.
+    refused_earlier: u64,
+    /// Cells whose result is final (their chords' splits with it), by node: a cell builds
+    /// once every co-owner under another parent that comes before it is here.
+    final_nodes: std::collections::HashSet<u64>,
+    /// Those earlier co-owners, by walk id, from a cell's close until it builds.
+    earlier: HashMap<u64, Vec<u64>>,
 }
 
 impl KeepWalk {
-    fn new(plan: &holds::Plan) -> Self {
-        Self {
-            unreleased: plan.admitted().map(|(n, i)| (i.end, n)).collect(),
-            ..Default::default()
-        }
-    }
-
-    /// The cell's hold (if planned) is over: later cells may pass its gate.
-    fn release(&mut self, plan: &holds::Plan, node: u64) {
-        if let Some(i) = plan.holds(node) {
-            self.unreleased.remove(&(i.end, node));
-        }
-    }
-
-    /// Whether the cell may spawn: every admitted hold ending before its rank is released.
-    fn gate_open(&self, plan: &holds::Plan, node: u64) -> bool {
-        plan.holds(node).is_none_or(|i| {
-            self.unreleased
-                .first()
-                .is_none_or(|&(end, _)| end >= i.rank)
-        })
-    }
-
-    /// Records the waiting cells' current hold in the report's peaks; the cells holding
-    /// (waiting or building again) never exceed the plan's budget.
-    fn note_holds(
-        &mut self,
-        plan: &holds::Plan,
-        ready: &HashMap<u64, Vec<store::spill::Held>>,
-    ) -> Result<(), JobError> {
-        if (self.waiting.len() + self.rebuilding.len()) as u64 > plan.budget {
-            return Err(state("D's holds exceed the hold plan's budget"));
-        }
+    /// Records the waiting cells' current hold in the report's peaks.
+    fn note_holds(&mut self, ready: &HashMap<u64, Vec<store::spill::Held>>) {
         let triangles: u64 = self
             .waiting
             .keys()
@@ -1082,27 +1044,25 @@ impl KeepWalk {
             .sum();
         self.peak_waiting = self.peak_waiting.max(self.waiting.len() as u64);
         self.peak_held_triangles = self.peak_held_triangles.max(triangles);
-        Ok(())
     }
 }
 
-/// A built cell waiting for its chords' co-owners (`KeepWalk`).
+/// A built cell waiting for its sibling co-owners (`KeepWalk`).
 struct Waiting {
     node: u64,
     co_owners: Vec<u64>,
-    /// The splits of its own chords its build used.
+    /// The splits its build read, its own chords' among them.
     local: borders::Overlay,
     row: Finished,
     timing: appearance::Timing,
 }
 
-/// D: decide every waiting cell whose co-owners have all resolved: its chords' final splits
+/// D: decide every waiting cell whose sibling co-owners have all resolved: its chords' final splits
 /// (from every site on them, `Borders::split`) join the overlay; when they are the splits
 /// its build used, its result is final (released) and its held children dropped, else it
 /// builds again with them.
 fn settle_keep(
     k: &mut KeepWalk,
-    plan: &holds::Plan,
     borders: &borders::Borders,
     ready: &mut HashMap<u64, Vec<store::spill::Held>>,
 ) -> Result<(), JobError> {
@@ -1142,16 +1102,18 @@ fn settle_keep(
                 borders::Overlay::default(),
             )?
         };
-        let same = splits.splits_at(depth) == w.local.splits_at(depth);
+        // Its own chords' final splits against those it built with.
+        let same = own
+            .iter()
+            .all(|&s| splits.split_of(depth, s) == w.local.split_of(depth, s));
         k.overlay.merge(&splits);
-        let _ = w.node;
         let geometry = ready.remove(&(WAIT | id)).unwrap_or_default();
         if same {
             ready.remove(&(HOLD | id));
             let seq = closed.seq;
             k.spawned.remove(&id);
+            k.final_nodes.insert(w.node);
             k.released.push((id, seq, geometry, w.row, w.timing));
-            k.release(plan, w.node);
         } else {
             k.rebuilds.push(id);
             k.rebuilding.insert(id);
@@ -1426,21 +1388,11 @@ pub(crate) fn produce(
         .map(|(path, lease)| audit::Writer::new(path, audit_bound, lease))
         .transpose()?;
     let repeats = RepeatCounter::default();
-    let hold_plan = if settings.mutation.keep_stuck() {
-        let budget = settings
-            .mutation
-            .hold_budget()
-            .unwrap_or_else(|| store::spill::holds(input.captured.tree.stats.height));
-        holds::Plan::new(&borders, budget)?
-    } else {
-        holds::Plan::default()
-    };
     let job = Job {
         input: &input,
         services: &services,
         source: &source,
         borders: &borders,
-        holds: &hold_plan,
         sampling: &sampling,
         check,
         repeats: &repeats,
@@ -1513,11 +1465,7 @@ pub(crate) fn produce(
     diagnostics.rebuilt_cells = report.rebuilt_cells;
     diagnostics.keep_peak_waiting = report.keep_peak_waiting;
     diagnostics.keep_peak_held_triangles = report.keep_peak_held_triangles;
-    diagnostics.kept_after_co_owner = report.kept_after_co_owner;
-    diagnostics.keep_sealed = report.keep_sealed;
-    diagnostics.keep_sealed_cells = report.keep_sealed_cells;
-    diagnostics.keep_hold_budget = report.keep_hold_budget;
-    diagnostics.keep_plan_peak = report.keep_plan_peak;
+    diagnostics.keep_refused_earlier = report.keep_refused_earlier;
     diagnostics.omitted_proxies = report.omitted_proxies;
     diagnostics.omission_sources = report.omission_sources;
     diagnostics.omitted_by_depth = report.omitted_by_depth.clone();
@@ -1545,11 +1493,7 @@ pub(crate) fn produce(
             "rebuilt_cells": diagnostics.rebuilt_cells,
             "keep_peak_waiting": diagnostics.keep_peak_waiting,
             "keep_peak_held_triangles": diagnostics.keep_peak_held_triangles,
-            "kept_after_co_owner": diagnostics.kept_after_co_owner,
-            "keep_sealed": diagnostics.keep_sealed,
-            "keep_sealed_cells": diagnostics.keep_sealed_cells,
-            "keep_hold_budget": diagnostics.keep_hold_budget,
-            "keep_plan_peak": diagnostics.keep_plan_peak,
+            "keep_refused_earlier": diagnostics.keep_refused_earlier,
             "fold_faces": diagnostics.fold_faces,
             "scratch_peak_bytes": diagnostics.stage_scratch_peak_bytes,
             "scratch_bound_bytes": diagnostics.stage_scratch_bound_bytes,
@@ -1846,8 +1790,6 @@ struct Job<'j, 'a> {
     /// S2's source index: bounded queries of each tile's descendant source range.
     source: &'j source_index::SourceIndex,
     borders: &'j borders::Borders,
-    /// D's hold plan: which cells may hold their inputs, and the sealed chords.
-    holds: &'j holds::Plan,
     sampling: &'j error::SamplingPlan,
     check: &'j (dyn Fn() -> Result<(), JobError> + Sync),
     /// Exact repeats the walk skipped (`geometry::Reused`), for the diagnostics.
@@ -2116,17 +2058,18 @@ fn prepare(
     }))
 }
 
-/// The cell `Mutation::KeepAt(depth)` stalls: the first at that depth.
+/// The cell `Mutation::KeepAt(depth, _, rank)` stalls: the one at that depth holding that
+/// source rank.
 #[cfg(test)]
-fn keep_at(closed: &Closed, depth: u32) -> bool {
-    closed.key.depth == depth && closed.key.first == 0
+fn keep_at(closed: &Closed, depth: u32, rank: u64) -> bool {
+    closed.key.depth == depth && closed.key.first <= rank && rank < closed.key.end
 }
 
 /// Whether P1 runs for `closed` (in tests, `KeepAt`'s cell stalls in its first build).
 fn p1_run(mutation: Mutation, closed: &Closed, keep: bool) -> geometry::p1::Run {
     #[cfg(test)]
-    if let Mutation::KeepAt(d, _, _) = mutation {
-        if keep && keep_at(closed, d) {
+    if let Mutation::KeepAt(d, _, rank) = mutation {
+        if keep && keep_at(closed, d, rank) {
             return geometry::p1::Run::Stalled;
         }
     }
@@ -2163,7 +2106,11 @@ fn build_tile(
     keep: bool,
 ) -> Done {
     let (captured, settings, check) = (job.input.captured, &job.input.settings, job.check);
-    let mut kept = Kept::default();
+    // The splits a build reads (its own chords' among them), compared at settle.
+    let mut kept = Kept {
+        local: overlay.clone(),
+        ..Kept::default()
+    };
     let mut contract = job
         .borders
         .contract_with(closed.key, 6 * settings.cap, overlay)?
@@ -2210,7 +2157,7 @@ fn build_tile(
                 let refuse_below = match settings.mutation {
                     Mutation::RefuseBuilds(k) => Some(k),
                     Mutation::P1Unfit | Mutation::P1Exhausted => Some(4),
-                    Mutation::KeepAt(d, _, _) if keep_at(closed, d) => Some(u8::MAX),
+                    Mutation::KeepAt(d, _, rank) if keep_at(closed, d, rank) => Some(u8::MAX),
                     _ => None,
                 };
                 #[cfg(test)]
@@ -2292,15 +2239,14 @@ fn build_tile(
                 .map(|r| r.stuck.clone())
                 .unwrap_or_default();
             let mut sites: std::collections::BTreeSet<borders::Site> = Default::default();
-            let mut sealed: std::collections::BTreeSet<borders::Site> = Default::default();
+            let mut refused_earlier: std::collections::BTreeSet<borders::Site> = Default::default();
             let mut found = None;
             for _ in 0..KEEP_ROUNDS {
                 let before = sites.len();
                 for (_, site) in job.borders.locate(key, &stuck)? {
                     if let Ok(site) = site {
-                        // A sealed chord's owners do not all hold (`holds::Plan`).
-                        if job.holds.sealed(site.segment) {
-                            sealed.insert(site);
+                        if job.borders.has_earlier_owner_elsewhere(key, site.segment)? {
+                            refused_earlier.insert(site);
                         } else {
                             sites.insert(site);
                         }
@@ -2354,7 +2300,7 @@ fn build_tile(
                 stuck = report.stuck;
             }
             let _ = base;
-            kept.sealed = sealed.len() as u64;
+            kept.refused_earlier = refused_earlier.len() as u64;
             if let Some((c, trial, b, report, candidate)) = found {
                 outcome.attempted_topology.add(b.topology);
                 if let Some(audit) = audit {
@@ -2943,7 +2889,7 @@ fn walk(
     // Each built cell's interval on its worker, for the walk's worker use (#343).
     let mut spans: Vec<utilisation::CellSpan> = Vec::new();
     let pool_started = std::time::Instant::now();
-    let keep = std::cell::RefCell::new(KeepWalk::new(job.holds));
+    let keep = std::cell::RefCell::new(KeepWalk::default());
     let outcome = pool.in_place_scope(|scope| -> Result<(), JobError> {
         type Message = (u64, u64, HeldDone, Option<utilisation::CellSpan>);
         let (sender, receiver) = mpsc::channel::<Message>();
@@ -3122,14 +3068,19 @@ fn walk(
                     ));
                     continue;
                 }
-                // D: an admitted hold spawns once every admitted hold ending before its rank
-                // is released (`holds::Plan`).
-                if !keep
-                    .borrow()
-                    .gate_open(job.holds, job.borders.node_id(pending[i].key)?)
+                // D: a cell builds once its chords' co-owners under other parents that come
+                // before it are final, so it reads their splits (`Borders::co_owner_groups`).
                 {
-                    i += 1;
-                    continue;
+                    let id = pending[i].id;
+                    let mut k = keep.borrow_mut();
+                    if let std::collections::hash_map::Entry::Vacant(e) = k.earlier.entry(id) {
+                        e.insert(job.borders.co_owner_groups(pending[i].key)?.1);
+                    }
+                    if !k.earlier[&id].iter().all(|n| k.final_nodes.contains(n)) {
+                        i += 1;
+                        continue;
+                    }
+                    k.earlier.remove(&id);
                 }
                 let merged: u64 = pending[i]
                     .children
@@ -3173,7 +3124,9 @@ fn walk(
                     .map(|g| g.load())
                     .collect::<Result<_, JobError>>()?;
                 keep.borrow_mut().spawned.insert(closed.id, closed.clone());
-                let view = keep.borrow().overlay.without_depth(closed.key.depth);
+                // Its own depth's splits here are final: they come from cells that built
+                // before it, under other parents (`Borders::co_owner_groups`).
+                let view = keep.borrow().overlay.clone();
                 launch(closed, children, view, true, job_lease, inflight);
             }
             Ok(())
@@ -3223,7 +3176,7 @@ fn walk(
          -> Result<(), JobError> {
             let released = {
                 let mut k = keep.borrow_mut();
-                settle_keep(&mut k, job.holds, job.borders, ready)?;
+                settle_keep(&mut k, job.borders, ready)?;
                 std::mem::take(&mut k.released)
             };
             for (id, seq, geometry, row, timing) in released {
@@ -3255,7 +3208,7 @@ fn walk(
                         .spawned
                         .remove(&id)
                         .ok_or_else(|| state("a rebuilt cell was never spawned"))?;
-                    k.release(job.holds, job.borders.node_id(closed.key)?);
+                    k.final_nodes.insert(job.borders.node_id(closed.key)?);
                     k.released.push((id, seq, geometry, row, timing));
                 } else {
                     // A first build: the cell resolves for its chords' co-owners.
@@ -3267,47 +3220,44 @@ fn walk(
                     let node = job.borders.node_id(closed.key)?;
                     k.resolved.insert(node);
                     k.kept_vertices += kept.sites.len() as u64;
-                    k.sealed += kept.sealed;
-                    for site in &kept.sites {
-                        if job.borders.has_earlier_co_owner(closed.key, site.segment)? {
-                            k.kept_after_co_owner += 1;
-                        }
-                    }
+                    k.refused_earlier += kept.refused_earlier;
                     if !kept.sites.is_empty() {
                         k.sites
                             .entry(closed.key.depth)
                             .or_default()
                             .extend(kept.sites.iter().copied());
                     }
-                    // Omitted, or with no planned hold: final now (its chords with
-                    // co-owners are sealed, so no co-owner splits them).
-                    if matches!(row, Finished::Omitted { .. }) || job.holds.holds(node).is_none() {
-                        k.spawned.remove(&id);
-                        k.release(job.holds, node);
-                        k.released.push((id, seq, geometry, row, timing));
-                    } else {
-                        let co_owners = job.borders.co_owners(closed.key)?;
-                        if !kept.children.is_empty() {
-                            ready.insert(
-                                HOLD | id,
-                                kept.children
-                                    .into_iter()
-                                    .map(store::spill::Held::Resident)
-                                    .collect(),
-                            );
+                    match row {
+                        Finished::Omitted { .. } => {
+                            k.spawned.remove(&id);
+                            k.final_nodes.insert(node);
+                            k.released.push((id, seq, geometry, row, timing));
                         }
-                        ready.insert(WAIT | id, geometry);
-                        k.waiting.insert(
-                            id,
-                            Waiting {
-                                node,
-                                co_owners,
-                                local: kept.local,
-                                row,
-                                timing,
-                            },
-                        );
-                        k.note_holds(job.holds, ready)?;
+                        Finished::Row(_) => {
+                            // It waits only for its siblings (its parent waits for them too).
+                            let co_owners = job.borders.co_owner_groups(closed.key)?.0;
+                            if !kept.children.is_empty() {
+                                ready.insert(
+                                    HOLD | id,
+                                    kept.children
+                                        .into_iter()
+                                        .map(store::spill::Held::Resident)
+                                        .collect(),
+                                );
+                            }
+                            ready.insert(WAIT | id, geometry);
+                            k.waiting.insert(
+                                id,
+                                Waiting {
+                                    node,
+                                    co_owners,
+                                    local: kept.local,
+                                    row,
+                                    timing,
+                                },
+                            );
+                            k.note_holds(ready);
+                        }
                     }
                 }
             }
@@ -3491,7 +3441,7 @@ fn walk(
                     })?;
                     let mut k = keep.borrow_mut();
                     k.resolved.insert(node);
-                    k.release(job.holds, node);
+                    k.final_nodes.insert(node);
                     drop(k);
                     *passed += 1;
                     return Ok(());
@@ -3637,9 +3587,7 @@ fn walk(
             }
             drain(&mut ready, &mut finished_rows)?;
             spawn(&mut pending, &mut ready, &mut inflight)?;
-            let unsettled = |k: &KeepWalk| {
-                !k.waiting.is_empty() || !k.rebuilds.is_empty() || !k.unreleased.is_empty()
-            };
+            let unsettled = |k: &KeepWalk| !k.waiting.is_empty() || !k.rebuilds.is_empty();
             while !pending.is_empty() || inflight > 0 || unsettled(&keep.borrow()) {
                 if inflight == 0 {
                     drain(&mut ready, &mut finished_rows)?;
@@ -3678,11 +3626,7 @@ fn walk(
     report.rebuilt_cells = keep.rebuilt;
     report.keep_peak_waiting = keep.peak_waiting;
     report.keep_peak_held_triangles = keep.peak_held_triangles;
-    report.kept_after_co_owner = keep.kept_after_co_owner;
-    report.keep_sealed = keep.sealed;
-    report.keep_sealed_cells = job.holds.sealed_cells;
-    report.keep_hold_budget = job.holds.budget;
-    report.keep_plan_peak = job.holds.peak;
+    report.keep_refused_earlier = keep.refused_earlier;
     let workers = u32::try_from(jobs).unwrap_or(u32::MAX);
     let utilisation = utilisation::measure(workers, pool_started, pool_ended, &spans);
     report.pass_through = passed;

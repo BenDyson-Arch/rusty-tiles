@@ -36,10 +36,7 @@ pub(crate) fn bound(
     height: u32,
     allocation: u64,
 ) -> Option<u64> {
-    // The walk's child window, and D's planned holds (`holds`): a cell's inputs and its
-    // own output.
-    let inputs = super::super::recovery::INPUTS as u64;
-    let limit = (limit(height) as u64 + 1) * inputs + holds(height) * (inputs + 1);
+    let limit = (limit(height) as u64 + 1) * super::super::recovery::INPUTS as u64;
     let all = source_triangles.checked_add(nodes.checked_mul(cap)?)?;
     let triangles = all.min(limit.checked_mul(leaf_cap.max(cap))?);
     triangles
@@ -48,12 +45,6 @@ pub(crate) fn bound(
 }
 pub(crate) fn limit(height: u32) -> usize {
     8 * (height as usize + 1) + 32
-}
-/// D's budget of concurrent holds (`hlod::holds`): as many tiles as the child window
-/// (`limit`), each hold a cell's inputs and its own output.
-pub(crate) fn holds(height: u32) -> u64 {
-    let inputs = super::super::recovery::INPUTS as u64;
-    (limit(height) as u64 + 1) * inputs / (inputs + 1)
 }
 
 pub(crate) enum Held {
@@ -393,9 +384,7 @@ mod tests {
     fn billion_scale_sibling_storage_depends_on_height_and_cap() {
         let at = |n| bound(n, n / 8192, 8192, 8192, 32, 4096).unwrap();
         assert_eq!(at(500_000_000), at(1_000_000_000));
-        // The child window (under 8 GiB) and D's planned holds, as many tiles again.
-        assert!(at(1_000_000_000) < 16 << 30);
+        assert!(at(1_000_000_000) < 8 << 30);
         assert_eq!(limit(32), 296);
-        assert_eq!(holds(32), 297 * 8 / 9);
     }
 }

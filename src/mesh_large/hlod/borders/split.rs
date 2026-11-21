@@ -79,31 +79,16 @@ impl Overlay {
             .iter()
             .flat_map(|(&(d, _), s)| s.kept.iter().map(move |&k| (d, k)))
     }
+    /// The split of one segment at `depth`, if any.
+    pub(crate) fn split_of(&self, depth: u32, segment: u64) -> Option<&Split> {
+        self.splits.get(&(depth, segment))
+    }
     /// The splits at `depth`, by segment.
     pub(crate) fn splits_at(&self, depth: u32) -> Vec<(u64, &Split)> {
         self.splits
             .range((depth, 0)..=(depth, u64::MAX))
             .map(|(&(_, s), split)| (s, split))
             .collect()
-    }
-    /// This overlay without the splits at `depth` (a cell's first build reads only finer
-    /// splits: its own depth's are not final until its co-owners have built).
-    pub(crate) fn without_depth(&self, depth: u32) -> Overlay {
-        Overlay {
-            splits: self
-                .splits
-                .iter()
-                .filter(|(&(d, _), _)| d != depth)
-                .map(|(&k, v)| (k, v.clone()))
-                .collect(),
-            maps: self
-                .maps
-                .iter()
-                .filter(|(&(d, _), _)| d != depth)
-                .map(|(&k, &v)| (k, v))
-                .collect(),
-            finer: self.finer.clone(),
-        }
     }
     pub(super) fn pieces(&self, depth: u32, segment: u64) -> Option<&[[u64; 12]]> {
         self.splits.get(&(depth, segment)).map(|s| &s.pieces[..])
@@ -149,27 +134,6 @@ impl Overlay {
 }
 
 impl Borders {
-    /// Every coarse cell (not a leaf), by node id, with its key.
-    pub(crate) fn coarse_cells(&self) -> Result<Vec<(u64, TileKey)>, JobError> {
-        let mut out = Vec::new();
-        for id in 0..self.source.nodes.len {
-            let n = self.source.nodes.get(id)?;
-            if n[5] & 1 == 0 {
-                out.push((
-                    id,
-                    TileKey {
-                        first: n[0],
-                        end: n[1],
-                        depth: narrow(n[2])?,
-                        leaf_begin: narrow(n[3])?,
-                        leaf_end: narrow(n[4])?,
-                    },
-                ));
-            }
-        }
-        Ok(out)
-    }
-
     /// The cell's own segments (stored references), as segment ids.
     pub(crate) fn own_segments(&self, key: TileKey) -> Result<Vec<u64>, JobError> {
         let n = self.source.nodes.get(self.source.node(key)?)?;
@@ -196,18 +160,52 @@ impl Borders {
         Ok(out.into_iter().collect())
     }
 
-    /// Whether a coarse owner of `key`'s own segment `segment` other than `key` comes
-    /// before it in the walk. Same-depth cells are disjoint, so node order (by first leaf)
-    /// is their postorder.
-    pub(crate) fn has_earlier_co_owner(
+    /// Whether `segment`, one of `key`'s own, has a coarse owner under another parent cell
+    /// that comes before `key` in the walk. D keeps no vertex on such a chord: that owner may
+    /// already be final, and waiting for it to build again would stall the walk.
+    pub(crate) fn has_earlier_owner_elsewhere(
         &self,
         key: TileKey,
         segment: u64,
     ) -> Result<bool, JobError> {
         let me = self.source.node(key)?;
-        let mut out = BTreeSet::new();
-        self.chord_owners(segment, key.depth, me, &mut out)?;
-        Ok(out.first().is_some_and(|&n| n < me))
+        let mut owners = BTreeSet::new();
+        self.chord_owners(segment, key.depth, me, &mut owners)?;
+        let parent = self.parent(me)?;
+        for o in owners.range(..me) {
+            if self.parent(*o)? != parent {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    /// `key`'s chord co-owners (`co_owners`) split by where D waits for them: its siblings
+    /// (same parent cell), whose final splits it settles with before its parent builds; and
+    /// owners under another parent that come before it in the walk, which must be final
+    /// before it builds. Owners under another parent that come later wait for it instead.
+    pub(crate) fn co_owner_groups(&self, key: TileKey) -> Result<(Vec<u64>, Vec<u64>), JobError> {
+        let me = self.source.node(key)?;
+        let parent = self.parent(me)?;
+        let (mut siblings, mut earlier) = (Vec::new(), Vec::new());
+        for o in self.co_owners(key)? {
+            if self.parent(o)? == parent {
+                siblings.push(o);
+            } else if o < me {
+                earlier.push(o);
+            }
+        }
+        Ok((siblings, earlier))
+    }
+
+    /// A node's parent cell (the root is its own).
+    fn parent(&self, node: u64) -> Result<u64, JobError> {
+        let row = self.source.nodes.get(node)?;
+        let depth = usize::try_from(row[2]).map_err(|_| state("a node depth exceeds usize"))?;
+        if depth == 0 {
+            return Ok(node);
+        }
+        Ok(self.source.leaves.get(row[3])?[depth])
     }
 
     /// The coarse owners at `depth` other than `me` of segment `id`, when it is a chord.

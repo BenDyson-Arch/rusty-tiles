@@ -2,7 +2,7 @@
 //! bytes by an independent census (its own GLB decoder; interfaces derived from the decoded
 //! leaves alone, never from producer records), plus the controls that must fail.
 mod border_census;
-use super::{error::Schedule, holds, KeepWalk, Mutation, Settings};
+use super::{error::Schedule, Mutation, Settings};
 use crate::{
     content_integrity::meshopt::{self as codec, Mode},
     mesh_large::{
@@ -7327,6 +7327,47 @@ fn published_root_covers_an_original_edge_in_the_delivered_glb() {
     );
 }
 
+/// D keeps no vertex on a chord that has an owner under another parent cell earlier in the
+/// walk (it may already be final, and waiting to rebuild it would stall the walk); it keeps
+/// those on chords shared only with its siblings and later cells. The walk's result is the
+/// same for any number of workers.
+#[test]
+fn a_stalled_cell_keeps_no_vertex_on_a_chord_with_an_earlier_owner_elsewhere() {
+    let work = tempfile::tempdir().unwrap();
+    let source = grid(
+        (64, 64),
+        (0., 100.),
+        (0., 100.),
+        &|_, _| 0.,
+        [0.4, 0.5, 0.3, 1.],
+    );
+    let input = write_gltf(&work.path().join("src"), &[source]);
+    // The last depth-1 cell's first child (source rank 6,144 of 8,192): it borders the
+    // depth-1 cells before it, and its siblings.
+    let run = |jobs| Run {
+        leaf_triangles: 64,
+        cap: 100,
+        jobs,
+        mutation: Mutation::KeepAt(2, true, 6144),
+        budget: Some(4 << 30),
+        ..s2_run()
+    };
+    let diagnostics = |dir: &Path| -> Value {
+        let resources: Value =
+            serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
+        resources["hlod"]["diagnostics"].clone()
+    };
+    let many = stage(&input, &work.path().join("many"), &run(4)).unwrap();
+    let d = diagnostics(&many);
+    assert!(d["kept_vertices"].as_u64().unwrap() > 0, "{d}");
+    assert!(d["keep_refused_earlier"].as_u64().unwrap() > 0, "{d}");
+    assert_eq!(d["omitted_proxies"], 0, "{d}");
+    published_and_valid("refused earlier chords", &many, work.path());
+    let one = stage(&input, &work.path().join("one"), &run(1)).unwrap();
+    assert!(published(&one) == published(&many));
+    assert!(audit_semantics(&one) == audit_semantics(&many));
+}
+
 /// D: a cell whose whole ladder fails keeps the border vertices P1 could not remove,
 /// splitting the chords it shares; the co-owners of those chords build again with the same
 /// pieces, so the archive validates with exact seams. Without keeping them the same cell is
@@ -7347,7 +7388,7 @@ fn a_stalled_cell_keeps_its_border_vertices() {
     let run = |keep| Run {
         leaf_triangles: 64,
         cap: 100,
-        mutation: Mutation::KeepAt(1, keep, None),
+        mutation: Mutation::KeepAt(1, keep, 0),
         budget: Some(4 << 30),
         ..s2_run()
     };
@@ -7364,134 +7405,11 @@ fn a_stalled_cell_keeps_its_border_vertices() {
     assert!(d["keep_peak_held_triangles"].as_u64().unwrap() > 0, "{d}");
     // The stalled cell is its depth's first in the walk: no chord it splits has an
     // earlier owner.
-    assert_eq!(d["kept_after_co_owner"], 0, "{d}");
+    assert_eq!(d["keep_refused_earlier"], 0, "{d}");
     assert_eq!(d["omitted_proxies"], 0, "{d}");
     published_and_valid("kept border vertices", &dir, work.path());
-    // The same archive with one worker (the hold plan and its gate are worker-independent).
-    let one = stage(
-        &input,
-        &work.path().join("keep-one"),
-        &Run {
-            jobs: 1,
-            ..run(true)
-        },
-    )
-    .unwrap();
-    assert!(published(&one) == published(&dir));
-    assert!(audit_semantics(&one) == audit_semantics(&dir));
     let control = stage(&input, &work.path().join("omit"), &run(false)).unwrap();
     let c = diagnostics(&control);
     assert_eq!(c["kept_vertices"], 0, "{c}");
     assert!(c["omitted_proxies"].as_u64().unwrap() > 0, "{c}");
-}
-
-/// D's gate: whatever order cells spawn and holds end in, the cells holding never exceed the
-/// plan's budget and the walk never waits on itself. A cell (node id = its rank) spawns
-/// when its gate is open; an admitted cell then holds until, at the earliest, every cell up
-/// to the end of its interval has spawned (an adversary picks among the enabled steps).
-#[test]
-fn the_hold_gate_keeps_any_schedule_within_the_budget() {
-    let mut x = 0x9e3779b97f4a7c15u64;
-    let mut next = |m: u64| {
-        x ^= x << 13;
-        x ^= x >> 7;
-        x ^= x << 17;
-        x % m.max(1)
-    };
-    for _ in 0..300 {
-        let ranks = 2 + next(40) as usize;
-        let mut cells: Vec<(u64, holds::Interval)> = Vec::new();
-        for rank in 0..ranks {
-            if next(4) > 0 {
-                let end = rank + next((ranks - rank).min(12) as u64) as usize;
-                cells.push((rank as u64, holds::Interval { rank, end }));
-            }
-        }
-        let budget = next(5);
-        let plan = holds::Plan::from_intervals(&cells, ranks, budget);
-        let mut k = KeepWalk::new(&plan);
-        let mut spawned = vec![false; ranks];
-        let mut holding: Vec<u64> = Vec::new();
-        loop {
-            let spawn: Vec<u64> = (0..ranks as u64)
-                .filter(|&c| !spawned[c as usize] && k.gate_open(&plan, c))
-                .collect();
-            let release: Vec<u64> = holding
-                .iter()
-                .copied()
-                .filter(|&h| spawned[..=plan.holds(h).unwrap().end].iter().all(|&s| s))
-                .collect();
-            if spawn.is_empty() && release.is_empty() {
-                assert!(spawned.iter().all(|&s| s) && holding.is_empty(), "stuck");
-                break;
-            }
-            let pick = next((spawn.len() + release.len()) as u64) as usize;
-            if pick < spawn.len() {
-                let c = spawn[pick];
-                spawned[c as usize] = true;
-                if plan.holds(c).is_some() {
-                    holding.push(c);
-                } else {
-                    k.release(&plan, c);
-                }
-            } else {
-                let h = release[pick - spawn.len()];
-                holding.retain(|&c| c != h);
-                k.release(&plan, h);
-            }
-            assert!(
-                holding.len() as u64 <= budget,
-                "{} > {budget}",
-                holding.len()
-            );
-        }
-    }
-}
-
-/// D's hold plan: with a budget of holds too small for every cell, the cells it cannot
-/// admit seal their chords; the stalled cell keeps no vertex on a sealed chord, holds never
-/// exceed the budget, and the archive is the same for any number of workers.
-#[test]
-fn a_hold_budget_seals_chords_for_any_number_of_workers() {
-    let work = tempfile::tempdir().unwrap();
-    let source = grid(
-        (32, 32),
-        (0., 100.),
-        (0., 100.),
-        &|_, _| 0.,
-        [0.4, 0.5, 0.3, 1.],
-    );
-    let input = write_gltf(&work.path().join("src"), &[source]);
-    let diagnostics = |dir: &Path| -> Value {
-        let resources: Value =
-            serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
-        resources["hlod"]["diagnostics"].clone()
-    };
-    for budget in [0, 1] {
-        let run = |jobs| Run {
-            leaf_triangles: 64,
-            cap: 100,
-            jobs,
-            mutation: Mutation::KeepAt(1, true, Some(budget)),
-            budget: Some(4 << 30),
-            ..s2_run()
-        };
-        let one = stage(&input, &work.path().join(format!("one-{budget}")), &run(1)).unwrap();
-        let many = stage(&input, &work.path().join(format!("many-{budget}")), &run(4)).unwrap();
-        assert!(published(&one) == published(&many), "budget {budget}");
-        assert!(
-            audit_semantics(&one) == audit_semantics(&many),
-            "budget {budget}"
-        );
-        let d = diagnostics(&many);
-        assert_eq!(d["keep_hold_budget"], budget, "{d}");
-        assert!(d["keep_plan_peak"].as_u64().unwrap() > budget, "{d}");
-        assert!(d["keep_sealed_cells"].as_u64().unwrap() > 0, "{d}");
-        assert!(d["keep_sealed"].as_u64().unwrap() > 0, "{d}");
-        assert!(d["keep_peak_waiting"].as_u64().unwrap() <= budget, "{d}");
-        if budget == 0 {
-            assert_eq!(d["rebuilt_cells"], 0, "{d}");
-        }
-        published_and_valid(&format!("hold budget {budget}"), &many, work.path());
-    }
 }

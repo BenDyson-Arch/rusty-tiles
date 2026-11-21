@@ -12,12 +12,10 @@
 
 ### Changed
 
-- HLOD: a built cell holds its inputs until the other owners of its chords have built (D),
-  within a budget planned before the walk: cells are admitted in postorder while the holds
-  that can overlap stay within the budget, and an admitted cell starts only after every
-  hold ending before it is released, so the bound holds for any number of workers. A cell
-  the plan cannot admit seals its chords (no vertex is kept on them). The held-spill bound,
-  and with it the stage's scratch forecast, now covers the budget beside the walk's child
-  window. Diagnostics report the budget, the least budget that seals nothing, sealed cells
-  and refused vertices (`keep_hold_budget`, `keep_plan_peak`, `keep_sealed_cells`,
-  `keep_sealed`) and the hold peaks (`keep_peak_waiting`, `keep_peak_held_triangles`).
+- HLOD: D keeps no vertex on a chord that has an owner under another parent cell earlier in
+  the walk (`keep_refused_earlier` counts them). A built cell then holds its inputs only
+  until its siblings sharing its chords have built, which its parent waits for anyway, and
+  a cell builds once its earlier co-owners under other parents are final, reading their
+  splits. No wait outlasts the walk's own order, so the walk keeps its parallelism and the
+  held tiles stay within the child window's spill bound. Diagnostics report the hold
+  peaks (`keep_peak_waiting`, `keep_peak_held_triangles`).
