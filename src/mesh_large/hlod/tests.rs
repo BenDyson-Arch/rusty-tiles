@@ -7327,6 +7327,27 @@ fn published_root_covers_an_original_edge_in_the_delivered_glb() {
     );
 }
 
+/// Every internal cell's row may queue for postorder writing (a built cell waits for its
+/// siblings, D): the stage charges each row's bound. Its strings fit their allowance at the
+/// largest keys, and the bound stays a few kilobytes.
+#[test]
+fn a_queued_row_is_charged_within_its_bound() {
+    let key = super::store::TileKey {
+        first: u64::MAX,
+        end: u64::MAX,
+        depth: u32::MAX,
+        leaf_begin: 0,
+        leaf_end: 0,
+    };
+    assert!(key.uri().len() <= 64, "{}", key.uri());
+    let bound = super::queued_row_bytes();
+    assert!(bound < 8 << 10, "{bound}");
+    assert_eq!(
+        super::queued_rows_bytes(1000),
+        1000 * bound + 264 * std::mem::size_of::<super::store::TileKey>() as u64
+    );
+}
+
 /// D keeps no vertex on a chord that has an owner under another parent cell earlier in the
 /// walk (it may already be final, and waiting to rebuild it would stall the walk); it keeps
 /// those on chords shared only with its siblings and later cells. The walk's result is the
@@ -7361,6 +7382,11 @@ fn a_stalled_cell_keeps_no_vertex_on_a_chord_with_an_earlier_owner_elsewhere() {
     let d = diagnostics(&many);
     assert!(d["kept_vertices"].as_u64().unwrap() > 0, "{d}");
     assert!(d["keep_refused_earlier"].as_u64().unwrap() > 0, "{d}");
+    assert_eq!(d["keep_outcomes"], json!({"built": 1}), "{d}");
+    assert_eq!(
+        d["keep_records"][0]["refusedEarlier"], d["keep_refused_earlier"],
+        "{d}"
+    );
     assert_eq!(d["omitted_proxies"], 0, "{d}");
     published_and_valid("refused earlier chords", &many, work.path());
     let one = stage(&input, &work.path().join("one"), &run(1)).unwrap();
@@ -7406,6 +7432,8 @@ fn a_stalled_cell_keeps_its_border_vertices() {
     // The stalled cell is its depth's first in the walk: no chord it splits has an
     // earlier owner.
     assert_eq!(d["keep_refused_earlier"], 0, "{d}");
+    assert_eq!(d["keep_outcomes"], json!({"built": 1}), "{d}");
+    assert_eq!(d["keep_records"][0]["kept"], d["kept_vertices"], "{d}");
     assert_eq!(d["omitted_proxies"], 0, "{d}");
     published_and_valid("kept border vertices", &dir, work.path());
     let control = stage(&input, &work.path().join("omit"), &run(false)).unwrap();

@@ -115,9 +115,31 @@ const STAGE_RESERVE: u64 = 256 << 20;
 /// The 1,700 coefficient is geometry workspace; the complete-parent controls report
 /// both it and the combined live contract cost, with meshopt allocations counted.
 const JOB_BYTES_PER_TRIANGLE: u64 = 1700;
-/// Finished coarse rows held while an earlier tile is still being built (`walk`); each is a
-/// few hundred bytes, charged within `STAGE_RESERVE`.
-const ROW_WINDOW: usize = 1024;
+/// Memory of one finished row queued for postorder writing (`walk`): its `Finished` entry
+/// with the boxed row or omission parts it owns (a P1 record, whose stuck list is cleared,
+/// a topology receipt, at most `INPUTS²` frontier keys), its map node and its two strings
+/// (a payload path under 64 bytes and a SHA-256 hex digest). A row waits for every earlier
+/// tile, and a built cell for its siblings (D), so up to every internal cell's row can
+/// queue: the stage charges that many (`queued_rows_bytes`). The recovered root's
+/// declaration (at most `OMITTED` cells) is charged once beside them.
+fn queued_row_bytes() -> u64 {
+    use std::mem::size_of;
+    (size_of::<Finished>()
+        + size_of::<HlodRow>()
+        + size_of::<geometry::p1::Report>()
+        + size_of::<geometry::TopologyReceipt>()
+        + recovery::INPUTS * recovery::INPUTS * size_of::<TileKey>()
+        + 64
+        + 64
+        + 64) as u64
+}
+
+/// Every internal cell's queued row (`queued_row_bytes`) and one root declaration.
+fn queued_rows_bytes(internal: u64) -> u64 {
+    internal.saturating_mul(queued_row_bytes()).saturating_add(
+        (recovery::OMITTED + recovery::INPUTS) as u64 * std::mem::size_of::<TileKey>() as u64,
+    )
+}
 /// Encoded GLB, compression scratch and decoded check copy of one coarse tile.
 const JOB_ENCODE_BYTES: u64 = 16 << 20;
 
@@ -159,6 +181,28 @@ pub struct P1Record {
     pub depth: u32,
     #[serde(flatten)]
     pub(crate) report: geometry::p1::Report,
+}
+
+/// D: a cell whose whole ladder failed ran keep rounds (`KEEP_ROUNDS`). Deterministic, so
+/// runs compare exactly.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeepRecord {
+    /// The cell's first node and cell depth.
+    pub first: u64,
+    pub depth: u32,
+    /// How the rounds ended: `built`; `noStuck` (P1 left no stuck vertex: it proposed
+    /// nothing or a refused proposal); `noNewSite` (every stuck vertex left was refused:
+    /// see the counts); `contractOverCap`; `assessmentRefused` (P1 proposed with the kept
+    /// vertices and assessment refused it); `roundsExhausted`.
+    pub outcome: &'static str,
+    pub rounds: u32,
+    /// Vertices kept, and stuck vertices refused: on a chord with an earlier owner under
+    /// another parent, by `Borders::locate`, or past the split tolerance.
+    pub kept: u64,
+    pub refused_earlier: u64,
+    pub refused_located: u64,
+    pub refused_tolerance: u64,
 }
 
 /// A tile declaring `asset.extras.rustyTiles.lastResort` (D1/D11 amendment A2).
@@ -483,6 +527,7 @@ pub(crate) fn plan(
     let fixed = captured
         .resident_bytes()
         .saturating_add(STAGE_RESERVE)
+        .saturating_add(queued_rows_bytes(captured.tree.stats.internal))
         .saturating_add(captured.images.len() as u64 * super::image_tiles::IMAGE_METADATA_BYTES)
         .saturating_add(source_index::build_bytes(captured.triangles.len()))
         .saturating_add(borders::WALK_CACHE_BYTES)
@@ -690,6 +735,9 @@ pub(crate) struct HlodReport {
     /// parent cell that comes earlier in the walk (`Borders::has_earlier_owner_elsewhere`).
     #[serde(skip)]
     pub keep_refused_earlier: u64,
+    /// D: every cell's keep rounds (`KeepRecord`); reported in the diagnostics.
+    #[serde(skip)]
+    pub keep_records: Vec<KeepRecord>,
     /// Content-less cells (omitted coarse tiles), by cell depth, and of them the sources:
     /// cells whose exact interface (or topology plain simplification cannot reduce) needs
     /// more triangles than the cap. Includes propagation and pass-through cells. A declared
@@ -816,6 +864,9 @@ pub struct HlodDiagnostics {
     pub keep_peak_held_triangles: u64,
     /// D: stuck vertices not kept because their chord has an earlier owner elsewhere.
     pub keep_refused_earlier: u64,
+    /// D: every cell's keep rounds (`KeepRecord`), and their count by outcome.
+    pub keep_records: Vec<KeepRecord>,
+    pub keep_outcomes: BTreeMap<&'static str, u64>,
     pub jobs: u64,
     /// Whole-process user+system CPU seconds of the stage (incidence, walk, encoding).
     pub cpu_seconds: Option<f64>,
@@ -964,6 +1015,8 @@ pub(crate) struct Kept {
     pub children: Vec<TileGeometry>,
     /// Stuck vertices not kept: their chord has an earlier owner under another parent.
     pub refused_earlier: u64,
+    /// Its keep rounds, when they ran.
+    pub record: Option<KeepRecord>,
 }
 
 /// Keep-and-retry rounds of a cell whose whole ladder failed (D): each keeps the border
@@ -1029,6 +1082,8 @@ struct KeepWalk {
     final_nodes: std::collections::HashSet<u64>,
     /// Those earlier co-owners, by walk id, from a cell's close until it builds.
     earlier: HashMap<u64, Vec<u64>>,
+    /// Report: every first build's keep rounds (`KeepRecord`), by walk id for postorder.
+    records: Vec<KeepRecord>,
 }
 
 impl KeepWalk {
@@ -1466,6 +1521,10 @@ pub(crate) fn produce(
     diagnostics.keep_peak_waiting = report.keep_peak_waiting;
     diagnostics.keep_peak_held_triangles = report.keep_peak_held_triangles;
     diagnostics.keep_refused_earlier = report.keep_refused_earlier;
+    diagnostics.keep_records = report.keep_records.clone();
+    for r in &report.keep_records {
+        *diagnostics.keep_outcomes.entry(r.outcome).or_default() += 1;
+    }
     diagnostics.omitted_proxies = report.omitted_proxies;
     diagnostics.omission_sources = report.omission_sources;
     diagnostics.omitted_by_depth = report.omitted_by_depth.clone();
@@ -1494,6 +1553,8 @@ pub(crate) fn produce(
             "keep_peak_waiting": diagnostics.keep_peak_waiting,
             "keep_peak_held_triangles": diagnostics.keep_peak_held_triangles,
             "keep_refused_earlier": diagnostics.keep_refused_earlier,
+            "keep_records": diagnostics.keep_records,
+            "keep_outcomes": diagnostics.keep_outcomes,
             "fold_faces": diagnostics.fold_faces,
             "scratch_peak_bytes": diagnostics.stage_scratch_peak_bytes,
             "scratch_bound_bytes": diagnostics.stage_scratch_bound_bytes,
@@ -2240,31 +2301,50 @@ fn build_tile(
                 .unwrap_or_default();
             let mut sites: std::collections::BTreeSet<borders::Site> = Default::default();
             let mut refused_earlier: std::collections::BTreeSet<borders::Site> = Default::default();
+            let mut refused_located: std::collections::BTreeSet<interfaces::Key> =
+                Default::default();
+            let mut refused_tolerance: std::collections::BTreeSet<borders::Site> =
+                Default::default();
+            let (mut ended, mut rounds) = ("roundsExhausted", 0u32);
             let mut found = None;
             for _ in 0..KEEP_ROUNDS {
+                rounds += 1;
                 let before = sites.len();
-                for (_, site) in job.borders.locate(key, &stuck)? {
-                    if let Ok(site) = site {
-                        if job.borders.has_earlier_owner_elsewhere(key, site.segment)? {
+                for (k, site) in job.borders.locate(key, &stuck)? {
+                    match site {
+                        Ok(site)
+                            if job.borders.has_earlier_owner_elsewhere(key, site.segment)? =>
+                        {
                             refused_earlier.insert(site);
-                        } else {
+                        }
+                        Ok(site) => {
                             sites.insert(site);
+                        }
+                        Err(_) => {
+                            refused_located.insert(k);
                         }
                     }
                 }
                 if sites.len() == before {
+                    ended = if stuck.is_empty() {
+                        "noStuck"
+                    } else {
+                        "noNewSite"
+                    };
                     break;
                 }
                 let wanted = BTreeMap::from([(depth, sites.clone())]);
                 let (trial, dropped) = job.borders.split(&wanted, overlay.clone())?;
                 for (_, site) in dropped {
                     sites.remove(&site);
+                    refused_tolerance.insert(site);
                 }
                 let Some(c) = job
                     .borders
                     .contract_with(key, 6 * cap, &trial)?
                     .filter(|c| c.minimum_triangles() <= cap)
                 else {
+                    ended = "contractOverCap";
                     break;
                 };
                 let (proposal, mut report) = geometry::p1_on(
@@ -2294,13 +2374,33 @@ fn build_tile(
                     None => None,
                 };
                 if let Some(b) = built {
+                    ended = "built";
                     found = Some((c, trial, b, report, candidate));
+                    break;
+                }
+                if report.outcome == "refused" {
+                    // A refused proposal leaves no stuck vertex: the next round would end.
+                    ended = "assessmentRefused";
                     break;
                 }
                 stuck = report.stuck;
             }
             let _ = base;
             kept.refused_earlier = refused_earlier.len() as u64;
+            kept.record = Some(KeepRecord {
+                first: key.first,
+                depth,
+                outcome: ended,
+                rounds,
+                kept: if found.is_some() {
+                    sites.len() as u64
+                } else {
+                    0
+                },
+                refused_earlier: refused_earlier.len() as u64,
+                refused_located: refused_located.len() as u64,
+                refused_tolerance: refused_tolerance.len() as u64,
+            });
             if let Some((c, trial, b, report, candidate)) = found {
                 outcome.attempted_topology.add(b.topology);
                 if let Some(audit) = audit {
@@ -2400,7 +2500,10 @@ fn build_tile(
                 })
                 .collect::<Result<_, JobError>>()?,
             topology: Box::new(outcome.attempted_topology),
-            p1: outcome.p1.map(Box::new),
+            p1: outcome.p1.map(|mut r| {
+                r.stuck = Vec::new();
+                Box::new(r)
+            }),
             topology_attempts,
             root_search: root_competition
                 .as_ref()
@@ -2603,7 +2706,10 @@ fn build_tile(
             .retry
             .filter(|_| built.last_resort)
             .map(|r| (r, refused)),
-        p1: outcome.p1,
+        p1: outcome.p1.map(|mut r| {
+            r.stuck = Vec::new();
+            r
+        }),
         fold_faces: if last_resort.is_some() { fold_faces } else { 0 },
         declared_folds: last_resort.is_some(),
         carries_folds,
@@ -3221,6 +3327,7 @@ fn walk(
                     k.resolved.insert(node);
                     k.kept_vertices += kept.sites.len() as u64;
                     k.refused_earlier += kept.refused_earlier;
+                    k.records.extend(kept.record.clone());
                     if !kept.sites.is_empty() {
                         k.sites
                             .entry(closed.key.depth)
@@ -3497,13 +3604,13 @@ fn walk(
             for node in nodes.by_ref() {
                 let node = node?;
                 check()?;
-                // Finished rows wait for every earlier tile in postorder: while too many wait,
-                // read nothing further and let in-flight jobs finish. No earlier tile needs
-                // a leaf not yet read (it is closed), so this never blocks the walk.
-                while (finished_rows.len() >= ROW_WINDOW
-                    || ready.len() + pending.len() + inflight >= ready_limit)
-                    && inflight > 0
-                {
+                // While the child window is full, read nothing further and let in-flight jobs
+                // finish. No earlier tile needs a leaf not yet read (it is closed), so this
+                // never blocks the walk. Finished rows waiting for earlier tiles are charged
+                // for every internal cell (`queued_rows_bytes`): they never stop the reading,
+                // since a built cell waiting for its siblings (D) can hold back the rows of
+                // their whole subtrees.
+                while ready.len() + pending.len() + inflight >= ready_limit && inflight > 0 {
                     receive(&mut pending, &mut ready, &mut inflight, &mut finished_rows)?;
                     flush(&mut finished_rows, &mut publish, &mut written)?;
                 }
@@ -3627,6 +3734,9 @@ fn walk(
     report.keep_peak_waiting = keep.peak_waiting;
     report.keep_peak_held_triangles = keep.peak_held_triangles;
     report.keep_refused_earlier = keep.refused_earlier;
+    let mut records = keep.records;
+    records.sort_by_key(|r| (r.first, r.depth));
+    report.keep_records = records;
     let workers = u32::try_from(jobs).unwrap_or(u32::MAX);
     let utilisation = utilisation::measure(workers, pool_started, pool_ended, &spans);
     report.pass_through = passed;
