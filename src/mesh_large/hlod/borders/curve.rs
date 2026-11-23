@@ -135,6 +135,40 @@ pub(super) fn shortcuts(
     Ok(())
 }
 
+/// The certificate `shortcuts` gives a chord from ordinal `first` to `last`: the largest
+/// distance of a source point from the chord at its ordinal, plus the same rounding
+/// allowance, rounded outward; 0 for one source edge. For a split piece (`split`), whose
+/// endpoints are fixed rather than chosen.
+pub(super) fn certify(
+    first: u64,
+    last: u64,
+    point: &mut impl FnMut(u64) -> Result<[f32; 3], JobError>,
+) -> Result<f64, JobError> {
+    if last <= first {
+        return Err(state("invalid split piece"));
+    }
+    if last == first + 1 {
+        return Ok(0.);
+    }
+    let (a, b) = (point(first)?, point(last)?);
+    let mut distance_max = 0f64;
+    let mut local_guard = rounding(a, b);
+    for i in first + 1..last {
+        let p = point(i)?;
+        let t = (i - first) as f64 / (last - first) as f64;
+        let distance = (0..3)
+            .map(|axis| {
+                let q = f64::from(a[axis]) * (1. - t) + f64::from(b[axis]) * t;
+                (q - f64::from(p[axis])).powi(2)
+            })
+            .sum::<f64>()
+            .sqrt();
+        distance_max = distance_max.max(distance);
+        local_guard = local_guard.max(rounding(p, p));
+    }
+    Ok((distance_max + local_guard).next_up())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

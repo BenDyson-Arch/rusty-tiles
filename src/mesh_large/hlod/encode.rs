@@ -112,6 +112,14 @@ pub(crate) enum Mutation {
     /// would stand for an assessment that is no longer the same.
     #[cfg(test)]
     RefuseBuilds(u8),
+    /// Keep no stuck border vertex (D off): a cell whose ladder fails is omitted, as before.
+    #[cfg(test)]
+    NoKeep,
+    /// The cell at this depth holding this source rank stalls (D's control): every build of
+    /// its ladder is refused and P1 reports every border vertex it must remove as stuck, so
+    /// it builds only by keeping them (`hlod::Kept`), when the flag lets it keep them.
+    #[cfg(test)]
+    KeepAt(u32, bool, u64),
 }
 
 impl Mutation {
@@ -159,6 +167,16 @@ impl Mutation {
         } else {
             Run::Off
         }
+    }
+
+    /// Whether a cell whose whole ladder failed keeps the border vertices P1 could not
+    /// remove (D, `hlod::Kept`). Only with P1.
+    pub(crate) fn keep_stuck(self) -> bool {
+        #[cfg(test)]
+        if matches!(self, Self::NoKeep | Self::KeepAt(_, false, _)) {
+            return false;
+        }
+        self.p1() == super::geometry::p1::Run::On
     }
 
     /// Whether the coarse ladder reuses exact repeats (`geometry::build_parent`).

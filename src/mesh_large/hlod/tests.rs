@@ -7326,3 +7326,164 @@ fn published_root_covers_an_original_edge_in_the_delivered_glb() {
         String::from_utf8_lossy(&result.stderr)
     );
 }
+
+/// Every internal cell's row may queue for postorder writing (a built cell waits for its
+/// siblings, D): the stage charges each row's bound. Its strings fit their allowance at the
+/// largest keys, and the bound stays a few kilobytes.
+#[test]
+fn a_queued_row_is_charged_within_its_bound() {
+    let key = super::store::TileKey {
+        first: u64::MAX,
+        end: u64::MAX,
+        depth: u32::MAX,
+        leaf_begin: 0,
+        leaf_end: 0,
+    };
+    assert!(key.uri().len() <= 64, "{}", key.uri());
+    let bound = super::queued_row_bytes();
+    assert!(bound < 8 << 10, "{bound}");
+    assert_eq!(
+        super::queued_rows_bytes(1000),
+        1000 * bound + 264 * std::mem::size_of::<super::store::TileKey>() as u64
+    );
+}
+
+/// D keeps no vertex on a chord that has an owner under another parent cell earlier in the
+/// walk (it may already be final, and waiting to rebuild it would stall the walk); it keeps
+/// those on chords shared only with its siblings and later cells. The walk's result is the
+/// same for any number of workers.
+#[test]
+fn a_stalled_cell_keeps_no_vertex_on_a_chord_with_an_earlier_owner_elsewhere() {
+    let work = tempfile::tempdir().unwrap();
+    let source = grid(
+        (64, 64),
+        (0., 100.),
+        (0., 100.),
+        &|_, _| 0.,
+        [0.4, 0.5, 0.3, 1.],
+    );
+    let input = write_gltf(&work.path().join("src"), &[source]);
+    // The last depth-1 cell's first child (source rank 6,144 of 8,192): it borders the
+    // depth-1 cells before it, and its siblings.
+    let run = |jobs| Run {
+        leaf_triangles: 64,
+        cap: 100,
+        jobs,
+        mutation: Mutation::KeepAt(2, true, 6144),
+        budget: Some(4 << 30),
+        ..s2_run()
+    };
+    let diagnostics = |dir: &Path| -> Value {
+        let resources: Value =
+            serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
+        resources["hlod"]["diagnostics"].clone()
+    };
+    let many = stage(&input, &work.path().join("many"), &run(4)).unwrap();
+    let d = diagnostics(&many);
+    assert!(d["kept_vertices"].as_u64().unwrap() > 0, "{d}");
+    assert!(d["keep_refused_earlier"].as_u64().unwrap() > 0, "{d}");
+    assert_eq!(d["keep_outcomes"], json!({"built": 1}), "{d}");
+    assert_eq!(
+        d["keep_records"][0]["refusedEarlier"], d["keep_refused_earlier"],
+        "{d}"
+    );
+    assert_eq!(d["omitted_proxies"], 0, "{d}");
+    published_and_valid("refused earlier chords", &many, work.path());
+    let one = stage(&input, &work.path().join("one"), &run(1)).unwrap();
+    assert!(published(&one) == published(&many));
+    assert!(audit_semantics(&one) == audit_semantics(&many));
+}
+
+/// D: a cell whose whole ladder fails keeps the border vertices P1 could not remove,
+/// splitting the chords it shares; the co-owners of those chords build again with the same
+/// pieces, so the archive validates with exact seams. Without keeping them the same cell is
+/// omitted.
+#[test]
+fn a_stalled_cell_keeps_its_border_vertices() {
+    let work = tempfile::tempdir().unwrap();
+    // A flat sheet: cell seams run along grid lines, so the shared chords remove the
+    // collinear border points between their ends.
+    let source = grid(
+        (32, 32),
+        (0., 100.),
+        (0., 100.),
+        &|_, _| 0.,
+        [0.4, 0.5, 0.3, 1.],
+    );
+    let input = write_gltf(&work.path().join("src"), &[source]);
+    let run = |keep| Run {
+        leaf_triangles: 64,
+        cap: 100,
+        mutation: Mutation::KeepAt(1, keep, 0),
+        budget: Some(4 << 30),
+        ..s2_run()
+    };
+    let diagnostics = |dir: &Path| -> Value {
+        let resources: Value =
+            serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
+        resources["hlod"]["diagnostics"].clone()
+    };
+    let dir = stage(&input, &work.path().join("keep"), &run(true)).unwrap();
+    let d = diagnostics(&dir);
+    assert!(d["kept_vertices"].as_u64().unwrap() > 0, "{d}");
+    assert!(d["rebuilt_cells"].as_u64().unwrap() > 0, "{d}");
+    assert!(d["keep_peak_waiting"].as_u64().unwrap() > 0, "{d}");
+    assert!(d["keep_peak_held_triangles"].as_u64().unwrap() > 0, "{d}");
+    // The stalled cell is its depth's first in the walk: no chord it splits has an
+    // earlier owner.
+    assert_eq!(d["keep_refused_earlier"], 0, "{d}");
+    assert_eq!(d["keep_outcomes"], json!({"built": 1}), "{d}");
+    assert_eq!(d["keep_records"][0]["kept"], d["kept_vertices"], "{d}");
+    assert_eq!(d["omitted_proxies"], 0, "{d}");
+    published_and_valid("kept border vertices", &dir, work.path());
+    let control = stage(&input, &work.path().join("omit"), &run(false)).unwrap();
+    let c = diagnostics(&control);
+    assert_eq!(c["kept_vertices"], 0, "{c}");
+    assert!(c["omitted_proxies"].as_u64().unwrap() > 0, "{c}");
+}
+
+#[test]
+#[ignore]
+fn explore_leaf_sided_chords() {
+    let work = tempfile::tempdir().unwrap();
+    let source = vec![
+        grid(
+            (64, 64),
+            (0., 50.),
+            (0., 100.),
+            &|_, _| 0.,
+            [0.4, 0.5, 0.3, 1.],
+        ),
+        grid(
+            (1, 64),
+            (50., 100.),
+            (0., 100.),
+            &|_, _| 0.,
+            [0.4, 0.5, 0.3, 1.],
+        ),
+    ];
+    let input = write_gltf(&work.path().join("src"), &source);
+    for depth in [1u32, 2, 3] {
+        for rank in (0..8320u64).step_by(520) {
+            let run = Run {
+                leaf_triangles: 64,
+                cap: 100,
+                mutation: Mutation::KeepAt(depth, true, rank),
+                budget: Some(4 << 30),
+                ..s2_run()
+            };
+            let dir = work.path().join(format!("d{depth}-r{rank}"));
+            let Ok(out) = stage(&input, &dir, &run) else {
+                println!("d{depth} r{rank}: stage error");
+                continue;
+            };
+            let r: Value =
+                serde_json::from_slice(&fs::read(out.join("resources.json")).unwrap()).unwrap();
+            let d = &r["hlod"]["diagnostics"];
+            println!(
+                "d{depth} r{rank}: records {} omitted {}",
+                d["keep_records"], d["omitted_proxies"]
+            );
+        }
+    }
+}

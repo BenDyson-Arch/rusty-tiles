@@ -1027,6 +1027,57 @@ fn oriented(t: &[u32; 3]) -> [u32; 3] {
     let k = (0..3).min_by_key(|&k| t[k]).unwrap();
     [t[k], t[(k + 1) % 3], t[(k + 2) % 3]]
 }
+/// P1 alone on `contract` (D's keep-and-retry rounds, `hlod::keep`): its proposal, set up
+/// as `build_parent` sets up P1's (for the caller to assess), and P1's record (with the
+/// border vertices a stalled pass left).
+pub(crate) fn p1_on(
+    tile: TileKey,
+    children: &[TileGeometry],
+    caps: &[usize],
+    contract: &Contract,
+    mapping: &BorderMap<'_>,
+    lattice: &LatticePlan,
+    check: &(dyn Fn() -> Result<(), JobError> + Sync),
+) -> Result<(Option<Built>, p1::Report), JobError> {
+    let (proposal, report) = p1::attempt(tile, children, caps, contract, mapping, lattice, check)?;
+    Ok((
+        proposal.map(|(stage, mut b)| {
+            b.last_resort_stage = stage;
+            b.staged = stage > 0;
+            b
+        }),
+        report,
+    ))
+}
+
+/// The children's border points the contract removes onto a chord (D's control: what a
+/// stalled P1 pass would leave, at most).
+#[cfg(test)]
+fn removals(
+    children: &[TileGeometry],
+    contract: &Contract,
+    mapping: &BorderMap<'_>,
+) -> Result<Vec<Key>, JobError> {
+    let points = interface_points(&contract.interface);
+    let mut out: Vec<Key> = Vec::new();
+    for c in children {
+        for r in &c.interface {
+            for k in [r.a, r.b] {
+                if !points.contains(&k) {
+                    if let Some((a, b, _, _)) = mapping(k)? {
+                        if a != b {
+                            out.push(k);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    out.sort_unstable();
+    out.dedup();
+    Ok(out)
+}
+
 /// Reconstruct the common contracted boundary before ordinary reduction. Only capped
 /// immediate children enter this job. After a stalled reduction, explicitly remesh the
 /// interior; omission is the reported last resort and propagates upwards in the walk.
@@ -1080,6 +1131,14 @@ pub(crate) fn build_parent(
         p1::Run::Exhausted => (
             None,
             Some(p1::Report::exhausted_first_pass(merged_faces(children))),
+        ),
+        #[cfg(test)]
+        p1::Run::Stalled => (
+            None,
+            Some(p1::Report::stalled_on(
+                merged_faces(children),
+                removals(children, contract, mapping)?,
+            )),
         ),
     };
     if let Some((stage, mut b)) = proposal {
