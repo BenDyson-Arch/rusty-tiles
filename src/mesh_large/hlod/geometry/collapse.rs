@@ -109,12 +109,13 @@ pub(crate) struct Stats {
     pub flips: u64,
     pub steiner: u64,
     /// Refusals by reason: 1 vanish, 2 link, 3 pinch, 4 zero area, 5 flip, 6 reversed,
-    /// 7 shared face, 8 coincident, 9 shared edge, 10 book, 11 segment, 12 not an edge.
+    /// 7 shared face, 8 coincident, 9 shared edge, 10 book, 11 segment, 12 not an edge,
+    /// 13 touching boundary.
     /// Each refused check counts once, under the first test that refused it; that test
     /// depends on the order they run in. A vertex above `RETRY_VALENCE` tests a sample of
     /// its moved faces first, so it may report a different reason than testing every face
     /// in turn would (its accept or refuse decision is the same).
-    pub why: [u64; 13],
+    pub why: [u64; 14],
     /// Work units spent (`State::work`), and whether `Problem::work_limit` stopped the pass.
     pub work: u64,
     pub exhausted: bool,
@@ -282,6 +283,11 @@ struct State<'a> {
     /// The directed edges live faces use twice or more (`books_hold` can refuse only a
     /// change that touches one, or makes one).
     books: HashSet<(u32, u32)>,
+    /// Per vertex: on a boundary (edges one face uses) whose component reaches a contract
+    /// point, in the input; a collapse passes it on to its target (`touching_changed`).
+    touching: Vec<bool>,
+    /// Whether any vertex is `touching` (else the rule has nothing to keep).
+    any_touching: bool,
 }
 
 /// Moved faces a high-valence vertex's check samples first (`State::check_star`).
@@ -414,6 +420,87 @@ impl<'a> State<'a> {
 
     fn is_boundary_edge(&self, a: u32, b: u32) -> bool {
         self.undirected(a, b) == 1
+    }
+
+    /// The vertices on a boundary (edges one live face uses) whose component of boundary
+    /// edges holds a contract point.
+    fn touching_boundaries(&self) -> Vec<bool> {
+        let n = self.vf.len();
+        let mut parent: Vec<usize> = (0..n).collect();
+        fn root(parent: &mut [usize], mut a: usize) -> usize {
+            while parent[a] != a {
+                parent[a] = parent[parent[a]];
+                a = parent[a];
+            }
+            a
+        }
+        let mut on = vec![false; n];
+        let mut edges: Vec<(u32, u32)> = self
+            .dir
+            .keys()
+            .map(|&(a, b)| (a.min(b), a.max(b)))
+            .filter(|&(a, b)| a != b && self.undirected(a, b) == 1)
+            .collect();
+        edges.sort_unstable();
+        edges.dedup();
+        for (a, b) in edges {
+            on[a as usize] = true;
+            on[b as usize] = true;
+            let (x, y) = (root(&mut parent, a as usize), root(&mut parent, b as usize));
+            parent[x] = y;
+        }
+        let mut reached = vec![false; n];
+        for (v, _) in on.iter().enumerate().filter(|&(_, &o)| o) {
+            if self.iface.get(v).copied().unwrap_or(false) {
+                let r = root(&mut parent, v);
+                reached[r] = true;
+            }
+        }
+        (0..n)
+            .map(|v| on[v] && reached[root(&mut parent, v)])
+            .collect()
+    }
+
+    /// Whether a collapse of `u` onto `v` with directed edge changes `delta` changes a
+    /// touching boundary (`touching`) other than by merging `u` into `v`: up to that merge,
+    /// every boundary edge there stays one and no edge becomes one. The topology floor
+    /// compares the anchored path multigraph of such boundaries before and after a pass
+    /// (`topology::changes_noting`) and refuses a proposal that changes it. A later
+    /// collapse rarely restores an edge a collapse covered (on non-manifold fins it can),
+    /// so a change made here usually costs the whole pass; refusing it lets P1 go on.
+    fn touching_changed(&self, u: u32, v: u32, delta: &HashMap<(u32, u32), i32>) -> bool {
+        if !self.any_touching {
+            return false;
+        }
+        let t = |x: u32| self.touching.get(x as usize).copied().unwrap_or(false);
+        let near = t(u) || t(v);
+        let mut edges: Vec<(u32, u32)> = delta.keys().map(|&(a, b)| (a.min(b), a.max(b))).collect();
+        edges.sort_unstable();
+        edges.dedup();
+        let merged = |x: u32| if x == u { v } else { x };
+        let (mut before, mut after) = (Vec::new(), Vec::new());
+        for (a, b) in edges {
+            let ends = [a, b].iter().any(|&x| x == u || x == v);
+            if !(t(a) || t(b) || (near && ends)) {
+                continue;
+            }
+            let old = i64::from(self.undirected(a, b));
+            let new = old
+                + i64::from(delta.get(&(a, b)).copied().unwrap_or(0))
+                + i64::from(delta.get(&(b, a)).copied().unwrap_or(0));
+            if old == 1 {
+                let (p, q) = (merged(a), merged(b));
+                if p != q {
+                    before.push((p.min(q), p.max(q)));
+                }
+            }
+            if new == 1 {
+                after.push((a, b));
+            }
+        }
+        before.sort_unstable();
+        after.sort_unstable();
+        before != after
     }
 
     fn on_boundary(&self, v: u32, nb: &[u32]) -> bool {
@@ -854,6 +941,11 @@ impl<'a> State<'a> {
             if after <= 0 {
                 return 11;
             }
+        }
+        // A boundary reaching a contract point keeps its shape (the topology floor's
+        // touching-boundary rule, `topology::changes_noting`).
+        if self.touching_changed(u, v, &delta) {
+            return 13;
         }
         // The guard's book rule on every edge the collapse touches: a moved wing of a
         // source book keeps the edge's counts but not its faces. Only an edge used twice or
@@ -1349,6 +1441,11 @@ impl<'a> State<'a> {
             }
         }
         self.dead[u as usize] = true;
+        if self.touching.get(u as usize).copied().unwrap_or(false) {
+            if let Some(t) = self.touching.get_mut(v as usize) {
+                *t = true;
+            }
+        }
         if matches!(self.class[u as usize], Class::Remove(_)) {
             self.removes_left -= 1;
         }
@@ -1402,6 +1499,8 @@ impl<'a> State<'a> {
             changes: 0,
             star_cache: None,
             books: HashSet::default(),
+            touching: Vec::new(),
+            any_touching: false,
         };
         for (i, &t) in p.triangles.iter().enumerate() {
             for j in 0..3 {
@@ -1422,6 +1521,8 @@ impl<'a> State<'a> {
             }
         }
         st.src_dir = st.dir.clone();
+        st.touching = st.touching_boundaries();
+        st.any_touching = st.touching.iter().any(|&t| t);
         st.books = st
             .dir
             .iter()
@@ -2703,7 +2804,11 @@ mod tests {
                     }
                 }
             }
-            // The contraction fold guard's book rule (the one rule the check gained since).
+            // The touching-boundary rule, then the contraction fold guard's book rule (the
+            // rules the check gained since).
+            if self.touching_changed(u, v, &delta) {
+                return 13;
+            }
             let rewritten: Vec<(u32, [u32; 3])> = moved
                 .iter()
                 .map(|&f| {
@@ -2718,6 +2823,147 @@ mod tests {
             }
             0
         }
+    }
+
+    /// Every live face's boundary edges (used by one face) with an endpoint on a touching
+    /// boundary (`State::touching`), with `u` merged into `v`, as a sorted list.
+    fn touching_edges(st: &State<'_>, merge: Option<(u32, u32)>) -> Vec<(u32, u32)> {
+        let mut faces = HashSet::default();
+        for v in 0..st.vf.len() as u32 {
+            faces.extend(st.live_faces(v));
+        }
+        let mut und: HashMap<(u32, u32), u32> = HashMap::default();
+        for &f in &faces {
+            let t = st.faces[f as usize];
+            for j in 0..3 {
+                let (a, b) = (t[j], t[(j + 1) % 3]);
+                *und.entry((a.min(b), a.max(b))).or_default() += 1;
+            }
+        }
+        let m = |x: u32| match merge {
+            Some((u, v)) if x == u => v,
+            _ => x,
+        };
+        // With a merge, u and v are both on a touching boundary if either is (the collapse
+        // passes the flag on).
+        let near = merge.is_some_and(|(u, v)| st.touching[u as usize] || st.touching[v as usize]);
+        let on = |x: u32| {
+            st.touching[x as usize] || (near && merge.is_some_and(|(u, v)| x == u || x == v))
+        };
+        let mut out: Vec<(u32, u32)> = und
+            .into_iter()
+            .filter(|&((a, b), c)| c == 1 && (on(a) || on(b)))
+            .map(|((a, b), _)| (m(a).min(m(b)), m(a).max(m(b))))
+            .filter(|&(a, b)| a != b)
+            .collect();
+        out.sort_unstable();
+        out
+    }
+
+    /// A live vertex on a boundary component (edges one live face uses) that holds a
+    /// `touching` vertex but is not marked itself, if any.
+    fn unmarked_on_touching(st: &State<'_>) -> Option<usize> {
+        let n = st.vf.len();
+        let mut parent: Vec<usize> = (0..n).collect();
+        fn root(parent: &mut [usize], mut a: usize) -> usize {
+            while parent[a] != a {
+                parent[a] = parent[parent[a]];
+                a = parent[a];
+            }
+            a
+        }
+        let mut on = vec![false; n];
+        let mut edges: Vec<(u32, u32)> = st
+            .dir
+            .iter()
+            .filter(|&(_, &c)| c > 0)
+            .map(|(&(a, b), _)| (a.min(b), a.max(b)))
+            .filter(|&(a, b)| a != b && st.undirected(a, b) == 1)
+            .collect();
+        edges.sort_unstable();
+        edges.dedup();
+        for (a, b) in edges {
+            on[a as usize] = true;
+            on[b as usize] = true;
+            let (x, y) = (root(&mut parent, a as usize), root(&mut parent, b as usize));
+            parent[x] = y;
+        }
+        let mut marked = vec![false; n];
+        for v in 0..n {
+            if on[v] && st.touching[v] {
+                let r = root(&mut parent, v);
+                marked[r] = true;
+            }
+        }
+        (0..n).find(|&v| on[v] && !st.dead[v] && !st.touching[v] && marked[root(&mut parent, v)])
+    }
+
+    /// The topology floor refuses any change to a boundary that reaches a contract point
+    /// (its touching-boundary rule). On rough meshes (holes, fins, a fan apex) with random
+    /// contract points, every collapse the check accepts keeps those boundaries' edges, up
+    /// to merging u into v. Without the check's touching rule, collapses that cover or drop
+    /// such an edge pass the link and pinch tests.
+    #[test]
+    fn accepted_collapses_keep_touching_boundaries() {
+        let mut accepted = 0u64;
+        for seed in 0..64u64 {
+            let mut state = seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1;
+            let mut next = move || {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                (state >> 40) as f32 / (1u64 << 24) as f32
+            };
+            let (positions, triangles) = rough_mesh(&mut next);
+            let keys: Vec<Key> = positions.iter().map(|&p| key(p)).collect();
+            let n = positions.len();
+            let interface: Vec<bool> = (0..n).map(|_| next() < 0.2).collect();
+            let p = Problem {
+                positions: &positions,
+                triangles: &triangles,
+                class: vec![Class::Free; n],
+                interface,
+                segments: HashSet::default(),
+                target: 0,
+                limit: 0,
+                min_cos: 0.,
+                owns_segment: None,
+                owns_face: None,
+                keys: &keys,
+                steiner: false,
+                snap: None,
+                protected: None,
+                shared: None,
+                work_limit: u64::MAX,
+                cancel: None,
+            };
+            let mut st = State::new(&p);
+            let mut nb = Vec::new();
+            for _ in 0..3 * n {
+                let u = (next() * n as f32) as u32 % n as u32;
+                if st.dead[u as usize] || st.vf[u as usize].is_empty() {
+                    continue;
+                }
+                st.neighbours(u, &mut nb);
+                let Some(&v) = nb.clone().iter().find(|&&v| st.check(u, v) == 0) else {
+                    continue;
+                };
+                let before = touching_edges(&st, Some((u, v)));
+                st.apply(u, v);
+                assert_eq!(
+                    touching_edges(&st, None),
+                    before,
+                    "seed {seed}: collapse {u} onto {v}"
+                );
+                // Nothing joins a touching boundary: recomputed from the live faces, every
+                // boundary component with a marked vertex is marked throughout.
+                if let Some(x) = unmarked_on_touching(&st) {
+                    panic!("seed {seed}: vertex {x} joined a touching boundary unmarked");
+                }
+                accepted += 1;
+            }
+        }
+        assert!(accepted > 1000, "{accepted}");
     }
 
     /// A random mesh for the differential test: a jittered grid (boundary on its rim) with
