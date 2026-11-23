@@ -96,7 +96,7 @@ pub(crate) struct Report {
     /// Collapse checks refused, by reason (`collapse::Stats::why`). The reason is the first
     /// test that refused, so a high-valence vertex's sampled faces can shift a refusal to
     /// another reason than a full scan would report; the totals are those of the decisions.
-    pub refused_by: [[u64; 13]; 2],
+    pub refused_by: [[u64; 14]; 2],
     pub guard_refused: [[u64; 6]; 2],
     pub guard_steiner: [u64; 2],
     /// The border vertices the last pass left when it stalled (D keeps them instead);
@@ -151,7 +151,7 @@ impl Report {
             rescue_work: [0; 2],
             steiner_work: [0; 2],
             site_work: [collapse::SiteWork::default(); 2],
-            refused_by: [[0; 13]; 2],
+            refused_by: [[0; 14]; 2],
             guard_refused: [[0; 6]; 2],
             guard_steiner: [0; 2],
             stuck: Vec::new(),
