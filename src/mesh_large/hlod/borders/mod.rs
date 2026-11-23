@@ -8,7 +8,7 @@ mod graph;
 mod split;
 #[cfg(test)]
 use split::Refused;
-pub(crate) use split::{Overlay, Site};
+pub(crate) use split::{Overlay, Site, Unordered};
 pub(super) fn memory_need(sorter: SortConfig) -> u64 {
     sorter.memory_bound::<InterfaceRow>()
         + sorter.memory_bound::<disk::Words<7>>()
@@ -1247,7 +1247,9 @@ impl Borders {
                     // A split piece always floors G (its bound may pass the stored chord's); a
                     // relieved chord's finer displacement includes finer splits on its arc.
                     if s[11] > 0 || split.is_some() {
-                        let finer = f64::from_bits(s[10]).max(overlay.finer(key.depth, s[0], s[1]));
+                        // Finer displacement is recorded by the stored chord's endpoints.
+                        let finer = f64::from_bits(s[10])
+                            .max(overlay.finer(key.depth, stored[0], stored[1]));
                         relief_floor = relief_floor.max(8. * (f64::from_bits(s[6]) + finer));
                     }
                 }

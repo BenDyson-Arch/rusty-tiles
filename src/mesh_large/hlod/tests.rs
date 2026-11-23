@@ -7441,3 +7441,49 @@ fn a_stalled_cell_keeps_its_border_vertices() {
     assert_eq!(c["kept_vertices"], 0, "{c}");
     assert!(c["omitted_proxies"].as_u64().unwrap() > 0, "{c}");
 }
+
+#[test]
+#[ignore]
+fn explore_leaf_sided_chords() {
+    let work = tempfile::tempdir().unwrap();
+    let source = vec![
+        grid(
+            (64, 64),
+            (0., 50.),
+            (0., 100.),
+            &|_, _| 0.,
+            [0.4, 0.5, 0.3, 1.],
+        ),
+        grid(
+            (1, 64),
+            (50., 100.),
+            (0., 100.),
+            &|_, _| 0.,
+            [0.4, 0.5, 0.3, 1.],
+        ),
+    ];
+    let input = write_gltf(&work.path().join("src"), &source);
+    for depth in [1u32, 2, 3] {
+        for rank in (0..8320u64).step_by(520) {
+            let run = Run {
+                leaf_triangles: 64,
+                cap: 100,
+                mutation: Mutation::KeepAt(depth, true, rank),
+                budget: Some(4 << 30),
+                ..s2_run()
+            };
+            let dir = work.path().join(format!("d{depth}-r{rank}"));
+            let Ok(out) = stage(&input, &dir, &run) else {
+                println!("d{depth} r{rank}: stage error");
+                continue;
+            };
+            let r: Value =
+                serde_json::from_slice(&fs::read(out.join("resources.json")).unwrap()).unwrap();
+            let d = &r["hlod"]["diagnostics"];
+            println!(
+                "d{depth} r{rank}: records {} omitted {}",
+                d["keep_records"], d["omitted_proxies"]
+            );
+        }
+    }
+}

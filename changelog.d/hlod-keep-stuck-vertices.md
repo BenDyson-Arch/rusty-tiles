@@ -19,7 +19,9 @@
   splits. No wait outlasts the walk's own order, so the walk keeps its parallelism and the
   held tiles stay within the child window's spill bound. Diagnostics report the hold
   peaks (`keep_peak_waiting`, `keep_peak_held_triangles`) and every cell's keep rounds and
-  how they ended (`keep_records`, `keep_outcomes`).
+  how they ended (`keep_records`, `keep_outcomes`), cells that a sibling's split made
+  omitted when built again (`rebuilt_omitted`), and kept vertices their chord's final
+  split dropped (`keep_dropped_at_settle`).
 - HLOD: finished coarse rows waiting for an earlier tile no longer stop the walk from
   reading at 1,024 rows. A cell waiting for its siblings holds back the rows of their
   whole subtrees, so up to every internal cell's row can wait: the stage now charges that

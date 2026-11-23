@@ -197,10 +197,12 @@ pub struct KeepRecord {
     /// vertices and assessment refused it); `roundsExhausted`.
     pub outcome: &'static str,
     pub rounds: u32,
-    /// Vertices kept, and stuck vertices refused: on a chord with an earlier owner under
-    /// another parent, by `Borders::locate`, or past the split tolerance.
+    /// Vertices kept, and stuck vertices refused: on a chord with an earlier owner or a leaf
+    /// owner under another parent (`Borders::unordered_owner_elsewhere`), by
+    /// `Borders::locate`, or past the split tolerance.
     pub kept: u64,
     pub refused_earlier: u64,
+    pub refused_leaf: u64,
     pub refused_located: u64,
     pub refused_tolerance: u64,
 }
@@ -732,12 +734,18 @@ pub(crate) struct HlodReport {
     #[serde(skip)]
     pub keep_peak_held_triangles: u64,
     /// D: stuck vertices it did not keep because their chord has an owner under another
-    /// parent cell that comes earlier in the walk (`Borders::has_earlier_owner_elsewhere`).
+    /// parent cell that comes earlier in the walk (`Borders::unordered_owner_elsewhere`).
     #[serde(skip)]
     pub keep_refused_earlier: u64,
     /// D: every cell's keep rounds (`KeepRecord`); reported in the diagnostics.
     #[serde(skip)]
     pub keep_records: Vec<KeepRecord>,
+    /// D: cells built again that were omitted then, and kept sites the final split of their
+    /// chord dropped; reported in the diagnostics.
+    #[serde(skip)]
+    pub rebuilt_omitted: u64,
+    #[serde(skip)]
+    pub keep_dropped_at_settle: u64,
     /// Content-less cells (omitted coarse tiles), by cell depth, and of them the sources:
     /// cells whose exact interface (or topology plain simplification cannot reduce) needs
     /// more triangles than the cap. Includes propagation and pass-through cells. A declared
@@ -867,6 +875,10 @@ pub struct HlodDiagnostics {
     /// D: every cell's keep rounds (`KeepRecord`), and their count by outcome.
     pub keep_records: Vec<KeepRecord>,
     pub keep_outcomes: BTreeMap<&'static str, u64>,
+    /// D: cells built again that were omitted then (a sibling's split pushed them over the
+    /// cap or stalled P1), and kept sites the final split of their chord dropped.
+    pub rebuilt_omitted: u64,
+    pub keep_dropped_at_settle: u64,
     pub jobs: u64,
     /// Whole-process user+system CPU seconds of the stage (incidence, walk, encoding).
     pub cpu_seconds: Option<f64>,
@@ -1033,7 +1045,8 @@ const WAIT: u64 = 1 << 62;
 
 /// The walk's D state (`Kept`). A cell's first build may keep stuck border vertices (its
 /// sites), but none on a chord with an owner under another parent that comes earlier in the
-/// walk (`Borders::has_earlier_owner_elsewhere`). So a chord's final splits are known once
+/// walk, or a leaf owner there (`Borders::unordered_owner_elsewhere`). So a chord's final
+/// splits are known once
 /// the owners in its earliest parent have built:
 /// - a built cell waits only for its siblings sharing its chords (its parent waits for
 ///   them anyway), and builds again when its chords' final splits differ from those it
@@ -1084,6 +1097,10 @@ struct KeepWalk {
     earlier: HashMap<u64, Vec<u64>>,
     /// Report: every first build's keep rounds (`KeepRecord`), by walk id for postorder.
     records: Vec<KeepRecord>,
+    /// Report: cells built again with their chords' final splits that were omitted then,
+    /// and sites a cell kept that the final split of their chord dropped (tolerance).
+    rebuilt_omitted: u64,
+    dropped_at_settle: std::collections::BTreeSet<borders::Site>,
 }
 
 impl KeepWalk {
@@ -1149,7 +1166,7 @@ fn settle_keep(
                     .collect()
             })
             .unwrap_or_default();
-        let (splits, _) = if mine.is_empty() {
+        let (splits, dropped) = if mine.is_empty() {
             (borders::Overlay::default(), Vec::new())
         } else {
             borders.split(
@@ -1162,6 +1179,8 @@ fn settle_keep(
             .iter()
             .all(|&s| splits.split_of(depth, s) == w.local.split_of(depth, s));
         k.overlay.merge(&splits);
+        k.dropped_at_settle
+            .extend(dropped.into_iter().map(|(_, site)| site));
         let geometry = ready.remove(&(WAIT | id)).unwrap_or_default();
         if same {
             ready.remove(&(HOLD | id));
@@ -1522,6 +1541,8 @@ pub(crate) fn produce(
     diagnostics.keep_peak_held_triangles = report.keep_peak_held_triangles;
     diagnostics.keep_refused_earlier = report.keep_refused_earlier;
     diagnostics.keep_records = report.keep_records.clone();
+    diagnostics.rebuilt_omitted = report.rebuilt_omitted;
+    diagnostics.keep_dropped_at_settle = report.keep_dropped_at_settle;
     for r in &report.keep_records {
         *diagnostics.keep_outcomes.entry(r.outcome).or_default() += 1;
     }
@@ -1555,6 +1576,8 @@ pub(crate) fn produce(
             "keep_refused_earlier": diagnostics.keep_refused_earlier,
             "keep_records": diagnostics.keep_records,
             "keep_outcomes": diagnostics.keep_outcomes,
+            "rebuilt_omitted": diagnostics.rebuilt_omitted,
+            "keep_dropped_at_settle": diagnostics.keep_dropped_at_settle,
             "fold_faces": diagnostics.fold_faces,
             "scratch_peak_bytes": diagnostics.stage_scratch_peak_bytes,
             "scratch_bound_bytes": diagnostics.stage_scratch_bound_bytes,
@@ -2305,6 +2328,7 @@ fn build_tile(
                 Default::default();
             let mut refused_tolerance: std::collections::BTreeSet<borders::Site> =
                 Default::default();
+            let mut refused_leaf: std::collections::BTreeSet<borders::Site> = Default::default();
             let (mut ended, mut rounds) = ("roundsExhausted", 0u32);
             let mut found = None;
             for _ in 0..KEEP_ROUNDS {
@@ -2312,13 +2336,18 @@ fn build_tile(
                 let before = sites.len();
                 for (k, site) in job.borders.locate(key, &stuck)? {
                     match site {
-                        Ok(site)
-                            if job.borders.has_earlier_owner_elsewhere(key, site.segment)? =>
-                        {
-                            refused_earlier.insert(site);
-                        }
                         Ok(site) => {
-                            sites.insert(site);
+                            match job.borders.unordered_owner_elsewhere(key, site.segment)? {
+                                Some(borders::Unordered::Earlier) => {
+                                    refused_earlier.insert(site);
+                                }
+                                Some(borders::Unordered::Leaf) => {
+                                    refused_leaf.insert(site);
+                                }
+                                None => {
+                                    sites.insert(site);
+                                }
+                            }
                         }
                         Err(_) => {
                             refused_located.insert(k);
@@ -2398,6 +2427,7 @@ fn build_tile(
                     0
                 },
                 refused_earlier: refused_earlier.len() as u64,
+                refused_leaf: refused_leaf.len() as u64,
                 refused_located: refused_located.len() as u64,
                 refused_tolerance: refused_tolerance.len() as u64,
             });
@@ -3315,6 +3345,7 @@ fn walk(
                         .remove(&id)
                         .ok_or_else(|| state("a rebuilt cell was never spawned"))?;
                     k.final_nodes.insert(job.borders.node_id(closed.key)?);
+                    k.rebuilt_omitted += u64::from(matches!(row, Finished::Omitted { .. }));
                     k.released.push((id, seq, geometry, row, timing));
                 } else {
                     // A first build: the cell resolves for its chords' co-owners.
@@ -3737,6 +3768,8 @@ fn walk(
     let mut records = keep.records;
     records.sort_by_key(|r| (r.first, r.depth));
     report.keep_records = records;
+    report.rebuilt_omitted = keep.rebuilt_omitted;
+    report.keep_dropped_at_settle = keep.dropped_at_settle.len() as u64;
     let workers = u32::try_from(jobs).unwrap_or(u32::MAX);
     let utilisation = utilisation::measure(workers, pool_started, pool_ended, &spans);
     report.pass_through = passed;

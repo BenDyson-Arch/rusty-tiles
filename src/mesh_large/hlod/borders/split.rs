@@ -35,6 +35,14 @@ pub(crate) enum Refused {
     Chain,
 }
 
+/// Why a chord has an owner under another parent D cannot order after a split
+/// (`Borders::unordered_owner_elsewhere`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Unordered {
+    Earlier,
+    Leaf,
+}
+
 /// A stuck vertex located on one of the cell's segments: the segment and the vertex's
 /// ordinal on its chain.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -155,29 +163,40 @@ impl Borders {
         let me = self.source.node(key)?;
         let mut out = BTreeSet::new();
         for id in self.own_segments(key)? {
-            self.chord_owners(id, key.depth, me, &mut out)?;
+            self.chord_owners(id, key.depth, me, false, &mut out)?;
         }
         Ok(out.into_iter().collect())
     }
 
-    /// Whether `segment`, one of `key`'s own, has a coarse owner under another parent cell
-    /// that comes before `key` in the walk. D keeps no vertex on such a chord: that owner may
-    /// already be final, and waiting for it to build again would stall the walk.
-    pub(crate) fn has_earlier_owner_elsewhere(
+    /// Why D keeps no vertex on `segment`, one of `key`'s own, if it keeps none: an owner
+    /// under another parent cell either comes before `key` in the walk (it may already be
+    /// final, and waiting for it to build again would stall the walk) or is a leaf. A leaf
+    /// waits for nothing, so the coarser cells across the chord would not wait for the
+    /// split either, and their relieved chords' floors (`Overlay::finer`) could miss it.
+    /// A later coarse owner elsewhere waits for `key` (`co_owner_groups`), and every
+    /// coarser cell across the chord is its ancestor, so builds after it.
+    pub(crate) fn unordered_owner_elsewhere(
         &self,
         key: TileKey,
         segment: u64,
-    ) -> Result<bool, JobError> {
+    ) -> Result<Option<Unordered>, JobError> {
         let me = self.source.node(key)?;
         let mut owners = BTreeSet::new();
-        self.chord_owners(segment, key.depth, me, &mut owners)?;
+        self.chord_owners(segment, key.depth, me, true, &mut owners)?;
         let parent = self.parent(me)?;
-        for o in owners.range(..me) {
-            if self.parent(*o)? != parent {
-                return Ok(true);
+        let mut found = None;
+        for o in owners {
+            if self.parent(o)? == parent {
+                continue;
+            }
+            if self.source.nodes.get(o)?[5] & 1 == 1 {
+                return Ok(Some(Unordered::Leaf));
+            }
+            if o < me {
+                found = Some(Unordered::Earlier);
             }
         }
-        Ok(false)
+        Ok(found)
     }
 
     /// `key`'s chord co-owners (`co_owners`) split by where D waits for them: its siblings
@@ -208,12 +227,14 @@ impl Borders {
         Ok(self.source.leaves.get(row[3])?[depth])
     }
 
-    /// The coarse owners at `depth` other than `me` of segment `id`, when it is a chord.
+    /// The coarse owners (and with `leaves`, the leaf owners) at `depth` other than `me` of
+    /// segment `id`, when it is a chord.
     fn chord_owners(
         &self,
         id: u64,
         depth: u32,
         me: u64,
+        leaves: bool,
         out: &mut BTreeSet<u64>,
     ) -> Result<(), JobError> {
         let s = self.segments.get(id)?;
@@ -224,7 +245,7 @@ impl Borders {
         while at < s[9] {
             let owner = self.source.owner(at, depth)?;
             let n = self.source.nodes.get(owner)?;
-            if owner != me && n[5] & 1 == 0 {
+            if owner != me && (leaves || n[5] & 1 == 0) {
                 out.insert(owner);
             }
             at = super::graph::next_owner(&self.source.owners, at, s[9], n[4])?;
