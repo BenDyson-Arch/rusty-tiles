@@ -183,6 +183,38 @@ def generate(root):
             child['extras']['depth'] += shift
             pending.extend(child.get('children', []))
     case('collapsed-root-chain', collapsed)
+
+    # Root recovery v2: the same relation, built from stand-ins, admits a frontier past
+    # eight inputs; an unknown version is refused.
+    def v2(doc, files):
+        relation(doc)['version'] = 2
+    case('v2-complete-frontier', v2)
+
+    def v2_many(doc, files):
+        v2(doc, files)
+        r = relation(doc)
+        r['frontier'] = r['frontier'] * 3
+    case('v2-nine-inputs-not-a-bound', v2_many, 'recoveryCoverage')
+
+    def v2_bound(doc, files):
+        v2(doc, files)
+        r = relation(doc)
+        r['frontier'] = r['frontier'] * 129
+    case('v2-frontier-bound', v2_bound, 'recoveryBounds')
+
+    def v2_low(doc, files):
+        v2(doc, files)
+        low(doc, files)
+    case('v2-g-below-frontier', v2_low, 'recoveryError', 'geometricError increases')
+
+    def v2_gap(doc, files):
+        v2(doc, files)
+        gap(doc, files)
+    case('v2-coverage-gap', v2_gap, 'recoveryCoverage')
+
+    def unknown(doc, files):
+        relation(doc)['version'] = 3
+    case('unknown-version', unknown, 'recoveryRelation')
     case('deepest-frontier-leaves', lambda doc, files: collapsed(doc, files, 29))
     (root / 'cases.json').write_text(json.dumps(cases, indent=2) + '\n')
     return cases
@@ -209,7 +241,8 @@ def run(root, binary=None):
             result = audit(folder, root / 'source.json', scratch=root, work_limit=2_000_000)
             assert case['check'] is None, (case, result)
         except Failure as error:
-            expected = 'geometricErrorOrder' if case['name'] == 'g-below-frontier' else case['check']
+            expected = ('geometricErrorOrder' if case['name'] in ('g-below-frontier', 'v2-g-below-frontier')
+                        else case['check'])
             assert error.check == expected, (case, error.check, error.detail)
         native = 'not run'
         if binary:

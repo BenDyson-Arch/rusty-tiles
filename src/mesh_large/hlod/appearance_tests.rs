@@ -565,7 +565,7 @@ fn omitted_cells_get_no_pages_textures_or_donor_work() {
             &input,
             &work.path().join(format!("cap{cap}")),
             super::Settings {
-                mutation: super::Mutation::NoRelief,
+                mutation: super::Mutation::NoReliefNoRecovery,
                 ..super::tests::test_settings(cap)
             },
         );

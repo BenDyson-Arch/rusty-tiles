@@ -64,7 +64,7 @@ def inspect(tiles, sizes, markers, require):
             'recoveryRelation', 'recovery requires one explicit REPLACE ownership root')
     value = extras(root)['recovery']
     require(isinstance(value, dict) and set(value) == {'version', 'root', 'encodedDepth', 'frontier', 'omitted'}
-            and type(value['version']) is int and value['version'] == 1,
+            and type(value['version']) is int and value['version'] in (1, 2),
             'recoveryRelation', 'invalid recovery declaration')
     rk = key(value['root'], require)
     require(rk[0] == rk[2] == rk[3] == 0 and type(value['encodedDepth']) is int
@@ -74,7 +74,10 @@ def inspect(tiles, sizes, markers, require):
             and root['node']['extras'].get('depth') == 0,
             'recoveryRelation', 'invalid recovery root')
     inputs, omitted = value['frontier'], value['omitted']
-    require(isinstance(inputs, list) and 1 <= len(inputs) <= 8
+    # Version 1 rebuilds the root from its frontier (at most eight capped inputs); version 2
+    # builds it from unpublished stand-ins and delivers it over at most 384 frontier tiles.
+    most = 8 if value['version'] == 1 else 384
+    require(isinstance(inputs, list) and 1 <= len(inputs) <= most
             and isinstance(omitted, list) and 1 <= len(omitted) <= 256,
             'recoveryBounds', 'recovery exceeds its input or ownership bounds')
     keys, counts = [], []
@@ -85,7 +88,8 @@ def inspect(tiles, sizes, markers, require):
         n = item['triangles']
         require(type(n) is int and 1 <= n <= 8192, 'recoveryBounds', 'frontier input exceeds the cap')
         counts.append(n)
-    require(sum(counts) <= 8 * 8192, 'recoveryBounds', 'frontier triangles exceed 8C')
+    require(value['version'] == 2 or sum(counts) <= 8 * 8192,
+            'recoveryBounds', 'frontier triangles exceed 8C')
     skipped = [key(k, require) for k in omitted]
     require(all(k[2] <= 30 for k in skipped), 'recoveryOwnership', 'omitted cell exceeds internal depth')
 

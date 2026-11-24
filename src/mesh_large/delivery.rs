@@ -837,7 +837,12 @@ pub(crate) fn write_prepared(
     }
     let writer = ForestWriter::new(&document, &staging, OCTREE)
         .map_err(|e| state(e.to_string()))?
-        .with_max_implicit_levels(plan::SKELETON_HEIGHT);
+        .with_max_implicit_levels(plan::SKELETON_HEIGHT)
+        .with_root_children(match &leaves.recovery {
+            // Root recovery v2: the root refines to its whole declared frontier.
+            Some(r) if r.version == 2 => crate::mesh_large::hlod::recovery::FRONTIER,
+            _ => 0,
+        });
     let mut sink = WriteSink {
         writer: Some(writer),
         staging: &staging,

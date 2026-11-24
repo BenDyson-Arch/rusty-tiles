@@ -362,8 +362,8 @@ With a number `t`, every content tile T whose mean base-colour texel spacing `s(
 
 A declared recovery root lets a coarse tile stand in for omitted descendants. It uses an explicit REPLACE ownership root. Its GLB sets `asset.extras.rustyTiles.descendantRecovery: 1`, and the root tile's `extras.recovery` holds exactly `version`, `root`, `encodedDepth`, `frontier` and `omitted`.
 
-- `version` is 1. Ownership keys hold `first`, `end`, `depth`, `leafBegin` and `leafEnd`. Each frontier entry holds a `key` and its decoded `triangles` count.
-- There are one to eight capped inputs, at most 65,536 input triangles, and one to 256 skipped ownership cells.
+- `version` is 1 or 2. Ownership keys hold `first`, `end`, `depth`, `leafBegin` and `leafEnd`. Each frontier entry holds a `key` and its decoded `triangles` count.
+- Version 1 rebuilds the root from its frontier: one to eight capped inputs and at most 65,536 input triangles. Version 2 builds the root from unpublished stand-ins of the omitted cells and delivers it over one to 384 capped frontier tiles, with no total input bound; the tileset root may then have more children than the subdivision scheme's branches. Both allow one to 256 skipped ownership cells.
 - Source and leaf intervals must form complete, disjoint covers. Internal ownership depths are at most 30; frontier leaves may reach depth 31.
 - The actual refinement children, after resolving document links, must be exactly that frontier, with G no greater than the recovered root's.
 - An explicit root or frontier tile must carry its own valid ownership label; an external document link cannot supply it. Only the generated root cell of an implicit header inherits that header's ownership.

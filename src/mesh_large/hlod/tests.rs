@@ -2963,7 +2963,7 @@ fn a_parent_whose_interface_cannot_fit_is_omitted_not_refused() {
         &work.path().join("capped"),
         &Run {
             cap: 12,
-            mutation: Mutation::NoRelief,
+            mutation: Mutation::NoReliefNoRecovery,
             ..Run::default()
         },
     )
@@ -3264,7 +3264,7 @@ fn omitted_cells_refine_whenever_they_are_visible() {
             &work.path().join(format!("cap{cap}")),
             &Run {
                 cap,
-                mutation: Mutation::NoRelief,
+                mutation: Mutation::NoReliefNoRecovery,
                 ..Run::default()
             },
         )
@@ -4056,7 +4056,7 @@ fn omitted_cells_are_not_measured_and_errors_stay_monotone() {
             &work.path().join(format!("cap{cap}")),
             &Run {
                 cap,
-                mutation: Mutation::NoRelief,
+                mutation: Mutation::NoReliefNoRecovery,
                 ..Run::default()
             },
         )
@@ -6685,7 +6685,10 @@ fn root_competition_preserves_natural_guard_and_descendant_refusals() {
                 root["rootCompetition"]["baselineG"]
             );
         } else {
-            assert!(rr.iter().all(|r| r["depth"] != 0));
+            // Root recovery v2: the propagated omission no longer costs the root, which
+            // declares version 2 over the published frontier.
+            let root = rr.iter().find(|r| r["depth"] == 0).unwrap();
+            assert_eq!(root["recovery"]["version"], 2, "{root}");
             let manifest: Value =
                 serde_json::from_slice(&fs::read(dirs[1].join("manifest.json")).unwrap()).unwrap();
             let h = &manifest["hlod"];
@@ -7344,7 +7347,10 @@ fn a_queued_row_is_charged_within_its_bound() {
     assert!(bound < 8 << 10, "{bound}");
     assert_eq!(
         super::queued_rows_bytes(1000),
-        1000 * bound + 264 * std::mem::size_of::<super::store::TileKey>() as u64
+        1000 * bound
+            + (256 * std::mem::size_of::<super::store::TileKey>()
+                + 2 * super::recovery::FRONTIER * std::mem::size_of::<super::recovery::Input>())
+                as u64
     );
 }
 
@@ -7486,4 +7492,211 @@ fn explore_leaf_sided_chords() {
             );
         }
     }
+}
+
+/// Root recovery v2: a stalled depth-2 cell (D off) is omitted, and its omission no
+/// longer costs the root. Every omitted cell passes up a contract-free stand-in within the
+/// cap, the root builds over them and declares version 2 over the whole published frontier,
+/// the archive validates, and the output is the same with 1 and 4 workers.
+#[test]
+fn root_recovery_v2_recovers_the_root_over_stand_ins() {
+    let work = tempfile::tempdir().unwrap();
+    let source = grid(
+        (64, 64),
+        (0., 100.),
+        (0., 100.),
+        &|_, _| 0.,
+        [0.4, 0.5, 0.3, 1.],
+    );
+    let input = write_gltf(&work.path().join("src"), &[source]);
+    let run = |jobs| Run {
+        leaf_triangles: 64,
+        cap: 100,
+        jobs,
+        mutation: Mutation::KeepAt(2, false, 0),
+        budget: Some(4 << 30),
+        ..s2_run()
+    };
+    let on = stage(&input, &work.path().join("j4"), &run(4)).unwrap();
+    let one = stage(&input, &work.path().join("j1"), &run(1)).unwrap();
+    assert!(published(&on) == published(&one));
+    let root = rows(&on.join("proxies.jsonl"))
+        .into_iter()
+        .find(|r| r["depth"] == 0)
+        .expect("v2 builds the root");
+    let recovery = &root["recovery"];
+    assert_eq!(recovery["version"], 2, "{root}");
+    let frontier = recovery["frontier"].as_array().unwrap();
+    assert!(
+        frontier.len() > 8,
+        "a frontier v1 could not take: {recovery}"
+    );
+    let resources: Value =
+        serde_json::from_slice(&fs::read(on.join("resources.json")).unwrap()).unwrap();
+    let stand_ins = resources["hlod"]["diagnostics"]["recovery_v2_stand_ins"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert!(!stand_ins.is_empty());
+    for s in &stand_ins {
+        let triangles = s[3].as_u64().unwrap();
+        assert!(triangles > 0 && triangles <= 100, "{s}");
+    }
+    published_and_valid("root recovery v2", &on, work.path());
+}
+
+/// Root recovery v2's frontier children keep their ownership identity however the
+/// planner fits the root's document: with a stall at each coarse depth, the archive
+/// validates under the production limits and under limits small enough that the root's
+/// children leave its document (an implicit root's header would carry no identity).
+#[test]
+fn a_recovered_roots_frontier_keeps_its_identity_in_any_layout() {
+    use crate::{mesh_large::delivery, validate::ExpectedProfile};
+    let work = tempfile::tempdir().unwrap();
+    let source = grid(
+        (64, 64),
+        (0., 100.),
+        (0., 100.),
+        &|_, _| 0.,
+        [0.4, 0.5, 0.3, 1.],
+    );
+    let input = write_gltf(&work.path().join("src"), &[source]);
+    for depth in 1..=3 {
+        let run = Run {
+            leaf_triangles: 64,
+            cap: 100,
+            mutation: Mutation::KeepAt(depth, false, 0),
+            budget: Some(4 << 30),
+            ..s2_run()
+        };
+        let on = stage(&input, &work.path().join(format!("d{depth}")), &run).unwrap();
+        let root = rows(&on.join("proxies.jsonl"))
+            .into_iter()
+            .find(|r| r["depth"] == 0)
+            .unwrap();
+        assert_eq!(root["recovery"]["version"], 2, "depth {depth}: {root}");
+        for (name, limits) in [
+            ("production", delivery::plan::LIMITS),
+            (
+                "small",
+                delivery::plan::Limits {
+                    objects: 6,
+                    records: 24,
+                    levels: 3,
+                },
+            ),
+        ] {
+            let output = work.path().join(format!("d{depth}-{name}.3tz"));
+            let mut file = fs::File::create(&output).unwrap();
+            delivery::publish_with_limits(
+                &MeshTilesetRequest::new(&on, &output),
+                limits,
+                &mut file,
+                work.path(),
+            )
+            .unwrap();
+            drop(file);
+            inspect(ValidationRequest::new(&output).expect_profile(ExpectedProfile::Hlod))
+                .unwrap_or_else(|e| panic!("depth {depth} {name}: {e}"));
+        }
+    }
+}
+
+/// Root recovery v2's declaration bound: a root whose scaffold would exceed its bound (here
+/// 0) stays omitted, as without recovery, and the stage completes and validates.
+#[test]
+fn a_root_past_its_declaration_bound_stays_omitted() {
+    let work = tempfile::tempdir().unwrap();
+    let source = grid(
+        (64, 64),
+        (0., 100.),
+        (0., 100.),
+        &|_, _| 0.,
+        [0.4, 0.5, 0.3, 1.],
+    );
+    let input = write_gltf(&work.path().join("src"), &[source]);
+    let dir = stage(
+        &input,
+        &work.path().join("bound"),
+        &Run {
+            leaf_triangles: 64,
+            cap: 100,
+            mutation: Mutation::StallPastScaffoldBound(2),
+            budget: Some(4 << 30),
+            ..s2_run()
+        },
+    )
+    .unwrap();
+    let rows = rows(&dir.join("proxies.jsonl"));
+    assert!(
+        rows.iter().all(|r| r["depth"] != 0),
+        "the root stays omitted"
+    );
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    assert_eq!(manifest["hlod"]["omittedByDepth"][0], 1, "{manifest}");
+    published_and_valid("declaration bound", &dir, work.path());
+}
+
+/// Root recovery v2 over folded sheets: N3's stand-ins admit folds (the layers collapse
+/// onto each other). No published tile below declares them, so a tile keeping them
+/// declares a fold stage of its own (at least 2) and the validator recounts them. A stall
+/// at each depth and cap: the root is recovered and the archive validates.
+#[test]
+fn stand_ins_over_folded_sheets_declare_the_folds_they_pass_up() {
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(
+        &work.path().join("src"),
+        &[folded_sheet(48, 5, 0.02, 0.001, 7)],
+    );
+    let mut folded = 0;
+    for (depth, cap) in [(1, 300), (2, 300), (3, 300), (1, 1200), (2, 1200)] {
+        let dir = stage(
+            &input,
+            &work.path().join(format!("d{depth}-{cap}")),
+            &Run {
+                cap,
+                mutation: Mutation::KeepAt(depth, false, 0),
+                ..Run::default()
+            },
+        )
+        .unwrap();
+        let resources: Value =
+            serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
+        let stand_ins = resources["hlod"]["diagnostics"]["recovery_v2_stand_ins"].clone();
+        folded += stand_ins
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|s| s[4].as_u64().unwrap() > 0)
+            .count();
+        let root = rows(&dir.join("proxies.jsonl"))
+            .into_iter()
+            .find(|r| r["depth"] == 0)
+            .unwrap_or_else(|| panic!("depth {depth} cap {cap}: no root, {stand_ins}"));
+        assert_eq!(root["recovery"]["version"], 2, "{root}");
+        published_and_valid(
+            &format!("folded stand-ins d{depth}-{cap}"),
+            &dir,
+            work.path(),
+        );
+    }
+    assert!(
+        folded > 0,
+        "the fixture must pass folds up through a stand-in"
+    );
+}
+
+/// A tile over a fold-carrying stand-in declares its folds at stage 2 or above (no
+/// published tile below declares them); without stand-in folds, or holding none, its
+/// built stage stands.
+#[test]
+fn folds_from_a_stand_in_are_declared_as_admitted_here() {
+    use super::declared_stage;
+    assert_eq!(declared_stage(0, true, 5), 2);
+    assert_eq!(declared_stage(1, true, 5), 2);
+    assert_eq!(declared_stage(3, true, 5), 3);
+    assert_eq!(declared_stage(0, true, 0), 0);
+    assert_eq!(declared_stage(0, false, 5), 0);
+    assert_eq!(declared_stage(1, false, 5), 1);
 }

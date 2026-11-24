@@ -84,6 +84,10 @@ pub(crate) enum Mutation {
     /// `Develop` and `NoRelief` together: develop's strategies on D11's ladder alone.
     #[cfg(test)]
     DevelopNoRelief,
+    /// `NoRelief` without root recovery: an omission reaches the root (the omission
+    /// controls; root recovery v2 has its own).
+    #[cfg(test)]
+    NoReliefNoRecovery,
     /// Publish relieved tiles without their relief floor on G.
     #[cfg(test)]
     UnflooredRelief,
@@ -120,12 +124,45 @@ pub(crate) enum Mutation {
     /// it builds only by keeping them (`hlod::Kept`), when the flag lets it keep them.
     #[cfg(test)]
     KeepAt(u32, bool, u64),
+    /// `KeepAt(depth, false, 0)` with root recovery's scaffold bound at 0: the recovered
+    /// root's declaration exceeds it, so the root stays omitted (and the stage completes).
+    #[cfg(test)]
+    StallPastScaffoldBound(u32),
 }
 
 impl Mutation {
+    /// Root recovery v2: every omitted cell passes up a contract-free stand-in, and the
+    /// root builds over them, delivered over the whole frontier.
+    pub(crate) fn recovery_v2(self) -> bool {
+        self.recovery()
+    }
+
+    /// The most omitted cells a recovered root's scaffold may name (`recovery::OMITTED`).
+    pub(crate) fn scaffold_bound(self) -> usize {
+        #[cfg(test)]
+        if matches!(self, Self::StallPastScaffoldBound(_)) {
+            return 0;
+        }
+        super::recovery::OMITTED
+    }
+
+    /// The cell a test stalls, as (depth, source rank): `KeepAt` and
+    /// `StallPastScaffoldBound`.
+    #[cfg(test)]
+    pub(crate) fn stalled_at(self) -> Option<(u32, u64)> {
+        match self {
+            Self::KeepAt(d, _, rank) => Some((d, rank)),
+            Self::StallPastScaffoldBound(d) => Some((d, 0)),
+            _ => None,
+        }
+    }
+
     pub(crate) fn recovery(self) -> bool {
         #[cfg(test)]
-        if self == Self::OmitRecoveryInputNoRecovery {
+        if matches!(
+            self,
+            Self::OmitRecoveryInputNoRecovery | Self::NoReliefNoRecovery
+        ) {
             return false;
         }
         self.last_resorts()
@@ -173,7 +210,10 @@ impl Mutation {
     /// remove (D, `hlod::Kept`). Only with P1.
     pub(crate) fn keep_stuck(self) -> bool {
         #[cfg(test)]
-        if matches!(self, Self::NoKeep | Self::KeepAt(_, false, _)) {
+        if matches!(
+            self,
+            Self::NoKeep | Self::KeepAt(_, false, _) | Self::StallPastScaffoldBound(_)
+        ) {
             return false;
         }
         self.p1() == super::geometry::p1::Run::On
@@ -214,7 +254,11 @@ impl Mutation {
         #[cfg(test)]
         if matches!(
             self,
-            Self::NoRelief | Self::DevelopNoRelief | Self::MiscountFolds | Self::UndeclaredFolds
+            Self::NoRelief
+                | Self::DevelopNoRelief
+                | Self::NoReliefNoRecovery
+                | Self::MiscountFolds
+                | Self::UndeclaredFolds
         ) {
             return usize::MAX / 200;
         }
