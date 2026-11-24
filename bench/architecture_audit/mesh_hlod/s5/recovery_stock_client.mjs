@@ -17,7 +17,7 @@ const hashes = Object.fromEntries(await Promise.all(files.map(async file =>
   [file, createHash('sha256').update(await readFile(resolve(engine, file))).digest('hex')])));
 const results = [];
 
-function fixture({ linked = false, empty = false } = {}) {
+function fixture({ linked = false, empty = false, count = 7 } = {}) {
   const set = {
     memoryAdjustedScreenSpaceError: 16, _requestedTiles: [], _selectedTiles: [],
     _selectedTilesToStyle: [], _emptyTiles: [], _statistics: { visited: 0 },
@@ -43,7 +43,11 @@ function fixture({ linked = false, empty = false } = {}) {
   }
   const root = tile('root', 32, 0);
   root._depth = 0;
-  const frontier = [1, 1, 1, 2, 2, 2, 2].map((d, i) => tile(`frontier-${i}`, 8, d));
+  // Root recovery v1's seven-tile frontier, or v2's: a root refining straight to its
+  // whole frontier (172 tiles on the private hill), at mixed ownership depths.
+  const depths = count === 7 ? [1, 1, 1, 2, 2, 2, 2]
+    : Array.from({ length: count }, (_, i) => 1 + (i % 5));
+  const frontier = depths.map((d, i) => tile(`frontier-${i}`, 8, d));
   root.children = frontier;
   for (const child of frontier) child.parent = root;
   if (linked) {
@@ -51,10 +55,11 @@ function fixture({ linked = false, empty = false } = {}) {
     link.hasEmptyContent = false;
     link.hasTilesetContent = true;
     link.contentAvailable = false;
-    link.children = [frontier[6]];
+    const last = frontier.length - 1;
+    link.children = [frontier[last]];
     link.parent = root;
-    frontier[6].parent = link;
-    root.children = [...frontier.slice(0, 6), link];
+    frontier[last].parent = link;
+    root.children = [...frontier.slice(0, last), link];
   }
   if (empty) {
     const gap = tile('omitted-routing-cell', 8, 1, false);
@@ -74,9 +79,9 @@ function fixture({ linked = false, empty = false } = {}) {
   } };
 }
 
-for (const linked of [false, true]) {
-  const f = fixture({ linked });
-  const tag = linked ? 'linked' : 'inline';
+for (const [count, linked] of [[7, false], [7, true], [172, false], [172, true]]) {
+  const f = fixture({ linked, count });
+  const tag = `${count === 7 ? 'v1' : 'v2-172'} ${linked ? 'linked' : 'inline'}`;
   f.root._screenSpaceError = 8;
   for (const child of f.frontier) child.contentAvailable = false;
   f.run(`${tag}: below SSE`, ['root']);

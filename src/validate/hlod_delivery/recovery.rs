@@ -17,6 +17,9 @@ const SCAN_UNITS: usize = 8;
 const CENSUS_UNITS: usize = 128;
 const LOOKUP_UNITS: usize = 1024;
 const PAIR_UNITS: usize = 16;
+/// Root recovery v2: the most frontier tiles a recovered root delivers (the producer's
+/// `hlod::recovery::FRONTIER`).
+const FRONTIER_V2: usize = 384;
 
 #[cfg(all(test, unix))]
 mod cost;
@@ -304,7 +307,7 @@ impl Store {
         let declaration: Declaration = serde_json::from_str(&text)
             .map_err(|_| bad("recoveryRelation", "invalid recovery declaration"))?;
         let d = &declaration;
-        if d.version != 1
+        if !(d.version == 1 || d.version == 2)
             || !d.root.valid()
             || d.root.first != 0
             || d.root.depth != 0
@@ -314,14 +317,18 @@ impl Store {
         {
             return Err(bad("recoveryRelation", "invalid recovery root"));
         }
+        // Version 1 rebuilds the root from its frontier (at most eight capped inputs);
+        // version 2 builds it from stand-ins and delivers it over a frontier of at most
+        // `FRONTIER_V2` tiles, with no input bound on the frontier's total.
+        let most = if d.version == 1 { 8 } else { FRONTIER_V2 };
         if d.frontier.is_empty()
-            || d.frontier.len() > 8
+            || d.frontier.len() > most
             || d.omitted.is_empty()
             || d.omitted.len() > 256
             || d.frontier
                 .iter()
                 .any(|c| c.triangles == 0 || c.triangles > 8192)
-            || d.frontier.iter().map(|c| c.triangles).sum::<u64>() > 8 * 8192
+            || (d.version == 1 && d.frontier.iter().map(|c| c.triangles).sum::<u64>() > 8 * 8192)
         {
             return Err(bad(
                 "recoveryBounds",
@@ -397,9 +404,9 @@ impl Store {
             ),
         )?;
         let mut query = self.connection.prepare(
-            "SELECT t.id,t.last,t.error,count(r.rank),coalesce(sum(p.triangles),0) FROM tiles t LEFT JOIN refs r ON r.tile=t.id LEFT JOIN payloads p ON p.rank=r.rank WHERE t.cell=? AND t.placeholder=0 GROUP BY t.id ORDER BY t.id LIMIT 9").map_err(sql)?;
+            "SELECT t.id,t.last,t.error,count(r.rank),coalesce(sum(p.triangles),0) FROM tiles t LEFT JOIN refs r ON r.tile=t.id LEFT JOIN payloads p ON p.rank=r.rank WHERE t.cell=? AND t.placeholder=0 GROUP BY t.id ORDER BY t.id LIMIT ?").map_err(sql)?;
         let children: Vec<(i64, i64, f64, i64, i64)> = query
-            .query_map([root], |r| {
+            .query_map(params![root, integer(most as u64 + 1)?], |r| {
                 Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
             })
             .map_err(sql)?
@@ -418,12 +425,30 @@ impl Store {
                     "frontier differs from its delivered cover",
                 ));
             }
-            if self.recovery_owner(*id, effort)? != Some((input.key.first, input.key.depth))
+            let owner = self.recovery_owner(*id, effort)?;
+            if owner != Some((input.key.first, input.key.depth))
                 || (input.key.depth == 31 && id != end)
             {
+                // Name the entry and the delivered row (ids and depths only, no positions).
+                let detail: (Option<i64>, Option<u32>, bool, bool, bool, Option<i64>) = self
+                    .connection
+                    .query_row(
+                        "SELECT rank_first,ownership_depth,ownership_invalid,implicit_root,placeholder,parent FROM tiles WHERE id=?",
+                        [*id],
+                        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
+                    )
+                    .map_err(sql)?;
+                let index = d
+                    .frontier
+                    .iter()
+                    .position(|c| std::ptr::eq(c, input))
+                    .unwrap_or(0);
                 return Err(bad(
                     "recoveryOwnership",
-                    "frontier ownership identity differs",
+                    &format!(
+                        "frontier ownership identity differs: frontier[{index}] of {} declares (first {}, depth {}), triangles {}; delivered tile {id} (last {end}) has owner {owner:?}, row (rank_first, depth, invalid, implicit_root, placeholder, parent) {detail:?}",
+                        d.frontier.len(), input.key.first, input.key.depth, input.triangles
+                    ),
                 ));
             }
             if *triangles != input.triangles as i64 {

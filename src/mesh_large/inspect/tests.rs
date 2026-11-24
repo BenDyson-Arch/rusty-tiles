@@ -322,7 +322,7 @@ fn certain_sources_are_the_bakes_contract_lower_bound_omissions() {
     let work = tempfile::tempdir().unwrap();
     let input = write_gltf(&work.path().join("src"), &holed_sheet());
     let settings = || hlod::Settings {
-        mutation: hlod::Mutation::NoRelief,
+        mutation: hlod::Mutation::NoReliefNoRecovery,
         ..hlod::test_settings(12)
     };
     let audit = work.path().join("audit");

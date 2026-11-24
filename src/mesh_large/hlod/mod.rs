@@ -134,10 +134,15 @@ fn queued_row_bytes() -> u64 {
         + 64) as u64
 }
 
-/// Every internal cell's queued row (`queued_row_bytes`) and one root declaration.
+/// Every internal cell's queued row (`queued_row_bytes`) and one root declaration: at most
+/// `OMITTED` scaffold cells and `FRONTIER` frontier tiles (root recovery v2), and the
+/// recovered root's frontier as its job receives it. The omitted cells' frontiers while the
+/// walk holds them are leased with the frontier labels (`recovery::LabelUnion`).
 fn queued_rows_bytes(internal: u64) -> u64 {
+    use std::mem::size_of;
     internal.saturating_mul(queued_row_bytes()).saturating_add(
-        (recovery::OMITTED + recovery::INPUTS) as u64 * std::mem::size_of::<TileKey>() as u64,
+        (recovery::OMITTED * size_of::<TileKey>()
+            + 2 * recovery::FRONTIER * size_of::<recovery::Input>()) as u64,
     )
 }
 /// Encoded GLB, compression scratch and decoded check copy of one coarse tile.
@@ -733,6 +738,9 @@ pub(crate) struct HlodReport {
     pub keep_peak_waiting: u64,
     #[serde(skip)]
     pub keep_peak_held_triangles: u64,
+    /// Root recovery v2: every stand-in attempt (`StandInAttempt`); in the diagnostics.
+    #[serde(skip)]
+    pub recovery_v2_stand_ins: Vec<StandInAttempt>,
     /// D: stuck vertices it did not keep because their chord has an owner under another
     /// parent cell that comes earlier in the walk (`Borders::unordered_owner_elsewhere`).
     #[serde(skip)]
@@ -863,6 +871,9 @@ pub struct HlodDiagnostics {
     pub last_resort_records: Vec<LastResortRecord>,
     /// Every cell where P1 ran, built or omitted (`P1Record`).
     pub p1_records: Vec<P1Record>,
+    /// Root recovery v2 (research): every stand-in attempt (first, depth, input
+    /// triangles, stand-in triangles or 0).
+    pub recovery_v2_stand_ins: Vec<StandInAttempt>,
     /// D: border vertices kept, and cells built again with their chords' final splits.
     pub kept_vertices: u64,
     pub rebuilt_cells: u64,
@@ -952,6 +963,23 @@ struct Closed {
     single_leaf: bool,
     ownership_root: bool,
     recover: bool,
+    /// Root recovery v2: an omitted cell that only builds its stand-in (no own build).
+    stand_in_only: bool,
+    /// Root recovery v2: the published frontier below the recovered root (its relation),
+    /// or a stand-in-only cell's own built children.
+    frontier: Vec<recovery::Input>,
+    /// Root recovery v2: each stand-in child's surviving frontier labels, by its key.
+    stand_in_labels: Vec<(TileKey, Vec<(recovery::Canon, recovery::Label)>)>,
+    /// Root recovery v2: the walk's union of frontier labels, for the recovered root's
+    /// drop count.
+    label_union: Option<std::sync::Arc<recovery::LabelUnion>>,
+    /// Root recovery v2 was given up for this walk (its labels outgrew the budget): an
+    /// omitted cell builds no stand-in.
+    v2_off: bool,
+    /// Root recovery v2: a stand-in among its inputs holds fold faces (N3 admits them). The
+    /// cell keeps them as input (`folds_below`) and, holding any, declares a fold stage of
+    /// its own (at least 2): no published tile below declares them.
+    stand_in_folds: bool,
     /// A child holds folds a last resort admitted (A2): the guard licenses them as input,
     /// so this tile may keep them and then declares them (stage 0 if it is no last resort).
     folds_below: bool,
@@ -1029,6 +1057,11 @@ pub(crate) struct Kept {
     pub refused_earlier: u64,
     /// Its keep rounds, when they ran.
     pub record: Option<KeepRecord>,
+    /// Root recovery v2: an omitted source cell's published frontier (its children).
+    pub frontier: Vec<recovery::Input>,
+    /// Root recovery v2: its frontier labels (`recovery::Labels`), and its stand-in attempt.
+    pub labels: Option<recovery::Labels>,
+    pub stand_in: Option<StandInAttempt>,
 }
 
 /// Keep-and-retry rounds of a cell whose whole ladder failed (D): each keeps the border
@@ -1555,6 +1588,8 @@ pub(crate) fn produce(
         .zip(cpu_started)
         .map(|(b, a)| b - a);
     diagnostics.wall_seconds = started.elapsed().as_secs_f64();
+    let rr2 = report.recovery_v2_stand_ins.clone();
+    diagnostics.recovery_v2_stand_ins = rr2.clone();
     input.phases.finished_with(
         Phase::HlodGeometry,
         geometry_seconds,
@@ -1567,6 +1602,7 @@ pub(crate) fn produce(
             "last_resort_stages": diagnostics.last_resort_stages,
             "last_resort_records": diagnostics.last_resort_records,
             "p1_records": diagnostics.p1_records,
+            "recovery_v2_stand_ins": rr2,
             "kept_vertices": diagnostics.kept_vertices,
             "rebuilt_cells": diagnostics.rebuilt_cells,
             "keep_peak_waiting": diagnostics.keep_peak_waiting,
@@ -2152,7 +2188,7 @@ fn keep_at(closed: &Closed, depth: u32, rank: u64) -> bool {
 /// Whether P1 runs for `closed` (in tests, `KeepAt`'s cell stalls in its first build).
 fn p1_run(mutation: Mutation, closed: &Closed, keep: bool) -> geometry::p1::Run {
     #[cfg(test)]
-    if let Mutation::KeepAt(d, _, rank) = mutation {
+    if let Some((d, rank)) = mutation.stalled_at() {
         if keep && keep_at(closed, d, rank) {
             return geometry::p1::Run::Stalled;
         }
@@ -2172,6 +2208,113 @@ fn keep_target(closed: &Closed, children: &[TileGeometry], cap: usize) -> usize 
     } else {
         cap
     }
+}
+
+/// Root recovery v2: one stand-in attempt, as `[first, depth, input triangles, stand-in
+/// triangles, stand-in fold faces]` (triangles 0 when N3 could not reach the cap).
+#[derive(Clone, Copy, Debug, Serialize)]
+pub struct StandInAttempt(u64, u32, u64, u64, u64);
+
+/// Root recovery v2: an omitted cell's unpublished, contract-free stand-in
+/// (`geometry::free_stand_in`). Its errors are its inputs' largest, so a parent's children
+/// error covers the frontier below it; its texture sums theirs.
+fn v2_stand_in(
+    job: &Job<'_, '_>,
+    closed: &Closed,
+    children: &[TileGeometry],
+) -> Result<(Option<TileGeometry>, StandInAttempt), JobError> {
+    let key = closed.key;
+    let inputs: u64 = children.iter().map(|c| c.triangles.len() as u64).sum();
+    let cap = job.input.settings.cap;
+    let built = geometry::free_stand_in(key, children, cap, true, job.check)?;
+    let s = built.map(|b| {
+        let mut s = b.geometry;
+        s.key = key;
+        s.interface = Vec::new();
+        let most = |f: fn(&TileGeometry) -> f64| children.iter().map(f).fold(0., f64::max);
+        s.geometric_error = most(|c| c.geometric_error);
+        s.published_error = most(|c| c.published_error);
+        s.surface_error = most(|c| c.surface_error);
+        s.texture = texture_error::Sums {
+            area: children.iter().map(|c| c.texture.area).sum(),
+            texels: children.iter().map(|c| c.texture.texels).sum(),
+        };
+        s
+    });
+    let attempt = StandInAttempt(
+        key.first,
+        key.depth,
+        inputs,
+        s.as_ref().map_or(0, |s| s.triangles.len() as u64),
+        s.as_ref().map_or(0, |s| {
+            geometry::folds::fold_faces(&s.positions, &s.triangles)
+        }),
+    );
+    Ok((s, attempt))
+}
+
+/// Root recovery v2: a root whose declaration would exceed a validator bound stays
+/// omitted, with its published frontier recorded as any descendant omission's is.
+fn unrecovered_root(
+    job: &Job<'_, '_>,
+    closed: &Closed,
+    children: &[TileGeometry],
+    kept: Kept,
+) -> Done {
+    // Its built children (not its omitted children's stand-ins), at their published depth.
+    let frontier = children
+        .iter()
+        .filter(|c| !closed.stand_in_labels.iter().any(|(k, _)| *k == c.key))
+        .map(|c| {
+            Ok(TileKey {
+                depth: job.borders.publication_depth(c.key)?,
+                ..c.key
+            })
+        })
+        .collect::<Result<_, JobError>>()?;
+    let omitted = Finished::Omitted {
+        key: closed.key,
+        reason: OmissionReason::DescendantOmission,
+        frontier,
+        topology: Default::default(),
+        topology_attempts: 0,
+        construction_topology: None,
+        root_search: None,
+        p1: None,
+    };
+    Ok((Vec::new(), omitted, appearance::Timing::default(), kept))
+}
+
+/// The fold stage a tile declares (A2). Root recovery v2: folds kept from a stand-in have no
+/// declared stage below (the stand-in is never published), so a tile holding fold faces
+/// over one declares them as admitted here (at least stage 2).
+fn declared_stage(built: u8, stand_in_folds: bool, fold_faces: u64) -> u8 {
+    if stand_in_folds && fold_faces > 0 {
+        built.max(2)
+    } else {
+        built
+    }
+}
+
+/// Root recovery v2: a job's frontier labels, with its stand-in's surviving ones.
+fn stand_in_labels(
+    children: &[TileGeometry],
+    stand_ins: &[(TileKey, Vec<(recovery::Canon, recovery::Label)>)],
+    s: Option<&TileGeometry>,
+) -> recovery::Labels {
+    let (at, mut labels) = recovery::label_inputs(children, stand_ins);
+    if let Some(s) = s {
+        let mut seen = std::collections::HashSet::new();
+        for &p in &s.positions {
+            let k = recovery::canon(p);
+            if seen.insert(k) {
+                for &l in at.get(&k).into_iter().flatten() {
+                    labels.stand_in.push((k, l));
+                }
+            }
+        }
+    }
+    labels
 }
 
 /// One parent: geometry, error, appearance, encoding, the pre-publication check and its
@@ -2199,10 +2342,48 @@ fn build_tile(
         .borders
         .contract_with(closed.key, 6 * settings.cap, overlay)?
         .filter(|c| c.minimum_triangles() <= settings.cap);
-    let recovery = closed
-        .recover
-        .then(|| recovery::declare(job, closed.key, &children))
-        .transpose()?;
+    if closed.stand_in_only {
+        // Root recovery v2: a cell with an omitted child builds only its stand-in.
+        let (s, attempt) = v2_stand_in(job, closed, &children)?;
+        kept.stand_in = Some(attempt);
+        kept.labels = Some(stand_in_labels(
+            &children,
+            &closed.stand_in_labels,
+            s.as_ref(),
+        ));
+        let omitted = Finished::Omitted {
+            key: closed.key,
+            reason: OmissionReason::DescendantOmission,
+            frontier: closed.frontier.iter().map(|c| c.key).collect(),
+            topology: Default::default(),
+            topology_attempts: 0,
+            construction_topology: None,
+            root_search: None,
+            p1: None,
+        };
+        return Ok((
+            s.into_iter().collect(),
+            omitted,
+            appearance::Timing::default(),
+            kept,
+        ));
+    }
+    // Root recovery v2: the recovered root's frontier labels by point, for its drop count.
+    let root_labels = closed.label_union.as_ref().map(|u| {
+        (
+            u,
+            recovery::label_inputs(&children, &closed.stand_in_labels),
+        )
+    });
+    let recovery = if closed.recover {
+        match recovery::declare_v2(job, closed.key, closed.frontier.clone())? {
+            Some(r) => Some(r),
+            // Past a declaration bound: the root stays omitted, as without recovery.
+            None => return unrecovered_root(job, closed, &children, kept),
+        }
+    } else {
+        None
+    };
     let mut prepared = None;
     let mut topology_attempts = 0;
     // The primary build's proposals refused, by reason: decode, topology, controls
@@ -2241,8 +2422,10 @@ fn build_tile(
                 let refuse_below = match settings.mutation {
                     Mutation::RefuseBuilds(k) => Some(k),
                     Mutation::P1Unfit | Mutation::P1Exhausted => Some(4),
-                    Mutation::KeepAt(d, _, rank) if keep_at(closed, d, rank) => Some(u8::MAX),
-                    _ => None,
+                    m => m
+                        .stalled_at()
+                        .filter(|&(d, rank)| keep_at(closed, d, rank))
+                        .map(|_| u8::MAX),
                 };
                 #[cfg(test)]
                 if let Some(k) = refuse_below {
@@ -2540,16 +2723,34 @@ fn build_tile(
                 .map(|r| (nearest.stats, r.cpu_seconds, r.timing)),
             construction_topology,
         };
-        let frontier = if recovery::bounded(
-            children.iter().map(|c| (c.key, c.triangles.len() as u64)),
-            closed.key,
-            settings.cap,
-        ) {
-            children
-        } else {
-            Vec::new()
-        };
-        return Ok((frontier, omitted, appearance::Timing::default(), kept));
+        // The root has no parent to pass a stand-in to.
+        let root = closed.ownership_root || job.borders.publication_depth(closed.key)? == 0;
+        if settings.mutation.recovery_v2() && !closed.recover && !closed.v2_off && !root {
+            // Root recovery v2: pass up the stand-in and the published frontier.
+            kept.frontier = children
+                .iter()
+                .map(|c| {
+                    Ok(recovery::Input {
+                        key: TileKey {
+                            depth: job.borders.publication_depth(c.key)?,
+                            ..c.key
+                        },
+                        triangles: c.triangles.len() as u32,
+                    })
+                })
+                .collect::<Result<_, JobError>>()?;
+            let (s, attempt) = v2_stand_in(job, closed, &children)?;
+            kept.stand_in = Some(attempt);
+            kept.labels = Some(stand_in_labels(&children, &[], s.as_ref()));
+            return Ok((
+                s.into_iter().collect(),
+                omitted,
+                appearance::Timing::default(),
+                kept,
+            ));
+        }
+        // No stand-in (recovery off, or the recovered root itself failed): nothing to pass up.
+        return Ok((Vec::new(), omitted, appearance::Timing::default(), kept));
     };
     // A3: how far apart the layers of its folds lie, against its children (reported).
     let fold_separation = if built.last_resort_stage >= 2 || closed.folds_below {
@@ -2619,7 +2820,16 @@ fn build_tile(
             .zip(appearance_start)
             .map_or(0., |(b, a)| b - a);
     }
-    let declared = built.topology.dropped_components;
+    // Root recovery v2: drops count against the delivered frontier, as the validator
+    // recounts them, not against the stand-ins the root was built from.
+    let declared = match &root_labels {
+        Some((union, (at, labels))) => {
+            let mut union = recovery::LabelUnion::clone(union);
+            union.add(labels);
+            union.dropped(at, positions.decoded.iter().map(|&p| recovery::canon(p)))
+        }
+        None => built.topology.dropped_components,
+    };
     #[cfg(test)]
     let declared = if settings.mutation == Mutation::UndeclaredDrop
         && built.topology.coarse_dropped_components > 0
@@ -2631,9 +2841,9 @@ fn build_tile(
     let fold_faces = geometry::folds::fold_faces(&positions.decoded, &tile.triangles);
     // A2: a last resort declares its stage; a tile over admitted folds that kept some
     // declares them as stage 0.
-    let carries_folds = fold_faces > 0 && (built.last_resort_stage >= 2 || closed.folds_below);
-    let last_resort = (built.last_resort_stage > 0 || carries_folds)
-        .then_some((built.last_resort_stage, fold_faces));
+    let stage = declared_stage(built.last_resort_stage, closed.stand_in_folds, fold_faces);
+    let carries_folds = fold_faces > 0 && (stage >= 2 || closed.folds_below);
+    let last_resort = (stage > 0 || carries_folds).then_some((stage, fold_faces));
     #[cfg(test)]
     let last_resort = match settings.mutation {
         Mutation::MiscountFolds => last_resort.map(|(s, f)| (s, f + 1)),
@@ -2731,7 +2941,7 @@ fn build_tile(
         protected_faces: built.protected_faces,
         retries: built.retries,
         last_resort: built.last_resort,
-        last_resort_stage: built.last_resort_stage,
+        last_resort_stage: stage,
         retry: outcome
             .retry
             .filter(|_| built.last_resort)
@@ -3026,6 +3236,8 @@ fn walk(
     let mut spans: Vec<utilisation::CellSpan> = Vec::new();
     let pool_started = std::time::Instant::now();
     let keep = std::cell::RefCell::new(KeepWalk::default());
+    // Root recovery v2: every stand-in attempt, in arrival order (sorted after the walk).
+    let attempts = std::cell::RefCell::new(Vec::<StandInAttempt>::new());
     let outcome = pool.in_place_scope(|scope| -> Result<(), JobError> {
         type Message = (u64, u64, HeldDone, Option<utilisation::CellSpan>);
         let (sender, receiver) = mpsc::channel::<Message>();
@@ -3033,6 +3245,18 @@ fn walk(
         // Finished children: one built tile, a complete frontier, or unavailable input.
         let mut ready: HashMap<u64, Vec<store::spill::Held>> = HashMap::new();
         let omitted_ids = std::cell::RefCell::new(std::collections::HashSet::<u64>::new());
+        // Root recovery v2: each omitted cell's published frontier, by walk id.
+        let frontier_of = std::cell::RefCell::new(HashMap::<u64, Vec<recovery::Input>>::new());
+        // Root recovery v2: the frontier labels' union, and each stand-in's surviving labels.
+        let label_union = std::cell::RefCell::new(recovery::LabelUnion::default());
+        let label_leases =
+            std::cell::RefCell::new(Vec::<crate::mesh_large::resources::Lease>::new());
+        let label_charged = std::cell::Cell::new(0u64);
+        let v2_off = std::cell::Cell::new(false);
+        // Root recovery v2: omitted cells whose stand-in holds fold faces.
+        let si_folds = std::cell::RefCell::new(std::collections::HashSet::<u64>::new());
+        let si_labels =
+            std::cell::RefCell::new(HashMap::<u64, Vec<(recovery::Canon, recovery::Label)>>::new());
         // Finished tiles holding admitted folds (A2), by walk id.
         let carriers = std::cell::RefCell::new(std::collections::HashSet::<u64>::new());
         let mut pending: Vec<Closed> = Vec::new();
@@ -3140,22 +3364,51 @@ fn walk(
                     .children
                     .iter()
                     .any(|c| omitted_ids.borrow().contains(c));
-                let complete = pending[i].children.iter().all(|c| !ready[c].is_empty())
-                    && recovery::bounded(
-                        pending[i]
-                            .children
-                            .iter()
-                            .flat_map(|c| ready[c].iter())
-                            .map(|g| (g.key(), g.triangles())),
-                        pending[i].key,
-                        settings.cap,
-                    );
                 let root = settings.mutation.recovery()
                     && (pending[i].ownership_root
                         || job.borders.publication_depth(pending[i].key)? == 0);
-                if has_omission && (!root || !complete) {
+                // Root recovery v2: with every omitted child's stand-in ready, the cell
+                // builds its own stand-in (or, at the root, the recovered root) over the
+                // published frontier below it, in rank order.
+                let v2 = settings.mutation.recovery_v2() && !v2_off.get();
+                let v2_frontier = if has_omission
+                    && v2
+                    && pending[i].children.iter().all(|c| !ready[c].is_empty())
+                {
+                    let (mut keys, mut local, mut whole) = (Vec::new(), Vec::new(), true);
+                    for c in &pending[i].children {
+                        if omitted_ids.borrow().contains(c) {
+                            match frontier_of.borrow().get(c) {
+                                Some(f) => keys.extend(f.iter().cloned()),
+                                None => whole = false,
+                            }
+                        } else {
+                            for g in &ready[c] {
+                                let input = recovery::Input {
+                                    key: TileKey {
+                                        depth: job.borders.publication_depth(g.key())?,
+                                        ..g.key()
+                                    },
+                                    triangles: u32::try_from(g.triangles()).unwrap_or(u32::MAX),
+                                };
+                                local.push(input.clone());
+                                keys.push(input);
+                            }
+                        }
+                    }
+                    (whole && keys.len() <= recovery::FRONTIER).then_some((keys, local))
+                } else {
+                    None
+                };
+                if has_omission && v2_frontier.is_none() {
+                    for c in &pending[i].children {
+                        frontier_of.borrow_mut().remove(c);
+                        si_labels.borrow_mut().remove(c);
+                    }
                     let closed = pending.remove(i);
-                    let mut retained = Vec::new();
+                    // Root recovery v2 found no stand-in for some child: the omission
+                    // propagates and nothing is retained.
+                    let retained = Vec::new();
                     let mut frontier = Vec::new();
                     for c in &closed.children {
                         let was_omitted = omitted_ids.borrow_mut().remove(c);
@@ -3165,9 +3418,6 @@ fn walk(
                                     depth: job.borders.publication_depth(geometry.key())?,
                                     ..geometry.key()
                                 });
-                            }
-                            if complete {
-                                retained.push(geometry);
                             }
                         }
                     }
@@ -3206,7 +3456,8 @@ fn walk(
                 }
                 // D: a cell builds once its chords' co-owners under other parents that come
                 // before it are final, so it reads their splits (`Borders::co_owner_groups`).
-                {
+                // A stand-in has no chords (v2).
+                if v2_frontier.is_none() || root {
                     let id = pending[i].id;
                     let mut k = keep.borrow_mut();
                     if let std::collections::hash_map::Entry::Vacant(e) = k.earlier.entry(id) {
@@ -3243,13 +3494,40 @@ fn walk(
                 };
                 let mut closed = pending.remove(i);
                 closed.recover = has_omission;
+                closed.v2_off = v2_off.get();
+                closed.stand_in_folds = closed
+                    .children
+                    .iter()
+                    .any(|c| si_folds.borrow().contains(c));
+                if let Some((keys, local)) = v2_frontier {
+                    for c in &closed.children {
+                        frontier_of.borrow_mut().remove(c);
+                        if let Some(list) = si_labels.borrow_mut().remove(c) {
+                            let key = ready[c][0].key();
+                            closed.stand_in_labels.push((key, list));
+                        }
+                    }
+                    if root {
+                        closed.label_union =
+                            Some(std::sync::Arc::new(label_union.borrow().clone()));
+                    }
+                    if root {
+                        closed.frontier = keys;
+                    } else {
+                        closed.recover = false;
+                        closed.stand_in_only = true;
+                        closed.frontier = local;
+                        frontier_of.borrow_mut().insert(closed.id, keys);
+                    }
+                }
                 for c in &closed.children {
                     omitted_ids.borrow_mut().remove(c);
                 }
-                closed.folds_below = closed
-                    .children
-                    .iter()
-                    .any(|c| carriers.borrow().contains(c));
+                closed.folds_below = closed.stand_in_folds
+                    || closed
+                        .children
+                        .iter()
+                        .any(|c| carriers.borrow().contains(c));
                 if closed.folds_below {
                     carriers.borrow_mut().insert(closed.id);
                 }
@@ -3335,7 +3613,67 @@ fn walk(
                 .map_err(|_| state("HLOD worker ended without a result"))?;
             *inflight -= 1;
             spans.extend(span);
-            let (geometry, row, timing, kept) = done?;
+            let (geometry, row, timing, mut kept) = done?;
+            if let Some(attempt) = kept.stand_in.take() {
+                if attempt.4 > 0 {
+                    si_folds.borrow_mut().insert(id);
+                }
+                attempts.borrow_mut().push(attempt);
+            }
+            if let Some(labels) = kept.labels.take().filter(|_| !v2_off.get()) {
+                label_union.borrow_mut().add(&labels);
+                if matches!(row, Finished::Omitted { .. }) {
+                    si_labels.borrow_mut().insert(id, labels.stand_in);
+                }
+                // Charge the labels as they grow: the walk's union, the recovered root's
+                // snapshot, its job's working copy and `dropped`'s class sets (5x), the
+                // stand-ins' lists, and the omitted cells' published frontiers.
+                let held: u64 = si_labels
+                    .borrow()
+                    .values()
+                    .map(|l| (l.len() * 20 * 16 / 7) as u64)
+                    .sum();
+                let frontiers: u64 = frontier_of
+                    .borrow()
+                    .values()
+                    .map(|f| (f.len() * std::mem::size_of::<recovery::Input>() * 16 / 7) as u64)
+                    .sum();
+                let need = 5 * label_union.borrow().bytes() + held + frontiers;
+                let charged = label_charged.get();
+                if need > charged {
+                    let lease = loop {
+                        if let Some(lease) = ledger.try_lease(need - charged, 0) {
+                            break Some(lease);
+                        }
+                        if !spill.borrow_mut().spill_one(ready)? {
+                            break None;
+                        }
+                    };
+                    match lease {
+                        Some(lease) => {
+                            label_leases.borrow_mut().push(lease);
+                            label_charged.set(need);
+                        }
+                        None => {
+                            // Past the budget: give root recovery up for this walk. Every
+                            // later omission propagates, as without it, and the root stays
+                            // omitted; the labels' memory is released.
+                            v2_off.set(true);
+                            *label_union.borrow_mut() = recovery::LabelUnion::default();
+                            si_labels.borrow_mut().clear();
+                            frontier_of.borrow_mut().clear();
+                            label_leases.borrow_mut().clear();
+                            label_charged.set(0);
+                        }
+                    }
+                }
+            }
+            if matches!(row, Finished::Omitted { .. }) && !kept.frontier.is_empty() && !v2_off.get()
+            {
+                frontier_of
+                    .borrow_mut()
+                    .insert(id, std::mem::take(&mut kept.frontier));
+            }
             {
                 let mut k = keep.borrow_mut();
                 if k.rebuilding.remove(&id) {
@@ -3613,6 +3951,12 @@ fn walk(
                 single_leaf,
                 ownership_root: stack.is_empty(),
                 recover: false,
+                stand_in_only: false,
+                frontier: Vec::new(),
+                stand_in_labels: Vec::new(),
+                label_union: None,
+                v2_off: false,
+                stand_in_folds: false,
                 folds_below: false,
             };
             *next_seq += 1;
@@ -3760,6 +4104,9 @@ fn walk(
     let pool_ended = std::time::Instant::now();
     outcome?;
     let keep = keep.into_inner();
+    let mut attempts = attempts.into_inner();
+    attempts.sort_unstable_by_key(|a| (a.1, a.0));
+    report.recovery_v2_stand_ins = attempts;
     report.kept_vertices = keep.kept_vertices;
     report.rebuilt_cells = keep.rebuilt;
     report.keep_peak_waiting = keep.peak_waiting;

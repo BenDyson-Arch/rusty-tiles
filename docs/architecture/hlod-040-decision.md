@@ -830,6 +830,16 @@ so the actual children are the frontier tiles through transparent document links
 The recovered relation is never encoded as an implicit hierarchy; existing supported
 subtrees below frontier tiles keep their delivery.
 
+**Owner amendment, 2026-11-24 — root recovery v2 (0.4.2).** The root is recovered
+whatever the size of the frontier below it. Every omitted cell passes up an unpublished,
+contract-free stand-in (N3 to the cap, folds admitted); the root builds over its built
+children and the stand-ins, S2-measured against the source, and declares version 2 over
+its whole published frontier (at most 384 tiles; the tileset root may refine to all of
+them). Drops are declared against that frontier, as the validators recount them. Folds a
+tile keeps from a stand-in are declared as admitted there (stage 2 or above). A
+declaration past its bounds (256 skipped cells, 64 KiB) or a stand-in that cannot reach
+the cap leaves the root omitted, as before. Version 1 is no longer produced.
+
 The root payload declares `asset.extras.rustyTiles.descendantRecovery: 1` and its
 explicit tile carries `extras.recovery`: version, root key, encoded root depth,
 frontier keys/counts and omitted ownership keys. The declaration contains at most

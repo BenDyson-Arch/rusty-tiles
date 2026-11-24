@@ -722,10 +722,21 @@ impl<'s, S: Sink> Builder<'s, S> {
     /// caller's.
     fn fit(&mut self, node: &mut Node) -> Result<(), JobError> {
         let limits = self.limits;
+        // Root recovery v2: the recovered root's children are its declared frontier, each
+        // with its own ownership identity; an implicit root's header carries none, so a
+        // direct child moves into an external document (whose root keeps it) instead.
+        let recovered = node.depth == 0 && self.recovery.as_ref().is_some_and(|r| r.version == 2);
         while node.over(&limits) {
             if node.objects > limits.objects {
                 if let Some(path) = node.largest_inline_tree() {
-                    node.demote(&path);
+                    if recovered && path.len() == 1 {
+                        let child = node.children.remove(path[0]);
+                        let link = self.externalize(child)?;
+                        node.children.insert(path[0], link);
+                        node.aggregate();
+                    } else {
+                        node.demote(&path);
+                    }
                     continue;
                 }
             }
@@ -740,7 +751,7 @@ impl<'s, S: Sink> Builder<'s, S> {
             let index = if node.levels > limits.levels {
                 let shallow = |c: &Node| c.leaf.is_none() && c.link.is_none() && !c.implicit;
                 match largest(&|c| u64::from(c.levels), &shallow) {
-                    Some(i) if !node.children[i].is_skeleton() => {
+                    Some(i) if !node.children[i].is_skeleton() && !recovered => {
                         node.demote(&[i]);
                         continue;
                     }
@@ -844,7 +855,7 @@ mod omission_tests {
             leaf_end: end as u32,
         };
         let recovery = Recovery {
-            version: 1,
+            version: 2,
             root: key(0, 2, 0),
             encoded_depth: 2,
             frontier: (0..2)

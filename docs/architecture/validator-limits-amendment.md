@@ -756,6 +756,12 @@ stops at 64 KiB; at most 265 scaffold keys enter the pairwise pass. Indexed firs
 terminal prefixes replace repeated coverage aggregates. No budget refusal may
 truncate the frontier.
 
+Root recovery v2 (2026-11-24) raises the frontier bound to 384 tiles (version 2 only), so
+at most 1 + 256 + 384 = 641 scaffold keys enter the pairwise pass: 641² × 16 ≈ 6.6M
+units, within the 16M floor. The children query reads at most 385 rows. The other
+charges are unchanged; a private 390M-triangle bake (172 frontier tiles, 42 skipped
+cells) validated its relation within them.
+
 | operation | charged units |
 | --- | ---: |
 | metadata read | 32 |

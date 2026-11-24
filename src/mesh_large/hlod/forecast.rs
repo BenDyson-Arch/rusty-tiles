@@ -9,10 +9,12 @@
 //! - a cell whose contract is past `6 × cap` items, or needs more than `cap` triangles on its
 //!   own, is omitted for certain (`ContractLowerBound`): the bake never builds it;
 //! - a cell with an omitted child is omitted without a build, unless it is the ownership
-//!   root and its children's frontier is complete and bounded (at most
-//!   [`recovery::INPUTS`] capped tiles), when the root is rebuilt from that frontier;
+//!   root, which root recovery v2 rebuilds over its omitted cells' stand-ins (the forecast
+//!   assumes every stand-in reaches the cap and the declaration fits its bounds: 384
+//!   frontier tiles, 256 skipped cells, 64 KiB);
 //! - an omitted cell hands its parent its children as a frontier when that frontier is
-//!   complete and bounded, else nothing.
+//!   complete and bounded (at most [`recovery::INPUTS`] capped tiles), else nothing: the
+//!   bounded frontier only sizes the forecast's own key memory.
 //!
 //! Whether a cell's own build fails is the estimate. On measured bakes every primary
 //! failure was a contraction stall or a stalled proposal, never a refused assessment: the
@@ -562,7 +564,11 @@ fn walk(
             let frontier = frontier(&frame.children);
             let root = !parent_depth_open || borders.publication_depth(key)? == 0;
             let recovery_allowed = settings.mutation.recovery();
-            let outcome = if has_omission && !(root && recovery_allowed && frontier.is_some()) {
+            // Root recovery v2 recovers the root over stand-ins whatever its frontier's size;
+            // a stand-in that misses the cap, or a declaration past its bounds, would leave
+            // it omitted (not forecast).
+            let recoverable = frontier.is_some() || settings.mutation.recovery_v2();
+            let outcome = if has_omission && !(root && recovery_allowed && recoverable) {
                 Outcome::Descendant
             } else if matches!(risk, Risk::Certain | Risk::High) {
                 if has_omission {

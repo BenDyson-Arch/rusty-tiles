@@ -1234,6 +1234,48 @@ pub(crate) fn build_parent(
     Ok(last)
 }
 
+/// Root recovery v2: an omitted cell's unpublished stand-in, N3's reduction of its inputs to
+/// `cap` with no border contract (it is never published, so no seam has to match), folds
+/// admitted when `folds`. `None` when N3 cannot reach the cap.
+pub(crate) fn free_stand_in(
+    tile: TileKey,
+    children: &[TileGeometry],
+    cap: usize,
+    folds: bool,
+    check: &(dyn Fn() -> Result<(), JobError> + Sync),
+) -> Result<Option<Built>, JobError> {
+    check()?;
+    let merged = merge(children);
+    let policy = if folds {
+        folds::Policy::last_resort(3, tile.leaf_begin, tile.leaf_end, &[])
+    } else {
+        folds::Policy::default()
+    };
+    let proposal = attempt(
+        tile,
+        &merged,
+        &[],
+        cap,
+        children
+            .iter()
+            .map(|c| c.geometric_error)
+            .fold(0., f64::max),
+        &merged,
+        &merged.triangles,
+        f64::INFINITY,
+        false,
+        &HashSet::default(),
+        Resort::N3,
+        &policy,
+        &mut false,
+    );
+    match proposal {
+        Ok(built) => Ok(Some(built)),
+        Err(e) if e.kind() == JobErrorKind::Unsupported => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
 /// One additional full-cap root proposal. No contraction or border-relief handover:
 /// an ownership root has no external interface. Component-aware N3 preserves the
 /// existing drop/fold/topology guards; the caller still performs final decode and S2.
