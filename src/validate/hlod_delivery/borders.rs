@@ -776,7 +776,12 @@ impl Store {
                     right
                         .iter()
                         .map(|(s, _)| {
-                            wedge(a, b, point(**c), point(**s)) == std::cmp::Ordering::Greater
+                            // The same third corner is the same source face, whatever its
+                            // wedge: a page collinear with the edge (a surface under the
+                            // published contract) has no acute wedge even with itself.
+                            c == s
+                                || wedge(a, b, point(**c), point(**s))
+                                    == std::cmp::Ordering::Greater
                         })
                         .collect()
                 })
@@ -1291,6 +1296,37 @@ mod tests {
         siblings(a_coarse(&ALL), 0., b_coarse(&ALL), 0.).unwrap();
         // Keeping P2 moves P1 and P3 by 0.05 off the chords through it.
         siblings(a_coarse(&[0, 2, 4]), 1., b_coarse(&[0, 2, 4]), 1.).unwrap();
+    }
+    /// #442: a source book spine (two pages each way on one edge) holding a page whose third
+    /// corner is collinear with the edge, which the published contract counts as a surface.
+    /// A coarse tile copying the leaf unchanged must validate; one that moves the collinear
+    /// page's third corner (still collinear) has no such source page.
+    fn spine(collinear: Point) -> Vec<[Point; 3]> {
+        let (a, b) = ([0., 0., 0.], [1., 0., 0.]);
+        vec![
+            [a, b, [0.5, 1., 0.]],
+            [a, b, collinear],
+            [b, a, [0.5, 0., 1.]],
+            [b, a, [0.5, 0., -1.]],
+        ]
+    }
+    #[test]
+    fn an_unchanged_collinear_book_page_corresponds_to_itself() {
+        let leaf = spine([2., 0., 0.]);
+        let copied = tree(&[
+            (None, 16., None),
+            (Some(0), 1., Some(leaf.clone())),
+            (Some(1), 0., Some(leaf.clone())),
+        ]);
+        assert!(copied.is_ok(), "{copied:?}");
+        refused(
+            tree(&[
+                (None, 16., None),
+                (Some(0), 1., Some(spine([3., 0., 0.]))),
+                (Some(1), 0., Some(leaf)),
+            ]),
+            "interfaceWinding",
+        );
     }
     #[test]
     fn contraction_beyond_g_over_8_is_refused() {

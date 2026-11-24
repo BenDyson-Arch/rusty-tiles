@@ -319,7 +319,8 @@ def folds(store, tile, directed, arcs, require, faces=()):
     def corresponds(p, q):
         """Every coarse face on p -> q matched, one to one, to a descendant source
         face running the same way on every source edge it stands for, with its third
-        corner on the same side of the coarse edge (exact acute wedge)."""
+        corner on the same side of the coarse edge (exact acute wedge), or the same
+        third corner."""
         a, b = canonical(p), canonical(q)
         if a is None or b is None:
             return False
@@ -333,7 +334,9 @@ def folds(store, tile, directed, arcs, require, faces=()):
             source = collections.Counter(z for z, leaf in index.get((x, y), ()) if lo <= leaf < hi)
             left, right = list(thirds.items()), [(store.canonical_xyz(z), n) for z, n in source.items()]
             store.work.charge(len(left) * len(right) * 64 + 1)
-            compatible = [[_wedge(p, q, c, z) > 0 for z, _ in right] for c, _ in left]
+            # The same third corner is the same source face, whatever its wedge: a page
+            # collinear with the edge has no acute wedge even with itself (#442).
+            compatible = [[c == z or _wedge(p, q, c, z) > 0 for z, _ in right] for c, _ in left]
             if not _routed([n for _, n in left], [n for _, n in right], compatible, store.work):
                 return False
         return True
