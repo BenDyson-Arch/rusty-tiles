@@ -696,8 +696,10 @@ impl Store {
     /// Whether every coarse face using `edge` in `direction` (0: lower to higher
     /// key) matches its own descendant source face, one to one, on every source edge
     /// of `arc`: same direction along the arc, third corner on the same side of the
-    /// coarse edge (exact acute wedge). An unrelated face of that edge (another
-    /// book page on another side) supplies no correspondence.
+    /// coarse edge (exact acute wedge), or, on an uncontracted edge (an arc of one
+    /// source edge), the same third corner: that source face itself, which a page
+    /// collinear with the edge matches by no wedge (#442). An unrelated face of that
+    /// edge (another book page on another side) supplies no correspondence.
     #[expect(
         clippy::too_many_arguments,
         reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
@@ -776,10 +778,12 @@ impl Store {
                     right
                         .iter()
                         .map(|(s, _)| {
-                            // The same third corner is the same source face, whatever its
-                            // wedge: a page collinear with the edge (a surface under the
-                            // published contract) has no acute wedge even with itself.
-                            c == s
+                            // On an uncontracted edge the same third corner is the same
+                            // source face, whatever its wedge: a page collinear with the
+                            // edge (a surface under the published contract) has no acute
+                            // wedge even with itself. On a contracted arc a shared apex is
+                            // not the same face, so the wedge still decides.
+                            (arc.len() == 1 && c == s)
                                 || wedge(a, b, point(**c), point(**s))
                                     == std::cmp::Ordering::Greater
                         })
@@ -1323,6 +1327,29 @@ mod tests {
             tree(&[
                 (None, 16., None),
                 (Some(0), 1., Some(spine([3., 0., 0.]))),
+                (Some(1), 0., Some(leaf.clone())),
+            ]),
+            "interfaceWinding",
+        );
+        // Two coarse copies of the collinear page against one source page: routing stays
+        // one to one by multiplicity.
+        let mut twice = leaf.clone();
+        twice.push(leaf[1]);
+        refused(
+            tree(&[
+                (None, 16., None),
+                (Some(0), 1., Some(twice)),
+                (Some(1), 0., Some(leaf.clone())),
+            ]),
+            "interfaceWinding",
+        );
+        // The collinear page reversed has no source page in its direction.
+        let mut reversed = leaf.clone();
+        reversed[1] = [leaf[1][1], leaf[1][0], leaf[1][2]];
+        refused(
+            tree(&[
+                (None, 16., None),
+                (Some(0), 1., Some(reversed)),
                 (Some(1), 0., Some(leaf)),
             ]),
             "interfaceWinding",

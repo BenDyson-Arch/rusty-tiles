@@ -334,9 +334,12 @@ def folds(store, tile, directed, arcs, require, faces=()):
             source = collections.Counter(z for z, leaf in index.get((x, y), ()) if lo <= leaf < hi)
             left, right = list(thirds.items()), [(store.canonical_xyz(z), n) for z, n in source.items()]
             store.work.charge(len(left) * len(right) * 64 + 1)
-            # The same third corner is the same source face, whatever its wedge: a page
-            # collinear with the edge has no acute wedge even with itself (#442).
-            compatible = [[c == z or _wedge(p, q, c, z) > 0 for z, _ in right] for c, _ in left]
+            # On an uncontracted edge the same third corner is the same source face,
+            # whatever its wedge: a page collinear with the edge has no acute wedge even
+            # with itself (#442). On a contracted arc a shared apex is not the same face.
+            single = len(path) == 2
+            compatible = [[(single and c == z) or _wedge(p, q, c, z) > 0 for z, _ in right]
+                          for c, _ in left]
             if not _routed([n for _, n in left], [n for _, n in right], compatible, store.work):
                 return False
         return True
