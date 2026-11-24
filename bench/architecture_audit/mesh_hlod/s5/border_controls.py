@@ -634,7 +634,18 @@ def review2(name):
                 walk(c)
         walk(doc['root'])
         refinable(doc)
-    if name in ('page-crossed', 'page-same-side', 'page-retained'):
+    if name in ('page-collinear-retained', 'page-collinear-moved'):
+        case = Case(name)
+        a, b, c = case.fx.quad_faces(1, 1)[0]
+        # Exact in f32: the corners lie on the integer grid.
+        along = lambda k: tuple(f32(a[i] + k * (b[i] - a[i])) for i in range(3))
+        page = (a, b, along(2))
+        case.fx.extra = {'A0': [page]}
+        doc, files, source, records = build(case)
+        out = [f for f in case.fx.coarse('A') if f != page]
+        out.append(page if name == 'page-collinear-retained' else (a, b, along(3)))
+        files['A.glb'] = glb(out, identities(out), leaf=False)
+    elif name in ('page-crossed', 'page-same-side', 'page-retained'):
         # A source page on edge a -> b. Crossed: the page lies on the other side and
         # a new coarse face overlaps the sheet face on this side. Same side: the
         # page lies 0.001 above where the coarse face is, a matched simplification.
@@ -816,6 +827,10 @@ REVIEW2 = [
     ('frontier-duplicate', 'omissionReport', None),
     ('frontier-subset', 'omissionReport', None),
     ('zero-epsilon-collinear', None, None),
+    # #442: a source page collinear with its edge (a surface under the published
+    # contract) corresponds to its unchanged copy; one moved along the line does not.
+    ('page-collinear-retained', None, None),
+    ('page-collinear-moved', 'interfaceWinding', 'interfaceWinding'),
 ]
 
 
