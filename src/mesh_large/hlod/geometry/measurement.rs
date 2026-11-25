@@ -3,8 +3,8 @@
 use super::topology::Change;
 use crate::{
     mesh_large::hlod::{
-        error::Nearest,
-        source_index::{self, Surface, Triangle, V3},
+        error::{Nearest, RootBatches, SearchStats, ROOT_BATCH, ROOT_RESULT_BYTES, ROOT_WINDOW},
+        source_index::{self, Hit, SourceQuery, Surface, Triangle, V3},
     },
     JobError,
 };
@@ -91,13 +91,190 @@ fn fine_samples(p: [V3; 3]) -> impl Iterator<Item = V3> {
 
 /// `source` returns an actual captured-source witness and its distance. Budget exhaustion
 /// gives an upper distance, hence cannot make an over-budget closure eligible.
+/// Whether a fold over the root's controls goes on or refuses (`Root::each`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Step {
+    Go,
+    Refuse,
+}
+
+/// The root's controls in fixed batches (`error::RootBatches`), with the job's search
+/// budget, and the searches they ran (added to the job's statistics by the caller, on
+/// every path).
+pub(crate) struct Root<'f, 'r> {
+    pub batches: RootBatches<'f, 'r>,
+    pub steps: u64,
+    pub searches: SearchStats,
+}
+
+/// One batch's results up to its first error, the error, and the searches it ran.
+type Batch<E> = (Vec<E>, Option<JobError>, SearchStats);
+/// One root sample's evaluation: its batch's source query (when asked for), search state
+/// and surface hint, and the point.
+type Eval<'e, E> = dyn Fn(Option<&mut SourceQuery<'_>>, &mut Nearest, &mut Option<usize>, V3) -> Result<E, JobError>
+    + Sync
+    + 'e;
+
+impl Root<'_, '_> {
+    /// Evaluate `points` in fixed batches of `ROOT_BATCH`, a window of `ROOT_WINDOW` at a
+    /// time. Each batch starts from a fresh source query (with `query`), search frontier
+    /// and surface hint, and stops at its first error. Results fold in order: a refusal
+    /// stops before any later sample's result or error, an error stops before any later
+    /// result, as a serial loop would.
+    pub(crate) fn each<E: Send>(
+        &mut self,
+        points: impl Iterator<Item = V3>,
+        query: bool,
+        eval: &Eval<'_, E>,
+        check: &(dyn Fn() -> Result<(), JobError> + Sync),
+        fold: &mut dyn FnMut(E) -> Step,
+    ) -> Result<Step, JobError> {
+        use rayon::prelude::*;
+        const { assert!(std::mem::size_of::<E>() as u64 <= ROOT_RESULT_BYTES) };
+        let ((width, fresh), steps) = (self.batches, self.steps);
+        let mut points = points.peekable();
+        while points.peek().is_some() {
+            let window: Vec<V3> = points.by_ref().take(ROOT_WINDOW).collect();
+            let batches: Vec<&[V3]> = window.chunks(ROOT_BATCH).collect();
+            for group in batches.chunks(width.max(1)) {
+                check()?;
+                let results: Vec<Batch<E>> = group
+                    .par_iter()
+                    .map(|batch| {
+                        let mut n = Nearest::with_steps(steps);
+                        let mut hint = None;
+                        let mut q = None;
+                        if query {
+                            match fresh() {
+                                Ok(fresh) => q = Some(fresh),
+                                Err(e) => return (Vec::new(), Some(e), n.stats),
+                            }
+                        }
+                        let mut out = Vec::with_capacity(batch.len());
+                        for &p in *batch {
+                            match eval(q.as_mut(), &mut n, &mut hint, p) {
+                                Ok(e) => out.push(e),
+                                Err(e) => return (out, Some(e), n.stats),
+                            }
+                        }
+                        (out, None, n.stats)
+                    })
+                    .collect();
+                // Each batch's searches count up to the batch the fold stops in, as one
+                // batch at a time would count them; later batches of the group are
+                // discarded unseen, so the counts do not depend on the width.
+                for (out, error, searches) in results {
+                    self.searches.add(searches);
+                    for e in out {
+                        if fold(e) == Step::Refuse {
+                            return Ok(Step::Refuse);
+                        }
+                    }
+                    if let Some(error) = error {
+                        return Err(error);
+                    }
+                }
+            }
+        }
+        Ok(Step::Go)
+    }
+
+    /// `each` over nearest source points: the point (or, with `position`, the nearest
+    /// source point) and its distance.
+    fn source(
+        &mut self,
+        points: impl Iterator<Item = V3>,
+        position: bool,
+        check: &(dyn Fn() -> Result<(), JobError> + Sync),
+        fold: &mut dyn FnMut((V3, f64)) -> Step,
+    ) -> Result<Step, JobError> {
+        self.each(
+            points,
+            true,
+            &move |q, n, _, p| source_point(batch_query(q)?, n, p, position),
+            check,
+            fold,
+        )
+    }
+
+    /// `each` over nearest faces of a resident surface (`surface`), from a fresh hint.
+    fn surface(
+        &mut self,
+        surface: &Surface,
+        points: impl Iterator<Item = V3>,
+        check: &(dyn Fn() -> Result<(), JobError> + Sync),
+        fold: &mut dyn FnMut(Hit) -> Step,
+    ) -> Result<Step, JobError> {
+        self.each(
+            points,
+            false,
+            &|_, n, hint, p| Ok(n.surface(surface, p, hint)),
+            check,
+            fold,
+        )
+    }
+
+    /// `each` over a source point (with `position`) and then its nearest face of
+    /// `surface`: the distance to that face.
+    fn source_then_surface(
+        &mut self,
+        surface: &Surface,
+        points: impl Iterator<Item = V3>,
+        check: &(dyn Fn() -> Result<(), JobError> + Sync),
+        fold: &mut dyn FnMut(f64) -> Step,
+    ) -> Result<Step, JobError> {
+        self.each(
+            points,
+            true,
+            &|q, n, hint, p| {
+                let (p, _) = source_point(batch_query(q)?, n, p, true)?;
+                Ok(n.surface(surface, p, hint).distance2.sqrt())
+            },
+            check,
+            fold,
+        )
+    }
+}
+
+/// A root batch's source query (`Root::each` opens one for every source search).
+pub(crate) fn batch_query<'a, 'q>(
+    q: Option<&'a mut SourceQuery<'q>>,
+) -> Result<&'a mut SourceQuery<'q>, JobError> {
+    q.ok_or_else(|| {
+        JobError::new(
+            crate::JobErrorKind::InvalidState,
+            "a root source batch has no source query".to_string(),
+        )
+    })
+}
+
+/// The nearest source point of `p` (`p` itself without `position`) and its distance.
+fn source_point(
+    q: &mut SourceQuery<'_>,
+    n: &mut Nearest,
+    p: V3,
+    position: bool,
+) -> Result<(V3, f64), JobError> {
+    let hit = n.source(q, p)?;
+    if !position {
+        return Ok((p, hit.distance2.sqrt()));
+    }
+    let t = q
+        .triangle(hit)?
+        .triangle
+        .positions
+        .map(|p| p.map(f64::from));
+    Ok((source_index::bary(t, hit.bary), hit.distance2.sqrt()))
+}
+
+/// `bounds`: the licensed change bound `e` and the G floor.
 pub(crate) fn assess(
     change: &mut Change,
     decoded: &[[f32; 3]],
     triangles: &[[u32; 3]],
-    e: f64,
-    g_floor: f64,
+    (e, g_floor): (f64, f64),
     source: &mut dyn FnMut(V3, bool) -> Result<(V3, f64), JobError>,
+    mut root: Option<&mut Root<'_, '_>>,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
 ) -> Result<Option<Controls>, JobError> {
     let _cpu = super::super::cpu_profile::start(
@@ -145,24 +322,48 @@ pub(crate) fn assess(
             let [a, b] = [a, b].map(|p| p.map(f64::from));
             (0..=8).map(move |k| std::array::from_fn(|i| a[i] + (b[i] - a[i]) * k as f64 / 8.))
         };
-        for (i, &p) in strip.lost_points.iter().enumerate() {
-            if i % 256 == 0 {
+        if let Some(root) = root.as_deref_mut() {
+            // The root: the same controls in the same order, in fixed batches.
+            root.surface(
+                proxy,
+                strip.lost_points.iter().copied(),
+                check,
+                &mut |hit| {
+                    controls.source.push(hit.distance2.sqrt());
+                    Step::Go
+                },
+            )?;
+            let added = strip
+                .added_edges
+                .iter()
+                .flat_map(|&edge| along(edge))
+                .chain(strip.added_faces.iter().flat_map(|&i| {
+                    fine_samples(triangles[i].map(|v| decoded[v as usize].map(f64::from)))
+                }));
+            root.source(added, false, check, &mut |(_, d)| {
+                controls.proxy.push(d);
+                Step::Go
+            })?;
+        } else {
+            for (i, &p) in strip.lost_points.iter().enumerate() {
+                if i % 256 == 0 {
+                    check()?;
+                }
+                controls
+                    .source
+                    .push(nearest.surface(proxy, p, &mut hint).distance2.sqrt());
+            }
+            for &edge in &strip.added_edges {
                 check()?;
+                for p in along(edge) {
+                    controls.proxy.push(source(p, false)?.1);
+                }
             }
-            controls
-                .source
-                .push(nearest.surface(proxy, p, &mut hint).distance2.sqrt());
-        }
-        for &edge in &strip.added_edges {
-            check()?;
-            for p in along(edge) {
-                controls.proxy.push(source(p, false)?.1);
-            }
-        }
-        for &i in &strip.added_faces {
-            check()?;
-            for p in fine_samples(triangles[i].map(|v| decoded[v as usize].map(f64::from))) {
-                controls.proxy.push(source(p, false)?.1);
+            for &i in &strip.added_faces {
+                check()?;
+                for p in fine_samples(triangles[i].map(|v| decoded[v as usize].map(f64::from))) {
+                    controls.proxy.push(source(p, false)?.1);
+                }
             }
         }
         hint = None;
@@ -173,34 +374,86 @@ pub(crate) fn assess(
         }
         controls.closure_faces.resize(triangles.len(), false);
         let mut patch = Vec::with_capacity(change.patch_faces.len());
-        for &i in &change.patch_faces {
-            check()?;
-            controls.closure_faces[i] = true;
-            let t = Triangle::new(triangles[i].map(|v| decoded[v as usize]), i as u64);
-            // The oracle's grid: the eighth grid holds the quarter grid and centroid.
-            for p in fine_samples(t.positions()) {
-                let (_, d) = source(p, false)?;
-                change.receipt.hole_patch_to_source = change.receipt.hole_patch_to_source.max(d);
+        if let Some(root) = root.as_deref_mut() {
+            let mut points = Vec::new();
+            for &i in &change.patch_faces {
+                controls.closure_faces[i] = true;
+                let t = Triangle::new(triangles[i].map(|v| decoded[v as usize]), i as u64);
+                points.extend(fine_samples(t.positions()));
+                patch.push(t);
+            }
+            let receipt = &mut change.receipt;
+            let step = root.source(points.into_iter(), false, check, &mut |(_, d)| {
+                receipt.hole_patch_to_source = receipt.hole_patch_to_source.max(d);
                 if d * 1.05 > e {
-                    return Ok(None);
+                    return Step::Refuse;
                 }
                 controls.proxy.push(d);
+                Step::Go
+            })?;
+            if step == Step::Refuse {
+                return Ok(None);
             }
-            patch.push(t);
+        } else {
+            for &i in &change.patch_faces {
+                check()?;
+                controls.closure_faces[i] = true;
+                let t = Triangle::new(triangles[i].map(|v| decoded[v as usize]), i as u64);
+                // The oracle's grid: the eighth grid holds the quarter grid and centroid.
+                for p in fine_samples(t.positions()) {
+                    let (_, d) = source(p, false)?;
+                    change.receipt.hole_patch_to_source =
+                        change.receipt.hole_patch_to_source.max(d);
+                    if d * 1.05 > e {
+                        return Ok(None);
+                    }
+                    controls.proxy.push(d);
+                }
+                patch.push(t);
+            }
         }
         // The oracle's other closure witnesses: each cycle centroid of the closing
         // boundary, projected onto the proxy, against source.
         if let Some(proxy) = &proxy {
-            for &c in &change.closure_centroids {
-                check()?;
-                let hit = nearest.surface(proxy, c, &mut hint);
-                let face = triangles[hit.rank as usize].map(|v| decoded[v as usize].map(f64::from));
-                let (_, d) = source(source_index::bary(face, hit.bary), false)?;
-                change.receipt.hole_patch_to_source = change.receipt.hole_patch_to_source.max(d);
-                if d * 1.05 > e {
+            if let Some(root) = root.as_deref_mut() {
+                let mut on_proxy = Vec::with_capacity(change.closure_centroids.len());
+                root.surface(
+                    proxy,
+                    change.closure_centroids.iter().copied(),
+                    check,
+                    &mut |hit| {
+                        let face = triangles[hit.rank as usize]
+                            .map(|v| decoded[v as usize].map(f64::from));
+                        on_proxy.push(source_index::bary(face, hit.bary));
+                        Step::Go
+                    },
+                )?;
+                let receipt = &mut change.receipt;
+                let step = root.source(on_proxy.into_iter(), false, check, &mut |(_, d)| {
+                    receipt.hole_patch_to_source = receipt.hole_patch_to_source.max(d);
+                    if d * 1.05 > e {
+                        return Step::Refuse;
+                    }
+                    controls.proxy.push(d);
+                    Step::Go
+                })?;
+                if step == Step::Refuse {
                     return Ok(None);
                 }
-                controls.proxy.push(d);
+            } else {
+                for &c in &change.closure_centroids {
+                    check()?;
+                    let hit = nearest.surface(proxy, c, &mut hint);
+                    let face =
+                        triangles[hit.rank as usize].map(|v| decoded[v as usize].map(f64::from));
+                    let (_, d) = source(source_index::bary(face, hit.bary), false)?;
+                    change.receipt.hole_patch_to_source =
+                        change.receipt.hole_patch_to_source.max(d);
+                    if d * 1.05 > e {
+                        return Ok(None);
+                    }
+                    controls.proxy.push(d);
+                }
             }
             hint = None;
         }
@@ -215,19 +468,43 @@ pub(crate) fn assess(
                 .map(|&i| Triangle::new(triangles[i].map(|v| decoded[v as usize]), i as u64)),
         );
         let patch = Surface::new(patch)?;
-        for edge in &change.boundary {
-            check()?;
+        let quarters = |edge: &[[f32; 3]; 2]| {
             let [a, b] = edge.map(|p| p.map(f64::from));
-            for k in 0..=4 {
-                let p = std::array::from_fn(|i| a[i] + (b[i] - a[i]) * k as f64 / 4.);
-                let (p, _) = source(p, true)?;
-                let d = nearest.surface(&patch, p, &mut hint).distance2.sqrt();
-                change.receipt.hole_boundary_to_patch =
-                    change.receipt.hole_boundary_to_patch.max(d);
-                if d * 1.05 > e {
-                    return Ok(None);
+            (0..=4).map(move |k| -> V3 {
+                std::array::from_fn(|i| a[i] + (b[i] - a[i]) * k as f64 / 4.)
+            })
+        };
+        if let Some(root) = root.as_deref_mut() {
+            let receipt = &mut change.receipt;
+            let step = root.source_then_surface(
+                &patch,
+                change.boundary.iter().flat_map(quarters),
+                check,
+                &mut |d| {
+                    receipt.hole_boundary_to_patch = receipt.hole_boundary_to_patch.max(d);
+                    if d * 1.05 > e {
+                        return Step::Refuse;
+                    }
+                    controls.source.push(d);
+                    Step::Go
+                },
+            )?;
+            if step == Step::Refuse {
+                return Ok(None);
+            }
+        } else {
+            for edge in &change.boundary {
+                check()?;
+                for p in quarters(edge) {
+                    let (p, _) = source(p, true)?;
+                    let d = nearest.surface(&patch, p, &mut hint).distance2.sqrt();
+                    change.receipt.hole_boundary_to_patch =
+                        change.receipt.hole_boundary_to_patch.max(d);
+                    if d * 1.05 > e {
+                        return Ok(None);
+                    }
+                    controls.source.push(d);
                 }
-                controls.source.push(d);
             }
         }
         controls.closure_max = change
@@ -253,34 +530,77 @@ pub(crate) fn assess(
             {
                 return Ok(None);
             }
-            for (t, lost) in &change.opening_reference {
-                if !lost {
-                    continue;
-                }
-                check()?;
-                for p in samples(t.map(|p| p.map(f64::from))) {
-                    let (p, _) = source(p, true)?;
-                    let d = nearest.surface(proxy, p, &mut hint).distance2.sqrt();
-                    change.receipt.opened_hole_to_proxy =
-                        change.receipt.opened_hole_to_proxy.max(d);
+            let quarters = |edge: &[[f32; 3]; 2]| {
+                let [a, b] = edge.map(|p| p.map(f64::from));
+                (0..=4).map(move |k| -> V3 {
+                    std::array::from_fn(|i| a[i] + (b[i] - a[i]) * k as f64 / 4.)
+                })
+            };
+            if let Some(root) = root {
+                // The root: the same lost-surface and boundary controls, in the same order,
+                // in fixed batches; the same refusal at the same sample.
+                let lost = change
+                    .opening_reference
+                    .iter()
+                    .filter(|(_, lost)| *lost)
+                    .flat_map(|(t, _)| samples(t.map(|p| p.map(f64::from))));
+                let receipt = &mut change.receipt;
+                let step = root.source_then_surface(proxy, lost, check, &mut |d| {
+                    receipt.opened_hole_to_proxy = receipt.opened_hole_to_proxy.max(d);
                     if 1.05 * d > e {
-                        return Ok(None);
+                        return Step::Refuse;
                     }
                     controls.source.push(d);
+                    Step::Go
+                })?;
+                if step == Step::Refuse {
+                    return Ok(None);
                 }
-            }
-            for edge in &change.opening_boundary {
-                check()?;
-                let [a, b] = edge.map(|p| p.map(f64::from));
-                for k in 0..=4 {
-                    let p = std::array::from_fn(|i| a[i] + (b[i] - a[i]) * k as f64 / 4.);
-                    let (_, d) = source(p, false)?;
-                    change.receipt.opened_hole_boundary_to_source =
-                        change.receipt.opened_hole_boundary_to_source.max(d);
-                    if 1.05 * d > e {
-                        return Ok(None);
+                let step = root.source(
+                    change.opening_boundary.iter().flat_map(quarters),
+                    false,
+                    check,
+                    &mut |(_, d)| {
+                        receipt.opened_hole_boundary_to_source =
+                            receipt.opened_hole_boundary_to_source.max(d);
+                        if 1.05 * d > e {
+                            return Step::Refuse;
+                        }
+                        controls.proxy.push(d);
+                        Step::Go
+                    },
+                )?;
+                if step == Step::Refuse {
+                    return Ok(None);
+                }
+            } else {
+                for (t, lost) in &change.opening_reference {
+                    if !lost {
+                        continue;
                     }
-                    controls.proxy.push(d);
+                    check()?;
+                    for p in samples(t.map(|p| p.map(f64::from))) {
+                        let (p, _) = source(p, true)?;
+                        let d = nearest.surface(proxy, p, &mut hint).distance2.sqrt();
+                        change.receipt.opened_hole_to_proxy =
+                            change.receipt.opened_hole_to_proxy.max(d);
+                        if 1.05 * d > e {
+                            return Ok(None);
+                        }
+                        controls.source.push(d);
+                    }
+                }
+                for edge in &change.opening_boundary {
+                    check()?;
+                    for p in quarters(edge) {
+                        let (_, d) = source(p, false)?;
+                        change.receipt.opened_hole_boundary_to_source =
+                            change.receipt.opened_hole_boundary_to_source.max(d);
+                        if 1.05 * d > e {
+                            return Ok(None);
+                        }
+                        controls.proxy.push(d);
+                    }
                 }
             }
             controls.opening_faces.clone_from(&change.opening_faces);
@@ -313,6 +633,75 @@ mod tests {
     use super::*;
     use crate::mesh_large::hlod::geometry::topology::{self, tests::ring};
 
+    /// `Root::each` folds in sampling order for any width: each point once, in order, up to
+    /// a refusal, which wins over a later evaluation error; searches count up to the end of
+    /// the batch the fold stops in. An evaluation error first is the outcome, its batch's
+    /// searches up to it counted.
+    #[test]
+    fn root_each_folds_in_order_and_stops_at_the_first_refusal_or_error() {
+        let b = ROOT_BATCH as u64;
+        let n = 2 * ROOT_WINDOW as u64 + 3;
+        let k = ROOT_WINDOW as u64 + 5 * b + 100;
+        let unused = || -> Result<SourceQuery<'static>, JobError> { unreachable!() };
+        let error = |i: u64| JobError::new(crate::JobErrorKind::InvalidState, format!("at {i}"));
+        let run = |width: usize, refuse: Option<u64>, fail: Option<u64>| {
+            let mut root = Root {
+                batches: (width, &unused),
+                steps: 4,
+                searches: SearchStats::default(),
+            };
+            let mut seen = Vec::new();
+            let step = root.each(
+                (0..n).map(|i| [i as f64, 0., 0.]),
+                false,
+                &|q, nearest, _, p| {
+                    assert!(q.is_none());
+                    nearest.stats.searches += 1;
+                    let i = p[0] as u64;
+                    if Some(i) == fail {
+                        Err(error(i))
+                    } else {
+                        Ok(i)
+                    }
+                },
+                &|| Ok(()),
+                &mut |i| {
+                    seen.push(i);
+                    if Some(i) == refuse {
+                        Step::Refuse
+                    } else {
+                        Step::Go
+                    }
+                },
+            );
+            (
+                step.map_err(|e| e.to_string()),
+                seen,
+                root.searches.searches,
+            )
+        };
+        let any_width = |refuse, fail| {
+            let one = run(1, refuse, fail);
+            for width in [2, 5] {
+                assert_eq!(run(width, refuse, fail), one, "width {width}");
+            }
+            one
+        };
+        assert_eq!(any_width(None, None), (Ok(Step::Go), (0..n).collect(), n));
+        for fail in [None, Some(k + 1), Some(k + b)] {
+            // The refusing batch's searches, up to its own evaluation error if any.
+            let searches = if fail == Some(k + 1) {
+                k + 2
+            } else {
+                (k / b + 1) * b
+            };
+            let refused = (Ok(Step::Refuse), (0..=k).collect(), searches);
+            assert_eq!(any_width(Some(k), fail), refused);
+        }
+        let failed = (Err(error(k).to_string()), (0..k).collect(), k + 1);
+        assert_eq!(any_width(Some(k + b), Some(k)), failed);
+    }
+
     #[test]
     fn lost_surface_controls_and_reference_index_fit_the_parent_charge() {
         let n = 16u32;
@@ -342,9 +731,9 @@ mod tests {
                 &mut change,
                 &m.positions,
                 &output,
-                0.2,
-                0.2,
+                (0.2, 0.2),
                 &mut |p, _| Ok((p, 0.)),
+                None,
                 &|| Ok(()),
             )
             .unwrap()
@@ -393,9 +782,9 @@ mod tests {
                 &mut change,
                 &m.positions,
                 &opened,
-                0.2,
-                0.2,
+                (0.2, 0.2),
                 &mut source,
+                None,
                 &|| Ok(()),
             )
             .unwrap();
@@ -425,9 +814,9 @@ mod tests {
                     &mut change,
                     &m.positions,
                     &opened,
-                    0.2,
-                    0.2,
+                    (0.2, 0.2),
                     &mut |_, _| panic!("border opening must be rejected before source work"),
+                    None,
                     &|| Ok(())
                 )
                 .unwrap()
@@ -468,14 +857,14 @@ mod tests {
                 &mut change,
                 &m.positions,
                 &filled,
-                0.2,
-                0.2,
+                (0.2, 0.2),
                 &mut |p, _| {
                     let hit = nearest.surface(&source, p, &mut hint);
                     let triangle = m.triangles[hit.rank as usize]
                         .map(|v| m.positions[v as usize].map(f64::from));
                     Ok((source_index::bary(triangle, hit.bary), hit.distance2.sqrt()))
                 },
+                None,
                 &|| Ok(()),
             )
             .unwrap();
@@ -520,9 +909,9 @@ mod tests {
                 &mut change,
                 &m.positions,
                 &filled,
-                budget,
-                budget,
+                (budget, budget),
                 &mut source,
+                None,
                 &|| Ok(()),
             )
             .unwrap();
