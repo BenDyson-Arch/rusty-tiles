@@ -544,10 +544,13 @@ pub(crate) fn plan(
             (settings.cap as u64).saturating_mul(6),
         ))
         .saturating_add(streams);
+    let root = error::root_bytes(1, settings.nearest_steps);
     let minimum = fixed.saturating_add(
         incidence.max(
             window
                 .saturating_add(job)
+                // The root's job also holds one measurement batch.
+                .saturating_add(root)
                 .saturating_add(appearance.cache_floor)
                 .saturating_add(appearance.decode),
         ),
@@ -587,7 +590,8 @@ pub(crate) fn plan(
         if ceiling < minimum {
             return Err(resource(format!(
                 "HLOD stage needs at least {minimum} bytes (fixed {fixed}, incidence {incidence}, \
-             child window {window}, one parent job {job}) but the memory budget allows \
+             child window {window}, one parent job {job}, the root's measurement batch \
+             {root}) but the memory budget allows \
              {ceiling} (budget {}, memory-backed scratch {tmpfs})",
                 budget.resolved_bytes
             )));
@@ -980,6 +984,9 @@ struct Closed {
     /// cell keeps them as input (`folds_below`) and, holding any, declares a fold stage of
     /// its own (at least 2): no published tile below declares them.
     stand_in_folds: bool,
+    /// The root's S2 runs in fixed batches, at most this many at once (the walk leases
+    /// their extra queries); 0 for every other cell.
+    s2_width: usize,
     /// A child holds folds a last resort admitted (A2): the guard licenses them as input,
     /// so this tile may keep them and then declares them (stage 0 if it is no last resort).
     folds_below: bool,
@@ -2043,12 +2050,22 @@ fn prepare(
     } else {
         contract.scale
     };
-    let Some(controls) = geometry::measurement::assess(
+    // The root measures in fixed batches from fresh queries (`error::RootBatches`).
+    let key = built.geometry.key;
+    let fresh = || job.source.query(job.input.captured, key);
+    let root_batches = nearest
+        .root_width
+        .map(|w| (w, &fresh as &(dyn Fn() -> Result<_, JobError> + Sync)));
+    let mut root = root_batches.map(|batches| geometry::measurement::Root {
+        batches,
+        steps: nearest.steps(),
+        searches: Default::default(),
+    });
+    let assessed = geometry::measurement::assess(
         &mut built.change,
         &positions.decoded,
         &built.geometry.triangles,
-        licensed,
-        contract.scale.max(built.children_error),
+        (licensed, contract.scale.max(built.children_error)),
         &mut |p, position| {
             let hit = nearest.source(query, p)?;
             if !position {
@@ -2061,9 +2078,14 @@ fn prepare(
                 .map(|p| p.map(f64::from));
             Ok((source_index::bary(t, hit.bary), hit.distance2.sqrt()))
         },
+        root.as_mut(),
         check,
-    )?
-    else {
+    );
+    // The root's searches count on every path, refusal and error included.
+    if let Some(root) = &mut root {
+        nearest.stats.add(std::mem::take(&mut root.searches));
+    }
+    let Some(controls) = assessed? else {
         built.rejection = Some(geometry::Rejection::Topology);
         return Ok(None);
     };
@@ -2072,22 +2094,47 @@ fn prepare(
     // nearest search). Charting/encoding must preserve these positions and rows in S3.
     let mut representatives = Vec::with_capacity(built.geometry.triangles.len());
     let mut centroid_checks = Vec::with_capacity(built.geometry.triangles.len());
-    for (i, t) in built.geometry.triangles.iter().enumerate() {
-        if i % 256 == 0 {
-            check()?;
-        }
-        let p = std::array::from_fn(|a| {
+    let centroid = |t: &[u32; 3]| -> source_index::V3 {
+        std::array::from_fn(|a| {
             t.iter()
                 .map(|&v| f64::from(positions.decoded[v as usize][a]))
                 .sum::<f64>()
                 / 3.
-        });
-        let hit = nearest.source(query, p)?;
-        representatives.push(query.primitive(hit));
-        centroid_checks.push(error::Centroid {
-            rank: hit.rank,
-            distance: hit.distance2.sqrt(),
-        });
+        })
+    };
+    match &mut root {
+        None => {
+            for (i, t) in built.geometry.triangles.iter().enumerate() {
+                if i % 256 == 0 {
+                    check()?;
+                }
+                let hit = nearest.source(query, centroid(t))?;
+                representatives.push(query.primitive(hit));
+                centroid_checks.push(error::Centroid {
+                    rank: hit.rank,
+                    distance: hit.distance2.sqrt(),
+                });
+            }
+        }
+        Some(root) => {
+            let found = root.each(
+                built.geometry.triangles.iter().map(centroid),
+                true,
+                &|q, n, _, p| {
+                    let q = geometry::measurement::batch_query(q)?;
+                    let hit = n.source(q, p)?;
+                    Ok((q.primitive(hit), hit.rank, hit.distance2.sqrt()))
+                },
+                check,
+                &mut |(primitive, rank, distance)| {
+                    representatives.push(primitive);
+                    centroid_checks.push(error::Centroid { rank, distance });
+                    geometry::measurement::Step::Go
+                },
+            );
+            nearest.stats.add(std::mem::take(&mut root.searches));
+            found?;
+        }
     }
     let mut table = representatives.clone();
     table.sort_unstable();
@@ -2127,7 +2174,10 @@ fn prepare(
         },
         query,
         nearest,
-        count,
+        error::Plan {
+            count,
+            batches: root_batches,
+        },
         &centroid_checks,
         &mut built.controls,
         check,
@@ -2392,6 +2442,9 @@ fn build_tile(
     let mut published_topology_attempt = None;
     let mut query = job.source.query(captured, closed.key)?;
     let mut nearest = error::Nearest::with_steps(settings.nearest_steps);
+    if closed.s2_width > 0 {
+        nearest.root_width = Some(closed.s2_width);
+    }
     let mut outcome = if let Some(contract) = &contract {
         let half = keep_target(closed, &children, settings.cap);
         let outcome = geometry::build_parent(
@@ -3253,6 +3306,8 @@ fn walk(
             std::cell::RefCell::new(Vec::<crate::mesh_large::resources::Lease>::new());
         let label_charged = std::cell::Cell::new(0u64);
         let v2_off = std::cell::Cell::new(false);
+        // The root's extra S2 batches' memory (`Closed::s2_width`), held to the walk's end.
+        let root_lease = std::cell::RefCell::new(None::<crate::mesh_large::resources::Lease>);
         // Root recovery v2: omitted cells whose stand-in holds fold faces.
         let si_folds = std::cell::RefCell::new(std::collections::HashSet::<u64>::new());
         let si_labels =
@@ -3325,8 +3380,20 @@ fn walk(
                 let Some(&id) = keep.borrow().rebuilds.first() else {
                     break;
                 };
+                // A root built again holds its measurement batch again (its extra width
+                // stays leased in `root_lease`).
+                let admit = if keep
+                    .borrow()
+                    .spawned
+                    .get(&id)
+                    .is_some_and(|c| c.s2_width > 0)
+                {
+                    job_bytes.saturating_add(error::root_bytes(1, settings.nearest_steps))
+                } else {
+                    job_bytes
+                };
                 let job_lease = loop {
-                    if let Some(lease) = ledger.try_lease(job_bytes, 0) {
+                    if let Some(lease) = ledger.try_lease(admit, 0) {
                         break Some(lease);
                     }
                     if !spill.borrow_mut().spill_one(ready)? {
@@ -3481,8 +3548,18 @@ fn walk(
                     )));
                 }
                 job_peak.set(job_peak.get().max(merged));
+                // The root measures in fixed batches (`error::ROOT_BATCH`): its job also
+                // holds one batch's source query, search frontier and window buffers
+                // (`error::root_bytes`), planned in the stage minimum.
+                let root_s2 = pending[i].ownership_root
+                    || job.borders.publication_depth(pending[i].key)? == 0;
+                let admit = if root_s2 {
+                    job_bytes.saturating_add(error::root_bytes(1, settings.nearest_steps))
+                } else {
+                    job_bytes
+                };
                 let job_lease = loop {
-                    if let Some(lease) = ledger.try_lease(job_bytes, 0) {
+                    if let Some(lease) = ledger.try_lease(admit, 0) {
                         break Some(lease);
                     }
                     if !spill.borrow_mut().spill_one(ready)? {
@@ -3495,6 +3572,23 @@ fn walk(
                 let mut closed = pending.remove(i);
                 closed.recover = has_omission;
                 closed.v2_off = v2_off.get();
+                // The root runs as many batches at once as the workers and the ledger
+                // admit, each with its own query and frontier. The results do not depend
+                // on it.
+                if root_s2 {
+                    debug_assert!(root_lease.borrow().is_none(), "one root per walk");
+                    let one = error::root_bytes(1, settings.nearest_steps);
+                    let mut width = jobs.max(1);
+                    while width > 1 {
+                        let extra = error::root_bytes(width, settings.nearest_steps) - one;
+                        if let Some(lease) = ledger.try_lease(extra, 0) {
+                            *root_lease.borrow_mut() = Some(lease);
+                            break;
+                        }
+                        width -= 1;
+                    }
+                    closed.s2_width = width;
+                }
                 closed.stand_in_folds = closed
                     .children
                     .iter()
@@ -3957,6 +4051,7 @@ fn walk(
                 label_union: None,
                 v2_off: false,
                 stand_in_folds: false,
+                s2_width: 0,
                 folds_below: false,
             };
             *next_seq += 1;
