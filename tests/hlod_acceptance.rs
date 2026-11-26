@@ -18,7 +18,7 @@ mod test_corpora;
 /// Work-root directories outside the `base` family: the other digested families
 /// and run outputs (winding probes, omission producer-report inputs, D11 border
 /// controls, whose producer-baked sheet is not digested).
-const OTHER: [&str; 11] = [
+const OTHER: [&str; 12] = [
     "lattice",
     "native",
     "nonmanifold",
@@ -30,6 +30,7 @@ const OTHER: [&str; 11] = [
     "last_resort",
     "recovery",
     "texture",
+    "crossing",
 ];
 
 /// Sorted `relative-path\tsha256\n` lines of a family's generated members.
@@ -115,6 +116,7 @@ fn hlod_archives_and_named_mutants() {
         "last_resort_controls.py",
         "recovery_controls.py",
         "texture_controls.py",
+        "crossing_controls.py",
     ] {
         let probes = work.path().join(name.trim_end_matches("_controls.py"));
         let result = Command::new("python3")
@@ -140,6 +142,7 @@ fn hlod_archives_and_named_mutants() {
                         | "last_resort_controls.py"
                         | "recovery_controls.py"
                         | "texture_controls.py"
+                        | "crossing_controls.py"
                 ) {
                     let mut args = vec!["--binary", env!("CARGO_BIN_EXE_rusty-tiles")];
                     // The producer sheet's exact audit dominates this test: 80 is the

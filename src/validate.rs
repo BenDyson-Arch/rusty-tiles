@@ -35,9 +35,9 @@ use limits::{LimitPlan, Sources};
 pub use resources::{BudgetReport, DiskBound, JobsReport, StorePlan, ValidationResources};
 pub use rows::{PayloadRows, PayloadRowsIter};
 pub use types::{
-    CoarseNormalCensus, ExpectedProfile, InterfaceCensus, PayloadReport, ScratchRefusal,
-    ScratchReport, ValidationFailure, ValidationLimits, ValidationReport, ValidationRequest,
-    ValidationWarning,
+    CoarseCrossingCensus, CoarseCrossingTile, CoarseNormalCensus, ExpectedProfile, InterfaceCensus,
+    PayloadReport, ScratchRefusal, ScratchReport, ValidationFailure, ValidationLimits,
+    ValidationReport, ValidationRequest, ValidationWarning,
 };
 type Error = ValidationFailure;
 use facts::{FactStore, Stored};
@@ -3566,6 +3566,9 @@ fn inspect_run(
         .map_err(|error| invalid(format!("bundled schema compilation failed: {error}")))?,
         c2,
     };
+    if request.counts_coarse_crossings() {
+        check.delivery.count_crossings();
+    }
     if let Some(member) = conversion {
         check.resources.used.set(member.rank);
         if let Some(name) = check.reports["geometryReports"].as_str() {
@@ -3775,6 +3778,14 @@ fn inspect_run(
                     .insert(format!("coarseNormalInversion.{suffix}"));
             }
         }
+        if c.coarse_crossings
+            .as_ref()
+            .is_some_and(|c| c.incomplete_tiles > 0)
+        {
+            check
+                .not_inspected
+                .insert("coarseCrossings.workBudget".to_string());
+        }
     }
     let warnings = census
         .as_ref()
@@ -3809,6 +3820,7 @@ fn inspect_run(
             surface_error_extent_tiles: c.surface_error_extent_tiles,
             texture_bound_tiles: c.texture_bound_tiles,
             coarse_normals: coarse_normal_census(&c.coarse_normals),
+            coarse_crossings: c.coarse_crossings.as_ref().map(coarse_crossing_census),
         }),
         scratch: scratch.is_created().then(|| ScratchReport {
             memory_backed: scratch.memory_backed(),
@@ -4077,6 +4089,31 @@ mod i1_fixtures {
 /// winding (the inversion bound; producers since #336 stay within 60°, so snorm8 and
 /// position rounding cannot reach it).
 const COARSE_NORMAL_BOUND_DEGREES: u32 = 90;
+fn coarse_crossing_census(c: &hlod_delivery::CoarseCrossings) -> CoarseCrossingCensus {
+    CoarseCrossingCensus {
+        tiles: c.tiles,
+        faces: c.faces,
+        incomplete_tiles: c.incomplete_tiles,
+        crossing_tiles: c.crossing_tiles,
+        new_tiles: c.new_tiles,
+        present_pairs: c.present_by_depth.iter().sum(),
+        new_pairs: c.new_by_depth.iter().sum(),
+        present_pairs_by_depth: c.present_by_depth.clone(),
+        new_pairs_by_depth: c.new_by_depth.clone(),
+        listed_tiles: c
+            .listed
+            .iter()
+            .map(|t| CoarseCrossingTile {
+                tile: u64::try_from(t.tile).unwrap_or(0),
+                depth: t.depth as u64,
+                faces: t.faces,
+                geometric_error: t.geometric_error,
+                present_pairs: t.present,
+                new_pairs: t.new,
+            })
+            .collect(),
+    }
+}
 fn coarse_normal_census(c: &hlod_delivery::CoarseNormals) -> CoarseNormalCensus {
     CoarseNormalCensus {
         bound_degrees: COARSE_NORMAL_BOUND_DEGREES,

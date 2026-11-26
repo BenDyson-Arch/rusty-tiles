@@ -300,7 +300,8 @@ def check_leaf(f,manifest,stats=None,*,geometry=True):
 
 
 def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='root',profile='hlod',producer_manifest=None,
-          border_audit=None,producer_report=None,triangle_cap=8192,certify_source_error=False):
+          border_audit=None,producer_report=None,triangle_cap=8192,certify_source_error=False,
+          coarse_crossings=False):
     """Check every published cell. Only one payload/tile is decoded at a time.
 
     root frame removes the archive's common placement, conjugating relative tile
@@ -490,6 +491,10 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
             # A2: verified stage-3 (N3) tiles may drop at any size (last_resort.py).
             n3={tid for tid,(stage,_,_) in getattr(store,'last_resort',{}).items() if stage==3}
             result['coarseDrops']=drops.inspect(store,tiles,archive,require,distance2,n3)
+            # Coarse self-intersections, when asked: reported, never refused (crossings.py, #420).
+            if coarse_crossings:
+                import crossings
+                result['coarseCrossings']=crossings.inspect(store,tiles,archive)
             # Upward omission, single first-renderable cover and empty-cell
             # refinement, from the same independent expansion (omission.py).
             from omission import inspect as inspect_omission, Failure as OmissionFailure
@@ -546,12 +551,14 @@ if __name__=='__main__':
     p.add_argument('--producer-report',help='producer run report naming the audit sidecar hash/bytes')
     p.add_argument('--certify-source-error',action='store_true',help='require exact continuous two-sided covers against captured source triangles')
     p.add_argument('--triangle-cap',type=int,default=8192,help='hard payload cap the A1 relief trigger is a share of')
+    p.add_argument('--coarse-crossings',action='store_true',help='also count coarse self-intersections (crossings.py), as native validate --coarse-crossings')
     a=p.parse_args()
     try:
         print(json.dumps(audit(a.root,a.expected,scratch=a.scratch,work_limit=a.work_limit,
                               coordinate_frame=a.coordinate_frame,profile=a.profile,producer_manifest=a.producer_manifest,
                               border_audit=a.border_audit,producer_report=a.producer_report,
-                              triangle_cap=a.triangle_cap,certify_source_error=a.certify_source_error),sort_keys=True))
+                              triangle_cap=a.triangle_cap,certify_source_error=a.certify_source_error,
+                              coarse_crossings=a.coarse_crossings),sort_keys=True))
     except Failure as e:
         print(json.dumps(dict(ok=False,check=e.check,detail=e.detail)))
         raise SystemExit(1)

@@ -38,6 +38,8 @@
 use super::{identity, invalid, spill_failure, Budget, Error, ScratchRefusal};
 mod borders;
 mod bulk;
+mod crossings;
+pub(crate) use crossings::CoarseCrossings;
 mod drops;
 pub(super) mod recovery;
 mod replay;
@@ -826,6 +828,8 @@ pub(super) struct DecodedInterfaceCensus {
     pub(super) texture_bound_tiles: u64,
     /// Coarse NORMAL census (a warning, never a failure).
     pub(super) coarse_normals: CoarseNormals,
+    /// Coarse self-intersections (#420), when requested: reported, never a failure.
+    pub(super) coarse_crossings: Option<crossings::CoarseCrossings>,
 }
 /// Coarse tiles publishing NORMAL, and those with faces some corner NORMAL of which points
 /// more than 90° from the face (the face is shaded against its own winding), by cell depth.
@@ -1239,6 +1243,8 @@ pub(super) struct Store {
     buffer_bytes: usize,
     resources: Resources,
     pool: replay::Pool,
+    /// Count coarse self-intersections (#420, opt-in).
+    crossings: bool,
 }
 /// The sizes of one store, from the validation's memory plan (#342).
 #[derive(Clone, Copy, Debug)]
@@ -1296,7 +1302,12 @@ impl Store {
             buffer_bytes: config.buffer_bytes,
             pool: replay::Pool::new(resources.workers, resources.window_bytes),
             resources,
+            crossings: false,
         })
+    }
+    /// Also count coarse self-intersections (`interfaceCensus.coarseCrossings`).
+    pub(super) fn count_crossings(&mut self) {
+        self.crossings = true;
     }
     /// Create the disk store and replay the pending rows into it, once.
     fn materialize(&mut self) -> Result<(), Error> {
@@ -2007,7 +2018,10 @@ impl Store {
                 "D4 coarse source_primitive table exceeds 8192 rows",
             ));
         }
-        let mut census = DecodedInterfaceCensus::default();
+        let mut census = DecodedInterfaceCensus {
+            coarse_crossings: self.crossings.then(Default::default),
+            ..Default::default()
+        };
         effort.ticks.pass()?;
         self.triangle_cap(&mut census)?;
         effort.ticks.pass()?;
@@ -2046,7 +2060,11 @@ impl Store {
         effort.ticks.pass()?;
         self.check_coarse(&mut census, &mut images, effort, read)?;
         effort.ticks.pass()?;
-        self.coarse_drops(&mut census.dropped_by_depth, effort)?;
+        self.coarse_drops(
+            &mut census.dropped_by_depth,
+            census.coarse_crossings.as_mut(),
+            effort,
+        )?;
         effort.ticks.pass()?;
         self.border_pairs(images, effort)?;
         census.surface_error_extent_tiles = self.surface_error_extents(effort)?;

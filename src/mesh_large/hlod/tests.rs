@@ -4989,7 +4989,26 @@ fn published_and_valid(name: &str, dir: &Path, work: &Path) {
     )
     .unwrap();
     drop(file);
-    inspect(ValidationRequest::new(&output).expect_profile(ExpectedProfile::Hlod)).unwrap();
+    let plain =
+        inspect(ValidationRequest::new(&output).expect_profile(ExpectedProfile::Hlod)).unwrap();
+    // The opt-in self-intersection census (#420) reports and changes nothing else.
+    let counted = inspect(
+        ValidationRequest::new(&output)
+            .expect_profile(ExpectedProfile::Hlod)
+            .coarse_crossings(),
+    )
+    .unwrap();
+    let census = |r: &crate::validate::ValidationReport| r.interface_census.clone().unwrap();
+    let (mut with, without) = (census(&counted), census(&plain));
+    assert!(without.coarse_crossings.is_none(), "{name}");
+    let crossings = with.coarse_crossings.take().unwrap();
+    assert_eq!(crossings.incomplete_tiles, 0, "{name}: {crossings:?}");
+    assert_eq!(with, without, "{name}");
+    assert_eq!(
+        (counted.ok, &counted.warnings, &counted.checks),
+        (plain.ok, &plain.warnings, &plain.checks),
+        "{name}"
+    );
     let shape = refinement_shape(&output);
     assert_eq!(
         shape.empty_below_content + shape.error_inversions,

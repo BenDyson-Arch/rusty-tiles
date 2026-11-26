@@ -260,6 +260,7 @@ The report's `interfaceCensus` is derived from the archive alone, using decoded 
 | `contractedBorderArcs`, `contractedBorderVertices` | Shared borders delivered as one chord over two or more leaf edges, and the leaf border vertices those chords remove |
 | `droppedComponents`, `droppedByDepth` | Child components that coarse payloads no longer hold, by delivered cell depth |
 | `textureRefinableTiles`, `textureBoundTiles` | Tiles refinable to finer texels, and those whose `geometricError` is within 1% of the texture term |
+| `coarseCrossings` | Only with `--coarseCrossings`: coarse tiles checked (`tiles`, `faces`), those over the census's own work budget (`incompleteTiles`), and face pairs meeting outside their common corners, present in the children or new (`crossingTiles`, `newTiles`, `presentPairs`, `newPairs`, the same `ByDepth`, and `listedTiles`); see [coarse self-intersections](#coarse-self-intersections) |
 | `coarseNormals` | Coarse tiles that publish `NORMAL` and their faces (`tiles`, `faces`), tiles whose `NORMAL` is not compared (`skippedTiles`), and those with a face shaded against its winding (`invertedTiles`, `invertedFaces`, and the same `ByDepth`, by cell depth), against `boundDegrees` (90); see [coarse normals](#coarse-normals) |
 
 ### Coarse normals
@@ -267,6 +268,20 @@ The report's `interfaceCensus` is derived from the archive alone, using decoded 
 For every coarse tile that publishes `NORMAL`, validation compares each face's corner normals with the face's own normal (wound by its corners, after the node transform). A corner normal more than 90° from its face means the face shades against its winding: under double-sided lighting it renders inverted. Such faces are counted in `interfaceCensus.coarseNormals` by cell depth and reported as the `coarseNormalInversion` warning. They never fail validation.
 
 The bound is 90° because that is where shading inverts, whatever smoothing a producer chose. `mesh` keeps every coarse corner normal within 60° of its face ([coarse normals](MESH.md#coarse-appearance)), so normal and position rounding stay far from the bound. Archives written before that change (issue #336) average every face at a vertex and usually carry the warning; rebuilding them removes it. Leaves are not compared: they keep the source's own normals. The comparison is charged to the existing work budget (6 units per face). It does not compare coarse orientation with the source surface, which remains not inspected. The comparison reads a `NORMAL` that is a VEC3 of floats or of normalized 8- or 16-bit integers, one per vertex, in a buffer view without an `EXT_meshopt_compression` filter. Any other coarse `NORMAL` that the earlier checks admit is not compared and never fails validation. Such tiles are counted as `skippedTiles`, and `notInspected` names the reason: `coarseNormalInversion.meshoptFilteredNormal` (for example `OCTAHEDRAL`), `.sparseNormal`, `.viewlessNormal` (zero storage without a buffer view) or `.unsupportedNormalAccessor`. `mesh` writes coarse normals the comparison reads.
+
+### Coarse self-intersections
+
+With `--coarseCrossings` (Python `coarse_crossings=True`), validation also counts, for every coarse tile, the pairs of its faces that meet anywhere other than in their common corners. Two faces may share a vertex, and meet only there, or share an edge, and meet only along it. A face that touches, pierces or overlaps another elsewhere forms an improper pair. The test is exact (adaptive orientation predicates on the decoded canonical f32 positions, with no tolerance). The faces are those the other coarse checks read, from all placements of the tile, with three distinct corners. Faces are distinct by corner set: a placement repeated at the same position, or a repeated or reversed triangle, is one face. Three collinear corners count as their segment. Two faces with the same three corners are coincident; they are folds, which the border rules and `lastResort` cover, and are not counted here.
+
+Each improper pair is *present* when both of its faces are also faces of the tile's immediate children together (for a tile over leaves, the source), so the children cross there too. Otherwise it is *new*. The two faces may come from different children. The coarse tile replaces its children together, and leaves together are the source, where two leaves' faces crossing is a source crossing. `interfaceCensus.coarseCrossings` gives the totals, the pairs by cell depth, and up to 16 `listedTiles` (most new pairs first), each with its preorder `tile` index as validation messages use it, `depth`, `faces`, `geometricError` and pairs.
+
+The census never fails validation. A coarse tile may intersect itself as long as the crossings stay within its geometric error, which bounds its distance to the source. So no verdict, warning or exit code depends on the census. It also has its own bounds per tile, separate from the validation's budgets:
+- **Work.** 2^24 units plus 2^15 per face.
+- **Workspace.** At most half the `documentDecodedBytes` allowance (128 MiB), which the coarse replay holds and has released before the census runs. That is about 28,600 face entries (placements included). The bound follows the allowance, so a smaller allowance reports more tiles as incomplete.
+
+A tile over either bound is counted in `incompleteTiles` without partial counts, and `notInspected` names `coarseCrossings.workBudget`.
+
+The census is off by default because of its cost: about 3–11 µs per coarse face on one core, in one pass. On the archives measured it added 9–15% to validation time on photogrammetry, a terrain-like scan and a 1.8M-triangle fixture, and 41% on a dense synthetic city with millions of crossing pairs.
 
 ### Border rules
 

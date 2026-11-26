@@ -1164,10 +1164,12 @@ impl ValidationPayloadsIter {
 /// lesser of 4 GiB and half the detected headroom) sizes the scratch stores, as for
 /// `mesh_to_tileset`; `jobs` (a positive int, default `None` for auto) caps parallel workers.
 /// Neither changes a verdict or any report member outside `resources` and `scratch`.
+/// `coarse_crossings=True` also counts coarse self-intersections on HLOD archives
+/// (`interfaceCensus.coarseCrossings`); no verdict depends on it.
 /// `callback` receives progress events; raising from it (or Ctrl-C) stops the validation and
 /// the exception propagates.
 #[pyfunction]
-#[pyo3(signature = (input, *, lazy_payloads = false, max_volume = None, scratch_dir = None, expect_profile = None, memory_budget_bytes = None, jobs = None, callback = None))]
+#[pyo3(signature = (input, *, lazy_payloads = false, max_volume = None, scratch_dir = None, expect_profile = None, memory_budget_bytes = None, jobs = None, coarse_crossings = false, callback = None))]
 #[allow(clippy::too_many_arguments)]
 fn validate(
     py: Python<'_>,
@@ -1178,6 +1180,7 @@ fn validate(
     expect_profile: Option<String>,
     memory_budget_bytes: Option<Bound<'_, PyAny>>,
     jobs: Option<Bound<'_, PyAny>>,
+    coarse_crossings: bool,
     callback: Option<Py<PyAny>>,
 ) -> PyResult<Py<PyAny>> {
     use tiles_core::validate::{ExpectedProfile, LimitKey, ValidationFailure, ValidationRequest};
@@ -1207,6 +1210,9 @@ fn validate(
     }
     if let Some(profile) = expected {
         request = request.expect_profile(profile);
+    }
+    if coarse_crossings {
+        request = request.coarse_crossings();
     }
     if let Some(mapping) = max_volume {
         let mapping = mapping
