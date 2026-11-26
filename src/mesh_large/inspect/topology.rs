@@ -205,7 +205,7 @@ impl Record for GeoSegment {
 }
 
 /// What a sort of `records` spills: nothing while they fit one run, else every record.
-fn spill<T: Record>(records: u64, sorter: SortConfig) -> Option<SortSpill> {
+pub(super) fn spill<T: Record>(records: u64, sorter: SortConfig) -> Option<SortSpill> {
     let run = (sorter.run_bytes / std::mem::size_of::<T>().max(1)).max(1) as u64;
     if records <= run {
         return Some(SortSpill {
@@ -238,7 +238,7 @@ pub struct Measure {
     pub length_m: f64,
 }
 impl Measure {
-    fn add(&mut self, edges: u64, length: f64) {
+    pub(super) fn add(&mut self, edges: u64, length: f64) {
         self.edges += edges;
         self.length_m += length;
     }
@@ -262,7 +262,7 @@ pub struct Loops {
     pub by_size_class: Vec<SizeClass>,
 }
 impl Loops {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             by_size_class: CLASSES
                 .iter()
@@ -371,21 +371,25 @@ pub(crate) struct Admit<'a> {
 }
 
 /// Union-find over `n` position ids: the smaller root wins, so roots are deterministic.
-struct Groups(Vec<u32>);
+pub(super) struct Groups(Vec<u32>);
 impl Groups {
-    fn new(n: u32) -> Result<Self, JobError> {
+    pub(super) fn new(n: u32) -> Result<Self, JobError> {
         let mut v = Vec::new();
         v.try_reserve_exact(usize::try_from(n).map_err(|_| resource("position count overflows"))?)
             .map_err(|_| resource("position union-find allocation failed"))?;
         v.extend(0..n);
         Ok(Self(v))
     }
-    fn reset(&mut self) {
+    /// Every position's parent, by position id.
+    pub(super) fn slice_mut(&mut self) -> &mut [u32] {
+        &mut self.0
+    }
+    pub(super) fn reset(&mut self) {
         for (i, p) in (0u32..).zip(self.0.iter_mut()) {
             *p = i;
         }
     }
-    fn find(&mut self, mut x: u32) -> u32 {
+    pub(super) fn find(&mut self, mut x: u32) -> u32 {
         while self.0[x as usize] != x {
             let up = self.0[self.0[x as usize] as usize];
             self.0[x as usize] = up;
@@ -393,7 +397,7 @@ impl Groups {
         }
         x
     }
-    fn join(&mut self, a: u32, b: u32) {
+    pub(super) fn join(&mut self, a: u32, b: u32) {
         let (a, b) = (self.find(a), self.find(b));
         if a != b {
             let (lo, hi) = (a.min(b), a.max(b));
@@ -402,7 +406,7 @@ impl Groups {
     }
 }
 
-fn length(pa: [u32; 3], pb: [u32; 3]) -> f64 {
+pub(super) fn length(pa: [u32; 3], pb: [u32; 3]) -> f64 {
     (0..3)
         .map(|i| {
             let d = f64::from(f32::from_bits(pa[i])) - f64::from(f32::from_bits(pb[i]));
@@ -412,7 +416,7 @@ fn length(pa: [u32; 3], pb: [u32; 3]) -> f64 {
         .sqrt()
 }
 
-fn area(p: &[[f32; 3]; 3]) -> f64 {
+pub(super) fn area(p: &[[f32; 3]; 3]) -> f64 {
     let q = p.map(|v| v.map(f64::from));
     let u = [q[1][0] - q[0][0], q[1][1] - q[0][1], q[1][2] - q[0][2]];
     let w = [q[2][0] - q[0][0], q[2][1] - q[0][1], q[2][2] - q[0][2]];
@@ -465,33 +469,70 @@ fn chain_table_bytes(edges: u64) -> u64 {
 }
 
 #[derive(Clone, Copy, Debug)]
-struct Chain {
+pub(super) struct Chain {
     edges: u64,
     length: f64,
-    lo: u32,
-    hi: u32,
+    pub lo: u32,
+    pub hi: u32,
     between: bool,
+}
+
+/// A kept (open or seam) edge as the loop joins read it: its position ids `a < b`, a leaf
+/// (the capture-based pass's; 0 without capture), whether its faces lie in more than one
+/// primitive instance, and its endpoint positions.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct KeptEdge {
+    pub a: u32,
+    pub b: u32,
+    pub leaf: u32,
+    pub between: bool,
+    pub pa: [u32; 3],
+    pub pb: [u32; 3],
+}
+
+/// Kept edges in edge order, read as often as the joins need.
+pub(super) trait KeptEdges {
+    fn count(&self) -> u64;
+    fn edges(&self) -> Result<Box<dyn Iterator<Item = Result<KeptEdge, JobError>> + '_>, JobError>;
+}
+impl KeptEdges for Sequence<Kept> {
+    fn count(&self) -> u64 {
+        self.len()
+    }
+    fn edges(&self) -> Result<Box<dyn Iterator<Item = Result<KeptEdge, JobError>> + '_>, JobError> {
+        Ok(Box::new(self.reader()?.map(|e| {
+            let e = e?;
+            Ok(KeptEdge {
+                a: e.a,
+                b: e.b,
+                leaf: e.leaf,
+                between: e.between,
+                pa: e.pa,
+                pb: e.pb,
+            })
+        })))
+    }
 }
 
 /// Every chain (connected open edges or seam edges) by its root, from `kept`.
 fn chains(
-    kept: &Sequence<Kept>,
+    kept: &dyn KeptEdges,
     groups: &mut Groups,
     admit: &Admit<'_>,
     name: &'static str,
     progress: &StepProgress<'_>,
 ) -> Result<BTreeMap<u32, Chain>, JobError> {
     groups.reset();
-    for (i, e) in kept.reader()?.enumerate() {
+    for (i, e) in kept.edges()?.enumerate() {
         if i % 65_536 == 0 {
             progress.check()?;
         }
         let e = e?;
         groups.join(e.a, e.b);
     }
-    (admit.memory)(name, chain_table_bytes(kept.len()))?;
+    (admit.memory)(name, chain_table_bytes(kept.count()))?;
     let mut table: BTreeMap<u32, Chain> = BTreeMap::new();
-    for (i, e) in kept.reader()?.enumerate() {
+    for (i, e) in kept.edges()?.enumerate() {
         if i % 65_536 == 0 {
             progress.check()?;
         }
@@ -589,6 +630,7 @@ pub(crate) fn run<'s>(input: Input<'s, '_, '_>) -> Result<Topology<'s>, JobError
     let mut sorted = ExternalSorter::<Corner>::new(scratch, sorter)?.observed(progress);
     let mut instances: std::collections::BTreeSet<(u32, u32)> = Default::default();
     let mut recent: Option<(u32, u32)> = None;
+    let mut surface = super::exact_sum::ExactSum::default();
     {
         let mut cursor = LeafCursor::new(nodes)?;
         for (rank, t) in triangles.reader()?.enumerate() {
@@ -598,7 +640,9 @@ pub(crate) fn run<'s>(input: Input<'s, '_, '_>) -> Result<Topology<'s>, JobError
             }
             let t = t?.triangle;
             let leaf = cursor.leaf_of(rank)?;
-            facts[leaf as usize].area += area(&t.positions);
+            let a = area(&t.positions);
+            facts[leaf as usize].area += a;
+            surface.add(a);
             if t.degenerate {
                 report.degenerate_triangles += 1;
             }
@@ -631,7 +675,7 @@ pub(crate) fn run<'s>(input: Input<'s, '_, '_>) -> Result<Topology<'s>, JobError
     }
     report.primitive_instances = instances.len() as u64;
     drop(instances);
-    report.surface_area_m2 = facts.iter().map(|f| f.area).sum();
+    report.surface_area_m2 = surface.value();
     let sorted = sorted.finish()?;
     progress.end()?;
     let id_spill = spill::<SlotId>(corners, sorter).ok_or_else(overflow)?;
@@ -879,26 +923,87 @@ pub(crate) fn run<'s>(input: Input<'s, '_, '_>) -> Result<Topology<'s>, JobError
     let seams = seams.finish()?;
 
     // 4. Loops and seam chains; each open edge's crossing depth for the forecast.
+    let geo = join_loops(Loops4 {
+        open: &open,
+        seams: &seams,
+        groups: &mut groups,
+        report: &mut report,
+        geo,
+        scratch,
+        sorter,
+        admit,
+        progress,
+        open_loops: &mut |loops, groups| {
+            for (i, e) in open.reader()?.enumerate() {
+                if i % 65_536 == 0 {
+                    progress.check()?;
+                }
+                let e = e?;
+                let root = groups.find(e.a);
+                let c = loops
+                    .get(&root)
+                    .ok_or_else(|| state("an open edge without its loop"))?;
+                let k = (forecast::common_depth(cells, c.lo, c.hi) as usize).min(DEPTHS - 1);
+                let f = facts
+                    .get_mut(e.leaf as usize)
+                    .ok_or_else(|| state("an open edge outside the leaves"))?;
+                f.open[k] = f.open[k].saturating_add(1);
+                f.length[k] += length(e.pa, e.pb);
+            }
+            Ok(())
+        },
+    })?;
+    drop(groups);
+    drop(open);
+    drop(seams);
+    Ok(Topology {
+        report,
+        leaves: facts,
+        geo,
+    })
+}
+
+/// [`join_loops`]'s hook on the open loops by root and the groups that joined them.
+pub(super) type OpenLoops<'a> =
+    dyn FnMut(&BTreeMap<u32, Chain>, &mut Groups) -> Result<(), JobError> + 'a;
+
+/// What [`join_loops`] reads and fills.
+pub(super) struct Loops4<'a, 's, 'p> {
+    pub open: &'a dyn KeptEdges,
+    pub seams: &'a dyn KeptEdges,
+    /// One `u32` per position: the joins' union-find.
+    pub groups: &'a mut Groups,
+    pub report: &'a mut TopologyReport,
+    pub geo: Option<GeoRequest>,
+    pub scratch: &'s Scratch,
+    pub sorter: SortConfig,
+    pub admit: &'a Admit<'a>,
+    pub progress: &'s StepProgress<'p>,
+    /// Called with the open loops by root and the groups that joined them.
+    pub open_loops: &'a mut OpenLoops<'a>,
+}
+
+/// Step 4 of the pass, shared by both inspections: open loops and seam chains by size
+/// class, and the GeoJSON's selected lines.
+pub(super) fn join_loops<'s>(input: Loops4<'_, 's, '_>) -> Result<Option<GeoLines<'s>>, JobError> {
+    let Loops4 {
+        open,
+        seams,
+        groups,
+        report,
+        geo,
+        scratch,
+        sorter,
+        admit,
+        progress,
+        open_loops,
+    } = input;
+    let overflow = || resource("inspection scratch bound overflows");
     progress.begin(Step::InspectLoops, 3)?;
-    let loops = chains(&open, &mut groups, admit, "open_loops", progress)?;
+    let loops = chains(open, groups, admit, "open_loops", progress)?;
     tally(&loops, &mut report.open);
-    report.open.edges = open.len();
-    for (i, e) in open.reader()?.enumerate() {
-        if i % 65_536 == 0 {
-            progress.check()?;
-        }
-        let e = e?;
-        let root = groups.find(e.a);
-        let c = loops
-            .get(&root)
-            .ok_or_else(|| state("an open edge without its loop"))?;
-        let k = (forecast::common_depth(cells, c.lo, c.hi) as usize).min(DEPTHS - 1);
-        let f = facts
-            .get_mut(e.leaf as usize)
-            .ok_or_else(|| state("an open edge outside the leaves"))?;
-        f.open[k] = f.open[k].saturating_add(1);
-        f.length[k] += length(e.pa, e.pb);
-    }
+    report.open.edges = open.count();
+    open_loops(&loops, groups)?;
     progress.advance(1)?;
     // Selected open loops by root (each root is its component's smallest position id,
     // whatever the join order, so a later join of the same edges finds the same roots).
@@ -912,9 +1017,9 @@ pub(crate) fn run<'s>(input: Input<'s, '_, '_>) -> Result<Topology<'s>, JobError
         );
     }
     drop(loops);
-    let seam_chains = chains(&seams, &mut groups, admit, "seam_chains", progress)?;
+    let seam_chains = chains(seams, groups, admit, "seam_chains", progress)?;
     tally(&seam_chains, &mut report.seams);
-    report.seams.edges = seams.len();
+    report.seams.edges = seams.count();
     progress.advance(2)?;
     let geo = match geo {
         None => {
@@ -968,15 +1073,15 @@ pub(crate) fn run<'s>(input: Input<'s, '_, '_>) -> Result<Topology<'s>, JobError
             )?;
             let mut sorted = ExternalSorter::<GeoSegment>::new(scratch, sorter)?.observed(progress);
             // The groups hold the seam join; the open loops are joined again after.
-            for (seam, kept) in [(true, &seams), (false, &open)] {
+            for (seam, kept) in [(true, seams), (false, open)] {
                 if !seam {
                     groups.reset();
-                    for e in open.reader()? {
+                    for e in open.edges()? {
                         let e = e?;
                         groups.join(e.a, e.b);
                     }
                 }
-                for (i, e) in kept.reader()?.enumerate() {
+                for (i, e) in kept.edges()?.enumerate() {
                     if i % 65_536 == 0 {
                         progress.check()?;
                     }
@@ -999,14 +1104,7 @@ pub(crate) fn run<'s>(input: Input<'s, '_, '_>) -> Result<Topology<'s>, JobError
             })
         }
     };
-    drop(groups);
-    drop(open);
-    drop(seams);
-    Ok(Topology {
-        report,
-        leaves: facts,
-        geo,
-    })
+    Ok(geo)
 }
 
 /// Worst-case scratch of the pass beside its retained files, for a memory-backed scratch

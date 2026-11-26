@@ -35,7 +35,7 @@ Converter inputs and outputs are filesystem paths (`str` or `os.PathLike`). All 
 | Function | Keyword arguments and result |
 | --- | --- |
 | `mesh_to_tileset(input, output, ...)` | `profile="balanced"`, `jobs=None`, `scratch_dir=None`, `memory_budget_bytes=None`, `report_path=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `source_crs=None`, `source_axes=None`, `source_offset=None`, `source_offset_file=None`, `height_offset=None`, `bbox=None`, `polygon=None`, `force=False`, `callback=None`; returns `TilerResult` |
-| `inspect_mesh(input, ...)` | `mesh_to_tileset`'s keywords without `output`, `report_path`, `bbox` and `polygon`, plus `geojson=None`, `geojson_local=False`, `min_feature_length=5.0`; writes no archive and returns `InspectResult`; see [Mesh inspection](#mesh-inspection) |
+| `inspect_mesh(input, ...)` | `mesh_to_tileset`'s keywords without `output`, `report_path`, `bbox` and `polygon`, plus `geojson=None`, `geojson_local=False`, `min_feature_length=5.0`, `forecast=False`; writes no archive and returns `InspectResult`; see [Mesh inspection](#mesh-inspection) |
 | `glb_to_3tz(input, output, ...)` | `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `ModelWrapResult` |
 | `model_to_manifest(input, ...)` | `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; writes a sibling `tileset.json` and returns `ModelManifestResult` |
 | `point_cloud_to_3tz(input, output, ...)` | required `source_crs`, `force=False`, `height_offset=None`, `max_points=8192` (also the maximum), `chunk_points=100000`, `metadata=False`, `metadata_attributes=False`, `callback=None`; returns `PointCloudResult` |
@@ -170,9 +170,13 @@ See [last-resort declarations](https://github.com/BenDyson-Arch/rusty-tiles/blob
 profile="balanced", jobs=None, scratch_dir=None, memory_budget_bytes=None,
 anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None,
 source_axes=None, source_offset=None, source_offset_file=None,
-height_offset=None, force=False, callback=None)` checks a mesh source before a
-bake, as `rusty-tiles mesh-inspect` does. Pass the keywords you will bake with:
-it captures the source as `mesh_to_tileset` does, so its cells are the bake's.
+height_offset=None, weld_epsilon=None, join_primitives=None, forecast=False,
+force=False, callback=None)` checks a mesh source before a bake, as
+`rusty-tiles mesh-inspect` does. By default it reads the source once, without
+capture, and reports its topology. `forecast=True` adds the coarse-omission
+estimate: it captures the source as `mesh_to_tileset` does, so pass the
+keywords you will bake with and its cells are the bake's; it costs most of a
+bake.
 
 ```python
 check = rusty_tiles.inspect_mesh(

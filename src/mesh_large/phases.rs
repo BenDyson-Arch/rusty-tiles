@@ -268,12 +268,30 @@ pub(crate) enum Step {
     BordersPublish,
     /// HLOD shared borders: an intermediate merge pass of the row sort.
     BordersMerge,
-    /// `mesh-inspect`: every triangle corner sorted by exact position (repeated positions,
-    /// position ids).
+    /// `mesh-inspect`: the source's payload checked as `mesh` checks it (one unit).
+    InspectValidate,
+    /// `mesh-inspect`: every index and used position checked, as capture's scan checks
+    /// them, and their bounds, from which a source CRS chooses its origin (one unit per
+    /// triangle).
+    InspectScan,
+    /// `mesh-inspect`: corner positions sampled to split the positions into ranges (one unit
+    /// per sample).
+    InspectSample,
+    /// `mesh-inspect`: every triangle read and its used vertices and edges written to their
+    /// position ranges (one unit per triangle).
+    InspectStream,
+    /// `mesh-inspect`: positions counted (repeated positions, position ids). By default one
+    /// unit per used source vertex, its position range sorted in memory; with the forecast,
+    /// one unit per captured triangle, its corners sorted by exact position.
     InspectVertices,
-    /// `mesh-inspect`: triangle edges keyed by position ids and sorted (open edges,
-    /// primitive boundaries, components).
+    /// `mesh-inspect`: triangle edges grouped by position (open edges, primitive boundaries,
+    /// seams, each range's own components). By default one unit per edge, its position range
+    /// sorted in memory; with the forecast, one unit per captured triangle, its edges keyed by
+    /// position ids and sorted.
     InspectEdges,
+    /// `mesh-inspect`: edges between position ranges joined into components (one unit per
+    /// such edge).
+    InspectComponents,
     /// `mesh-inspect`: open-edge loops and seams joined and measured.
     InspectLoops,
     /// `mesh-inspect`: an intermediate merge pass of one of its sorts.
@@ -315,8 +333,13 @@ impl Step {
             Self::BordersLevels => "hlod_borders_levels",
             Self::BordersPublish => "hlod_borders_publish",
             Self::BordersMerge => "hlod_borders_merge",
+            Self::InspectValidate => "inspect_validate",
+            Self::InspectScan => "inspect_scan",
+            Self::InspectSample => "inspect_sample",
+            Self::InspectStream => "inspect_stream",
             Self::InspectVertices => "inspect_vertices",
             Self::InspectEdges => "inspect_edges",
+            Self::InspectComponents => "inspect_components",
             Self::InspectLoops => "inspect_loops",
             Self::InspectMerge => "inspect_merge",
             Self::InspectContracts => "inspect_contracts",

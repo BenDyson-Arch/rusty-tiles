@@ -405,8 +405,10 @@ class WheelAPI(unittest.TestCase):
         self.assertEqual(source_report["open"]["edges"], 9)
         self.assertEqual(source_report["open"]["loops"], 3)
         self.assertEqual(source_report["repeated_positions"]["positions"], 0)
-        self.assertEqual(report["forecast"]["root"], "built")
-        self.assertTrue(report["forecast"]["estimate"])
+        # The default inspection reads the source without capture: no forecast.
+        self.assertEqual(report["schema_version"], 2)
+        self.assertNotIn("forecast", report)
+        self.assertNotIn("tree", report)
         self.assertEqual(report["geojson"]["open_loops"], 3)
         self.assertEqual(report["geojson"]["coordinates"], "local_east_north_metres")
         self.assertNotIn("path", report["geojson"])
@@ -419,9 +421,16 @@ class WheelAPI(unittest.TestCase):
             self.assertEqual(len(ring), 4)
             self.assertEqual(ring[0], ring[-1])
         self.assertTrue(result.summary[0].startswith("source: 3 triangles"))
-        self.assertTrue(any(line.startswith("omission risk (an estimate") for line in result.summary))
+        self.assertFalse(any(line.startswith("omission risk (an estimate") for line in result.summary))
         phases = {event.get("phase") for event in events}
-        self.assertTrue({"capture", "inspect_vertices", "inspect_edges", "inspect_loops"} <= phases, phases)
+        self.assertTrue({"inspect_stream", "inspect_vertices", "inspect_edges", "inspect_loops"} <= phases, phases)
+        self.assertNotIn("capture", phases)
+        # The forecast captures the source; its topology is the same.
+        forecast = rusty_tiles.inspect_mesh(source, forecast=True, jobs=1)
+        self.assertEqual(forecast.report["forecast"]["root"], "built")
+        self.assertTrue(forecast.report["forecast"]["estimate"])
+        self.assertEqual(forecast.report["source"], report["source"])
+        self.assertTrue(any(line.startswith("omission risk (an estimate") for line in forecast.summary))
         with self.assertRaises(AttributeError):
             result.geojson = self.root / "redirected.geojson"
         # Deterministic: another worker count, without a GeoJSON, gives the same report.

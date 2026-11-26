@@ -286,27 +286,28 @@ rusty-tiles mesh-inspect -i site.glb --source-crs EPSG:3857 --source-offset-file
   --geojson site-check.geojson
 ```
 
-Checks a `mesh` source before a bake and writes no archive. It reports exact counts of:
+Checks a `mesh` source before a bake and writes no archive. It reads the source once, without capture, and reports exact counts of:
 
 - open edges and loops by length class;
 - edges on primitive boundaries, and how many coincide with another primitive's edge;
 - repeated positions, and the edges welding them would close;
 - connected components.
 
-It also gives an estimated coarse-omission risk per cell over the cells the bake would build. See [check a source before baking](MESH.md#check-a-source-before-baking).
+It checks topology and payload with `mesh`'s checks and errors, but not the checks only a bake needs (image preflight, attribute layout, tile member gate, triangle record limit, and with a source CRS the per-vertex Jacobian for normals and tangents), so `mesh` can still refuse a source it passed. With `--forecast` it also gives an estimated coarse-omission risk per cell over the cells the bake would build. That captures the source as `mesh` does and builds the bake's border contracts, so it costs most of a bake. See [check a source before baking](MESH.md#check-a-source-before-baking).
 
-It takes `mesh`'s `-i`, `--profile`, `--jobs`, `--scratchDir`, `--memory-budget`, placement, source CRS and weld (`--weld-epsilon`, `--join-primitives`) options, with the same meaning. With a weld it reports the welded source, plus `inspectReport.weld`, so it previews the open edges a weld closes. Give the options you will bake with, so the cells line up. It also takes:
+It takes `mesh`'s `-i`, `--profile`, `--jobs`, `--scratchDir`, `--memory-budget`, placement, source CRS and weld (`--weld-epsilon`, `--join-primitives`) options, with the same meaning. With a weld it reports the welded source, plus `inspectReport.weld`, so it previews the open edges a weld closes. With `--forecast`, give the options you will bake with, so the cells line up. It also takes:
 
 | Option | Alias | Default | Meaning |
 | --- | --- | --- | --- |
-| `--geojson PATH` | | none | Also write a `.geojson` of open loops and seams at least `--minFeatureLength` long (ordered polylines) and of the cells at risk. Coordinates are WGS84, so the source needs `--anchor` or a source CRS; otherwise the request is refused unless `--geojsonLocal` is given. Installed only after the run succeeds. |
+| `--forecast` | | off | Also estimate coarse omissions per cell (`hlod_view`, `tree` and `forecast` in the report, and the cells at risk in the GeoJSON). Costs most of a bake. |
+| `--geojson PATH` | | none | Also write a `.geojson` of open loops and seams at least `--minFeatureLength` long (ordered polylines) and, with `--forecast`, of the cells at risk. Coordinates are WGS84, so the source needs `--anchor` or a source CRS; otherwise the request is refused unless `--geojsonLocal` is given. Installed only after the run succeeds. |
 | `--geojsonLocal` | `--geojson-local` | off | Write the GeoJSON in local east/north metres (east = glTF +X, north = glTF −Z) instead. This is not RFC 7946; a top-level `rustyTilesFrame` member says so. |
 | `--minFeatureLength METRES` | `--min-feature-length` | `5` | Shortest open loop or seam written to the GeoJSON. |
 | `-f`, `--force` | | off | Replace an existing GeoJSON. |
 
-Without `--json` it prints six summary lines on stderr, a weld line before them with a weld, and a last line naming the GeoJSON. `--json` returns:
+Without `--json` it prints five summary lines on stderr (the last saying the forecast was not run and that `--profile` applies only with it; six with `--forecast`), a weld line before them with a weld, and a last line naming the GeoJSON. `--json` returns:
 
-- `inspectReport`: the same for every `--jobs`, budget, scratch location and GeoJSON path;
+- `inspectReport` (`schema_version` 2): the same for every `--jobs`, budget, scratch location and GeoJSON path;
 - `geojson`: the installed path, or null;
 - `diagnostics`: workers, the memory plan and stage seconds;
 - `cleanupDiagnostics`.
@@ -470,7 +471,7 @@ Every converter emits a `conversion` phase at 0 and at 1. Completion comes only 
 | Command | Phases |
 | --- | --- |
 | `mesh` | Every phase has a total. `capture` (the source's triangles; its steps `capture_scan`, with `--bbox` or `--polygon` `capture_select`, `capture_validate`, with `--weld-epsilon` or `--join-primitives` `capture_weld` and, after `capture_sequence`, `capture_weld_check`, `capture_corners`, `capture_positions`, `capture_triangles`, `capture_sequence`, `capture_images`, `capture_tree`, `capture_corner_depths`, `capture_leaf_plans` and, when a sort needs one, `capture_merge`, each with its total and repeated at least every 250 ms), `leaf_crop_plan` (with source images on disk-backed scratch) and `leaf_crop_store` (when the crop store is built), reported the same way, `leaf_build`, `hlod_incidence` (retained triangles; its steps `hlod_incidence_items`, `hlod_incidence_reduce`, `hlod_incidence_ends` and, when a sort needs one, `hlod_incidence_merge`, reported the same way), the shared-border steps `hlod_borders_rows`, `hlod_borders_graph`, `hlod_borders_faces`, `hlod_borders_levels`, `hlod_borders_publish` and, when the row sort needs one, `hlod_borders_merge`, reported the same way, `hlod_geometry` (coarse cells), `leaf_payloads`, `archive` (leaf and coarse tiles), `ready_to_publish`; required events finish before installation. See the [mesh guide](MESH.md). |
-| `mesh-inspect` | `capture` and its steps (as for `mesh`), `inspect_vertices`, `inspect_edges`, `inspect_loops` (and `inspect_merge` when a sort needs one), `hlod_incidence_items`, `hlod_incidence_reduce`, `hlod_incidence_ends`, the shared-border steps (as for `mesh`), `inspect_contracts` (linked contract items), `inspect_forecast` (tree nodes), `ready_to_publish` |
+| `mesh-inspect` | Every step has a total. By default: `inspect_scan` (triangles), `inspect_validate`, with a weld `capture_weld`, `inspect_sample`, `inspect_stream` (triangles), `inspect_vertices` (used vertices), `inspect_edges` (edges), `inspect_components` (edges between position ranges), with a weld `capture_weld_check`, `inspect_loops` (and `inspect_merge` when a sort needs one), `ready_to_publish`. With `--forecast`: `capture` and its steps (as for `mesh`), `inspect_vertices`, `inspect_edges`, `inspect_loops` (and `inspect_merge`), `hlod_incidence_items`, `hlod_incidence_reduce`, `hlod_incidence_ends`, the shared-border steps (as for `mesh`), `inspect_contracts` (linked contract items), `inspect_forecast` (tree nodes), `ready_to_publish` |
 | `point-cloud` | `ingestion`, `tiling`, `point_archive`, `ready_to_publish`; these finish before installation |
 | `vector` | `ingestion`, `encoding` |
 | `raster` | `source_cog` and `aligned_warp` report progress out of 1,000,000. `tiling` reports completed tiles on the same scale and resets for each zoom. `raster_complete` reports the actual tile count before sealing and installation. |
