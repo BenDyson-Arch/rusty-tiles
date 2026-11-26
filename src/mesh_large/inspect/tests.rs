@@ -1,6 +1,7 @@
-//! `mesh-inspect` on small analytic fixtures: exact topology counts, determinism across
-//! `--jobs`, the forecast's certain sources against a real bake's audit, request refusals and
-//! cancellation.
+//! `mesh-inspect` on small analytic fixtures: exact topology counts, the default inspection
+//! against the capture-based one (`--forecast`) field for field, determinism across `--jobs`
+//! and partitions, the forecast's certain sources against a real bake's audit, request
+//! refusals and cancellation.
 use super::{forecast::Risk, inspect_mesh, InspectRequest, InspectResult};
 use crate::{
     mesh_large::{hlod, TilerJobs, TilerRequest},
@@ -120,6 +121,32 @@ fn inspect(request: InspectRequest) -> InspectResult {
     inspect_mesh(request, &RunControl::default()).unwrap_or_else(|f| panic!("{}", f.error))
 }
 
+/// The topology and weld sections, serialized: what both inspections must agree on, byte
+/// for byte.
+fn topology_bytes(result: &InspectResult) -> String {
+    serde_json::to_string(&(&result.report.source, &result.report.weld)).unwrap()
+}
+
+/// The default inspection gives the capture-based topology, at one and several partitions,
+/// with corners from position tables or read in triangle order.
+fn assert_same_topology(request: impl Fn() -> InspectRequest) -> InspectResult {
+    let captured = inspect(request().with_forecast(true));
+    for (parts, tables) in [(1, None), (7, None), (5, Some(0))] {
+        let mut r = request().with_test_partitions(parts);
+        if let Some(bytes) = tables {
+            r = r.with_test_tables(bytes);
+        }
+        let fast = inspect(r);
+        assert!(fast.report.forecast.is_none() && fast.report.tree.is_none());
+        assert_eq!(
+            topology_bytes(&fast),
+            topology_bytes(&captured),
+            "{parts} partitions, tables {tables:?}"
+        );
+    }
+    captured
+}
+
 /// Two 2×2 sheets meeting along an unwelded seam (separate primitives), a lone triangle,
 /// and a quad whose diagonal is unwelded inside its primitive: every count is known.
 #[test]
@@ -149,6 +176,7 @@ fn topology_counts_are_exact_on_an_analytic_fixture() {
             quad,
         ],
     );
+    let captured = assert_same_topology(|| request(&input, hlod::Settings::production(), 1));
     let result = inspect(request(&input, hlod::Settings::production(), 1));
     let s = serde_json::to_value(&result.report.source).unwrap();
     let r2 = 2f64.sqrt();
@@ -192,9 +220,137 @@ fn topology_counts_are_exact_on_an_analytic_fixture() {
     assert_eq!(seams["loops"], 2);
     close(&seams["length_m"], 2. + r2);
     // One leaf: no coarse cell, nothing to forecast.
-    assert_eq!(result.report.tree.coarse_cells, 0);
-    assert_eq!(result.report.forecast.root, "built");
-    assert_eq!(result.report.hlod_view.open_edges, 12 + 3 + 4);
+    let r = &captured.report;
+    assert_eq!(r.tree.as_ref().unwrap().coarse_cells, 0);
+    assert_eq!(r.forecast.as_ref().unwrap().root, "built");
+    assert_eq!(r.hlod_view.as_ref().unwrap().open_edges, 12 + 3 + 4);
+}
+
+/// With a weld (and between primitives of one material), the default inspection reports
+/// the welded source and the weld's statement as the capture-based one does.
+#[test]
+fn a_weld_preview_is_the_capture_based_one() {
+    let work = tempfile::tempdir().unwrap();
+    // Two sheets 1 mm apart along their shared column, and a sliver that collapses.
+    let mut meshes = holed_sheet();
+    for p in &mut meshes[1].positions {
+        p[0] += 0.001;
+    }
+    meshes.push(Mesh {
+        positions: vec![[0., 0., 0.], [0.0005, 0., 0.], [0., 0.0005, 0.]],
+        indices: vec![0, 1, 2],
+    });
+    let input = write_gltf(&work.path().join("src"), &meshes);
+    for weld in [
+        crate::MeshWeld::new(0.002).unwrap(),
+        crate::MeshWeld::new(0.002).unwrap().joining_same_material(),
+    ] {
+        let captured = assert_same_topology(|| {
+            request(&input, hlod::Settings::production(), 2).with_weld(weld)
+        });
+        let w = captured.report.weld.as_ref().unwrap();
+        assert!(w.merged_vertices > 0, "{w:?}");
+    }
+}
+
+/// A failing source gets capture's verdict (`--forecast` captures) at every job count: the
+/// first failing triangle in input order, not the first failure in time. Two invalid
+/// positions lie in different scan and decode chunks, in both orders; a bad index in the
+/// second primitive comes after a bad position in the first.
+#[test]
+fn the_first_failure_is_captures_at_any_job_count() {
+    let work = tempfile::tempdir().unwrap();
+    // 301 × 301 vertices: more than one 2^16-vertex chunk and 2^16-triangle task.
+    let sheet = || grid((300, 300), (0., 0.), &flat, &solid);
+    let failure = |input: &Path, jobs: usize, forecast: bool| -> String {
+        let r = request(input, hlod::Settings::production(), jobs).with_forecast(forecast);
+        inspect_mesh(r, &RunControl::default())
+            .map(|_| ())
+            .unwrap_err()
+            .error
+            .to_string()
+    };
+    let mut verdicts = Vec::new();
+    for (name, early, late) in [
+        ("nan-first", f32::NAN, 2.0e6),
+        ("far-first", 2.0e6, f32::NAN),
+    ] {
+        let mut m = sheet();
+        // The end of the first chunk and the start of the second: a parallel pass meets
+        // the later one first.
+        m.positions[65_000][0] = early;
+        m.positions[65_600][0] = late;
+        let input = write_gltf(&work.path().join(name), &[m]);
+        let captured = failure(&input, 1, true);
+        for jobs in [1, 4] {
+            assert_eq!(
+                failure(&input, jobs, false),
+                captured,
+                "{name}, {jobs} jobs"
+            );
+        }
+        verdicts.push(captured);
+    }
+    assert_ne!(verdicts[0], verdicts[1], "the order decides: {verdicts:?}");
+    let mut first = sheet();
+    first.positions[50_000][1] = f32::NAN;
+    let mut second = grid((4, 4), (400., 0.), &flat, &solid);
+    second.indices[5] = 10_000;
+    let input = write_gltf(&work.path().join("index"), &[first, second]);
+    let captured = failure(&input, 1, true);
+    assert!(captured.contains("nonfinite"), "{captured}");
+    for jobs in [1, 4] {
+        assert_eq!(failure(&input, jobs, false), captured, "{jobs} jobs");
+    }
+}
+
+/// A position the scan admits but the source CRS cannot map fails while streaming; that
+/// failure is rerun serially for capture's verdict (`--forecast`), at every job count. On a
+/// small longitude/latitude patch at 10 E, two vertices, at the end of the first 2^16-vertex
+/// chunk and the start of the second, fail differently: one at 190 E is outside the
+/// longitude range, one at 170 W maps outside the local domain (the bounds' centre stays
+/// on the patch). The first in vertex order decides, in both orders.
+#[test]
+fn a_source_crs_failure_while_streaming_is_captures() {
+    let work = tempfile::tempdir().unwrap();
+    let crs = || {
+        crate::MeshSourceCrs::from_parameters(
+            Some("EPSG:4326"),
+            Some(crate::SourceAxes::Xyz),
+            None,
+            None,
+            None,
+        )
+        .unwrap()
+        .unwrap()
+    };
+    let mut verdicts = Vec::new();
+    for (name, early, late) in [("range-first", 190., -170.), ("far-first", -170., 190.)] {
+        let mut m = grid((300, 300), (0., 0.), &flat, &solid);
+        // East = x, north = y, up = z: a 0.003-degree patch at (10 E, 45 N), height 0.
+        for p in &mut m.positions {
+            *p = [10. + p[0] * 1e-5, 45. + p[2] * 1e-5, 0.];
+        }
+        m.positions[65_000][0] = early;
+        m.positions[65_600][0] = late;
+        let input = write_gltf(&work.path().join(name), &[m]);
+        let failure = |jobs: usize, forecast: bool| -> String {
+            let r = request(&input, hlod::Settings::production(), jobs)
+                .with_source_crs(crs())
+                .with_forecast(forecast);
+            inspect_mesh(r, &RunControl::default())
+                .map(|_| ())
+                .unwrap_err()
+                .error
+                .to_string()
+        };
+        let captured = failure(1, true);
+        for jobs in [1, 4] {
+            assert_eq!(failure(jobs, false), captured, "{name}, {jobs} jobs");
+        }
+        verdicts.push(captured);
+    }
+    assert_ne!(verdicts[0], verdicts[1], "the order decides: {verdicts:?}");
 }
 
 /// A holed, two-primitive sheet large enough for coarse cells.
@@ -218,10 +374,12 @@ fn holed_sheet() -> Vec<Mesh> {
 fn report_and_geojson_do_not_depend_on_jobs() {
     let work = tempfile::tempdir().unwrap();
     let input = write_gltf(&work.path().join("src"), &holed_sheet());
-    let run = |jobs: usize, name: &str| {
+    let run = |jobs: usize, name: &str, forecast: bool| {
         let path = work.path().join(name);
         let result = inspect(
             request(&input, hlod::Settings::production(), jobs)
+                .with_test_partitions(if forecast { 1 } else { 2 * jobs as u64 })
+                .with_forecast(forecast)
                 .with_geojson(&path)
                 .with_geojson_local(true)
                 .with_min_feature_length(1.),
@@ -232,12 +390,34 @@ fn report_and_geojson_do_not_depend_on_jobs() {
         let report = serde_json::to_value(&result.report).unwrap();
         (report, fs::read(path).unwrap(), result)
     };
-    let (one, one_geo, result) = run(1, "one.geojson");
-    let (three, three_geo, _) = run(3, "three.geojson");
+    let (one, one_geo, fast) = run(1, "one.geojson", false);
+    let (three, three_geo, _) = run(3, "three.geojson", false);
     assert_eq!(one, three);
     assert!(one_geo == three_geo, "GeoJSON differs between job counts");
+    let (with_cells, cells_geo, result) = run(1, "cells.geojson", true);
+    assert_eq!(topology_bytes(&fast), topology_bytes(&result));
+    assert_eq!(
+        one["geojson"]["open_loops"],
+        with_cells["geojson"]["open_loops"]
+    );
+    assert_eq!(one["geojson"]["seams"], with_cells["geojson"]["seams"]);
+    assert_eq!(fast.report.geojson.as_ref().unwrap().cells, 0);
+    // Without the forecast, the GeoJSON is the forecast's without its cells.
+    let lines = |bytes: &[u8]| -> Vec<Value> {
+        let doc: Value = serde_json::from_slice(bytes).unwrap();
+        doc["features"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|f| f["properties"]["kind"] != "cell")
+            .cloned()
+            .collect()
+    };
+    assert_eq!(lines(&one_geo), lines(&cells_geo));
+    let one_geo = cells_geo;
     let report = &result.report;
-    assert!(report.tree.coarse_cells > 3, "{:?}", report.tree);
+    let tree = report.tree.as_ref().unwrap();
+    assert!(tree.coarse_cells > 3, "{tree:?}");
     assert_eq!(report.source.components, 1);
     // Two holes and the sheet's outer border.
     assert_eq!(report.source.open.loops, 3);
@@ -291,8 +471,15 @@ fn report_and_geojson_do_not_depend_on_jobs() {
         }
     }
     // Every coarse cell is forecast once, by depth.
-    let cells: u64 = report.forecast.by_depth.iter().map(|d| d.cells).sum();
-    assert_eq!(cells, report.tree.coarse_cells);
+    let cells: u64 = report
+        .forecast
+        .as_ref()
+        .unwrap()
+        .by_depth
+        .iter()
+        .map(|d| d.cells)
+        .sum();
+    assert_eq!(cells, tree.coarse_cells);
 }
 
 /// Omitted cells in a bake's audit sidecar: `(first, depth) -> reason`.
@@ -349,10 +536,11 @@ fn certain_sources_are_the_bakes_contract_lower_bound_omissions() {
     let geojson = work.path().join("forecast.geojson");
     let result = inspect(
         request(&input, settings(), 2)
+            .with_forecast(true)
             .with_geojson(&geojson)
             .with_geojson_local(true),
     );
-    let forecast = &result.report.forecast;
+    let forecast = result.report.forecast.as_ref().unwrap();
     let certain: BTreeSet<(u64, u32)> = forecast
         .top_cells
         .iter()
@@ -496,8 +684,12 @@ fn cancellation_inside_the_topology_pass_leaves_nothing() {
     assert!(!geojson.exists());
     assert_eq!(fs::read_dir(&scratch).unwrap().count(), 0);
     let phases = observer.1.lock().unwrap();
-    assert!(phases.iter().any(|p| p == "capture_tree"), "{phases:?}");
+    assert!(phases.iter().any(|p| p == "inspect_stream"), "{phases:?}");
     assert!(phases.iter().any(|p| p == "inspect_vertices"), "{phases:?}");
+    assert!(
+        !phases.iter().any(|p| p.starts_with("capture")),
+        "{phases:?}"
+    );
     assert!(
         work.path().read_dir().unwrap().all(|e| !e
             .unwrap()

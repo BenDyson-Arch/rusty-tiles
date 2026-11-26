@@ -63,7 +63,7 @@ Open <http://127.0.0.1:9227/> and use **3D mesh extent** to frame the model. The
 | Your data | Command | Output |
 | --- | --- | --- |
 | Textured GLB or glTF meshes | `mesh` | Streamed 3D Tiles with exact leaves and simplified, textured coarse levels |
-| A mesh source, before baking it | `mesh-inspect` | A report of open edges, seams, repeated positions and components, an estimated coarse-omission risk per cell, and an optional GeoJSON; no archive |
+| A mesh source, before baking it | `mesh-inspect` | A report of open edges, seams, repeated positions and components, an optional GeoJSON and, with `--forecast` (most of a bake's cost), an estimated coarse-omission risk per cell; no archive |
 | LAS or LAZ point clouds | `point-cloud` | 3D Tiles with sampled parents and full-detail leaves |
 | GeoJSON or GeoPackage layers | `vector` | glTF vector tiles (experimental) |
 | An existing model or tileset | `glb-to-3tz`, `createTilesetJson`, `convert` | `.3tz` or `tileset.json`, without new levels of detail |

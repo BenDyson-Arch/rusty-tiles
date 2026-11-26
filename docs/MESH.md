@@ -46,23 +46,44 @@ rusty-tiles --json mesh-inspect -i local.glb > check.json
 
 It takes `mesh`'s source options (`--profile`, `--jobs`, `--scratch-dir`,
 `--memory-budget`, the placement, the [source CRS](#source-crs) and the
-[weld](#weld-the-source) options)
-and captures the source exactly as `mesh` does: the same capture, cell tree,
-lattice, incidence pass and shared-border contracts. Give it the options you
-will bake with and its cells are the bake's cells. It writes no archive. The
-source is read once; later passes read the captured scratch files. Every sort
-is admitted on the scratch and every resident array against the memory budget
-before it is written, so a source the budget cannot hold is refused as
-`resource_limit`, as `mesh` refuses it. On the sources measured it took 7–30 %
-of a bake's wall time on the same cores: capture, plus about as much again for
-the passes below.
+[weld](#weld-the-source) options) and writes no archive.
 
-The report (`--json`'s `inspectReport`, Python's `report`) is the same for
-every `--jobs`, budget, scratch location and GeoJSON path; the path is reported
-beside it (`geojson` in `--json`, `InspectResult.geojson` in Python). Without
-`--json`, six lines on stderr summarise it (a weld adds one before them, and
-a last one names the GeoJSON). It
-holds:
+By default it reads the source once and reports its topology, without capture.
+Each corner gets the position `mesh` would capture: after its node transform,
+any source CRS mapping and any weld. Used vertices and triangle edges are
+written to scratch in ranges of position, and the ranges are sorted and counted
+in memory on the `--jobs` workers. Loops and seams are then joined from the
+open and closed edges alone. Partition files, position tables and kept edges
+are admitted on the scratch, and every resident array against the memory
+budget, before they are written. A source the budget cannot hold is refused as
+`resource_limit`. On Walem (10 M triangles) and an 80 M-triangle copy of it,
+with `--jobs 4`, it took about 1 % of a bake's wall time.
+
+Without `--forecast` it checks the source's topology and payload: its indices,
+positions (with the source CRS and any weld) and accessor data, with `mesh`'s
+checks and errors in `mesh`'s order. It does not run the checks that only a
+bake needs, so `mesh` can still refuse a source it passed: the image preflight
+and decode admission, the attribute layout, the tile member gate, the
+triangle record limit, and with a source CRS the per-vertex Jacobian that
+normals and tangents need (a position whose Jacobian cannot be evaluated). Without a table of every instance's positions in
+memory, a single primitive instance larger than the budget's position-table
+allowance (13 bytes per vertex) is read per task instead, each task decoding
+its own vertices once in vertex order, at about the same speed.
+
+`--forecast` (Python `forecast=True`) adds the [omission
+forecast](#the-omission-forecast-is-an-estimate). It costs most of a bake:
+it captures the source exactly as `mesh` does (the same capture, cell tree,
+lattice, incidence pass and shared-border contracts), so give it the options
+you will bake with and its cells are the bake's cells. Its topology section is
+the same as without it.
+
+The report (`--json`'s `inspectReport`, Python's `report`;
+`schema_version` 2) is the same for every `--jobs`, budget, scratch location
+and GeoJSON path; the path is reported beside it (`geojson` in `--json`,
+`InspectResult.geojson` in Python). Without `--json`, five lines on stderr
+summarise it, the last saying the forecast was not run and that `--profile`
+applies only with it; six with `--forecast`. A weld adds one line before them, and a
+last line names the GeoJSON. It holds:
 
 - **Source topology** (`source`), on exact positions: two corners are one
   position only when their captured coordinates are bit-equal, with no
@@ -79,20 +100,26 @@ holds:
   - `seams`: those closed edges joined into chains, with their length classes.
   - `components` (connected after welding positions), `nonmanifold_edges`,
     `degenerate_triangles`, `surface_area_m2` and the counts of triangles,
-    positions, source vertices and primitive instances.
-- **The bake's view** (`hlod_view`): open edges as the bake's incidence pass
-  counts them, after welding on the leaf-canonical lattice. The bake keeps
-  every one exactly.
-- **The cell tree** (`tree`): leaves, coarse cells, height, leaf size and the
-  triangle cap.
-- **An omission risk estimate** (`forecast`), labelled `"estimate": true`.
+    positions, source vertices and primitive instances. `surface_area_m2` is
+    the correctly rounded sum of the triangles' areas, independent of order;
+    releases up to 0.4.1 summed it in capture's order, so it may differ from
+    theirs in the last bits.
+- With `--weld-epsilon` or `--join-primitives`, the **weld statement**
+  (`weld`), as `mesh` reports it.
+- With `--forecast` only:
+  - **the bake's view** (`hlod_view`): open edges as the bake's incidence pass
+    counts them, after welding on the leaf-canonical lattice. The bake keeps
+    every one exactly.
+  - **The cell tree** (`tree`): leaves, coarse cells, height, leaf size and the
+    triangle cap.
+  - **An omission risk estimate** (`forecast`), labelled `"estimate": true`.
 
 The topology counts are exact. The forecast is not.
 
 ### The omission forecast is an estimate
 
-The forecast replays the bake's structural rules over its real contracts and
-estimates whether each cell's own build fails:
+With `--forecast`, the forecast replays the bake's structural rules over its
+real contracts and estimates whether each cell's own build fails:
 
 - **Certain omissions.** A cell whose border contract alone cannot fit the
   triangle cap is omitted without a build (`risk: "certain"`), and the bake
@@ -145,8 +172,9 @@ writes one FeatureCollection:
   ordered polylines. A loop is a closed ring; a branching chain is split at its
   branch points. Features are written longest first, up to 250,000 segments
   in all, and `omitted_line_features` counts the rest.
-- `cell` features: the footprint of every cell at `elevated` risk or above, or
-  predicted omitted, with its forecast as properties.
+- With `--forecast`, `cell` features: the footprint of every cell at
+  `elevated` risk or above, or predicted omitted, with its forecast as
+  properties (`geojson.cells` counts them; 0 without the forecast).
 
 Coordinates are WGS84 longitude and latitude in degrees (RFC 7946), so the
 source must be placed with `--anchor` or a source CRS. Otherwise the request is
@@ -168,10 +196,24 @@ print(*check.summary, sep="\n")
 ```
 
 `inspect_mesh(input, *, geojson=None, geojson_local=False,
-min_feature_length=5.0, ...)` takes `mesh_to_tileset`'s keywords, without
-`output`. It returns a frozen `InspectResult` with `report`, `diagnostics`,
-`geojson` (the installed path, or `None`), `summary` and `cleanup_diagnostics`.
-Progress reaches `callback` as for `mesh_to_tileset`. The phases are:
+min_feature_length=5.0, forecast=False, ...)` takes `mesh_to_tileset`'s
+keywords, without `output`. It returns a frozen `InspectResult` with `report`,
+`diagnostics`, `geojson` (the installed path, or `None`), `summary` and
+`cleanup_diagnostics`. Progress reaches `callback` as for `mesh_to_tileset`;
+every step has a total and repeats its count at least every 250 ms. Without
+`--forecast` the phases are:
+
+- `inspect_scan` (every index and used position checked, as `mesh`'s scan
+  checks them; with a source CRS their bounds choose its origin),
+  `inspect_validate` (the payload check), and with a weld `capture_weld`;
+- `inspect_sample` (corner positions sampled to split the position ranges),
+  `inspect_stream` (triangles read), `inspect_vertices` (used vertices
+  counted), `inspect_edges` (edges counted), `inspect_components` (edges
+  between position ranges joined), and with a weld `capture_weld_check`;
+- `inspect_loops` (and `inspect_merge` when the GeoJSON's sort merges);
+- `ready_to_publish`.
+
+With `--forecast`:
 
 - `capture` and its steps;
 - `inspect_vertices`, `inspect_edges` and `inspect_loops` (and `inspect_merge`

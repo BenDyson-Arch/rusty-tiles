@@ -813,6 +813,11 @@ pub(crate) fn capture(
     capture_admitted(source, config, &StepProgress::new(&check, None))
 }
 
+/// The host's hardware threads: the most workers `--jobs auto` plans.
+pub(crate) fn host_cores() -> usize {
+    std::thread::available_parallelism().map_or(1, |n| n.get())
+}
+
 /// Captures an admitted source. `progress` is capture's cancellation check and receives its
 /// steps ([`Step`]).
 pub(crate) fn capture_admitted(
@@ -842,7 +847,7 @@ pub(crate) fn capture_admitted(
         .map_err(super::failure)?;
     // The scan holds two bounded readers per worker, within the per-job term; its workers
     // are planned like capture's own before capture's larger base is known.
-    let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
+    let cores = host_cores();
     // The scan's used-vertex bitmap is charged in its own plan and, with validation's task
     // lists (whichever is larger), in capture's resident bound below.
     let scan_bitmap = capture::scan_bitmap_bytes(&source);

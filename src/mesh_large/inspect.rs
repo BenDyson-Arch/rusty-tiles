@@ -1,20 +1,23 @@
-//! `mesh-inspect` (#348): a pre-bake check of a `mesh` source.
+//! `mesh-inspect` (#348, #437): a pre-bake check of a `mesh` source.
 //!
-//! One operation captures the source exactly as `mesh` does (the same capture, cell tree,
-//! lattice, incidence pass and shared-border contracts, from the same request options), so
-//! its cells are the bake's cells. It then reports, without building any tile:
+//! By default it reads the source once, without capture ([`fast`]), and reports its
+//! exact-position topology: open edges and loops by size class, primitive boundaries and how
+//! many coincide with another primitive's edge, repeated positions and the open edges
+//! welding them closes, connected components, and an opt-in weld's statement. Optionally it
+//! writes a GeoJSON of open loops and seams above a length threshold, in WGS84 when the
+//! source is placed (anchor or source CRS), else local metres.
 //!
-//! - the source's exact-position topology ([`topology`]): open edges and loops by size class,
-//!   primitive boundaries and how many coincide with another primitive's edge, repeated
-//!   positions and the open edges welding them closes, connected components;
-//! - a coarse-omission forecast per cell ([`super::hlod::forecast`]), labelled an estimate;
-//! - optionally a GeoJSON of open loops and seams above a length threshold and of the cells
-//!   at risk, in WGS84 when the source is placed (anchor or source CRS), else local metres.
+//! With the coarse-omission forecast requested, it instead captures the source exactly as
+//! `mesh` does (the same capture, cell tree, lattice, incidence pass and shared-border
+//! contracts, from the same request options), so its cells are the bake's cells, and adds a
+//! forecast per cell ([`super::hlod::forecast`]), labelled an estimate, and the cells at risk
+//! to the GeoJSON. Its topology section is the same, computed from the capture
+//! ([`topology`]); the forecast costs most of a bake.
 //!
-//! The source is read once (capture); later passes read the captured spills. Every sort and
-//! sequence is admitted on the scratch, every resident array against the memory budget,
-//! before it is written. The report does not depend on `--jobs`: only capture runs workers,
-//! and its output is job-independent; every later pass is sequential.
+//! Every sort and sequence is admitted on the scratch, every resident array against the
+//! memory budget, before it is written. The report does not depend on `--jobs`.
+mod exact_sum;
+mod fast;
 #[cfg(test)]
 mod tests;
 mod topology;
@@ -49,6 +52,8 @@ pub const DEFAULT_MIN_FEATURE_LENGTH: f64 = 5.0;
 const MAX_GEOJSON_SEGMENTS: u64 = 250_000;
 /// Runtime and writer reserve of the inspection beside its admitted parts.
 const RESERVE_BYTES: u64 = 64 << 20;
+/// `inspectReport.schema_version`: 2 since the forecast sections became optional (#437).
+const SCHEMA_VERSION: u32 = 2;
 /// Cells listed in the report, highest load first.
 const TOP_CELLS: usize = 20;
 
@@ -75,12 +80,17 @@ pub struct InspectRequest {
     weld: Option<super::MeshWeld>,
     policy: OutputPolicy,
     memory_budget: Option<u64>,
+    forecast: bool,
     #[cfg(test)]
     hlod: hlod::Settings,
     #[cfg(test)]
     leaf_triangles: Option<u64>,
     #[cfg(test)]
     test_spill: Option<(crate::spill::SortConfig, usize)>,
+    #[cfg(test)]
+    test_partitions: Option<u64>,
+    #[cfg(test)]
+    test_tables: Option<u64>,
 }
 
 impl InspectRequest {
@@ -98,12 +108,17 @@ impl InspectRequest {
             weld: None,
             policy: OutputPolicy::CreateNew,
             memory_budget: None,
+            forecast: false,
             #[cfg(test)]
             hlod: hlod::Settings::default(),
             #[cfg(test)]
             leaf_triangles: None,
             #[cfg(test)]
             test_spill: None,
+            #[cfg(test)]
+            test_partitions: None,
+            #[cfg(test)]
+            test_tables: None,
         }
     }
     /// Also write a GeoJSON (`.geojson`) of open loops, seams and cells at risk.
@@ -158,6 +173,13 @@ impl InspectRequest {
         self.memory_budget = Some(bytes);
         self
     }
+    /// Also forecast coarse omissions per cell (and add the cells at risk to the GeoJSON).
+    /// This captures the source and builds the bake's border contracts: it costs most of a
+    /// bake.
+    pub fn with_forecast(mut self, forecast: bool) -> Self {
+        self.forecast = forecast;
+        self
+    }
     #[cfg(test)]
     pub(crate) fn with_hlod_settings(mut self, settings: hlod::Settings) -> Self {
         self.hlod = settings;
@@ -171,6 +193,18 @@ impl InspectRequest {
     #[cfg(test)]
     pub(crate) fn with_test_spill(mut self, sort: crate::spill::SortConfig, chunk: usize) -> Self {
         self.test_spill = Some((sort, chunk));
+        self
+    }
+    /// At least `parts` position ranges in the default inspection.
+    #[cfg(test)]
+    pub(crate) fn with_test_partitions(mut self, parts: u64) -> Self {
+        self.test_partitions = Some(parts);
+        self
+    }
+    /// At most `bytes` of position tables at once (0: corners read in triangle order).
+    #[cfg(test)]
+    pub(crate) fn with_test_tables(mut self, bytes: u64) -> Self {
+        self.test_tables = Some(bytes);
         self
     }
 }
@@ -250,12 +284,14 @@ pub struct GeoJsonSummary {
     pub seams: u64,
     /// Line features at or above the threshold left out by the segment budget.
     pub omitted_line_features: u64,
+    /// Cells at risk (with the forecast; 0 without it).
     pub cells: u64,
 }
 
 /// The inspection report. Deterministic for a given source and request: independent of
 /// `--jobs`, the memory budget, the scratch location and the GeoJSON path (which is not in
-/// it; see [`InspectResult::geojson`]).
+/// it; see [`InspectResult::geojson`]). `source` and `weld` do not depend on the forecast
+/// either.
 #[derive(Clone, Debug, Serialize)]
 pub struct InspectReport {
     pub schema_version: u32,
@@ -263,9 +299,15 @@ pub struct InspectReport {
     /// `local-gltf` or `source-crs`, as the tiler reports.
     pub source_coordinates: &'static str,
     pub source: topology::TopologyReport,
-    pub hlod_view: HlodView,
-    pub tree: InspectTree,
-    pub forecast: OmissionForecast,
+    /// With the forecast: what the bake's incidence pass sees.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hlod_view: Option<HlodView>,
+    /// With the forecast: the captured cell tree.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tree: Option<InspectTree>,
+    /// With the forecast: the coarse-omission estimate.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub forecast: Option<OmissionForecast>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub geojson: Option<GeoJsonSummary>,
     /// An opt-in weld's statement, as `mesh` reports it; absent without one.
@@ -277,14 +319,23 @@ pub struct InspectReport {
 #[derive(Clone, Debug, Serialize)]
 pub struct InspectDiagnostics {
     pub requested_jobs: String,
-    pub capture_jobs: u64,
-    pub capture_jobs_limited_by: &'static str,
+    /// Workers of the source pass (capture's with the forecast).
+    pub jobs: u64,
+    pub jobs_limited_by: &'static str,
     pub memory: InspectMemory,
     pub scratch_peak_bytes: u64,
-    pub incidence_scratch_peak_bytes: u64,
-    pub capture_seconds: f64,
+    /// Without the forecast: position-range partitions, and how many were counted at once.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub partitions: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub partition_workers: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub incidence_scratch_peak_bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub capture_seconds: Option<f64>,
     pub topology_seconds: f64,
-    pub forecast_seconds: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub forecast_seconds: Option<f64>,
 }
 
 /// The budget and what each stage admitted under it.
@@ -297,10 +348,12 @@ pub struct InspectMemory {
     pub fixed_bytes: u64,
     /// Memory-backed scratch charged to the budget (0 on disk).
     pub memory_backed_scratch_bytes: u64,
-    pub capture_bound_bytes: u64,
-    /// Largest admitted resident total of the topology pass and of the forecast.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub capture_bound_bytes: Option<u64>,
+    /// Largest resident total of the topology pass and, with the forecast, of the forecast.
     pub topology_bytes: u64,
-    pub forecast_bytes: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub forecast_bytes: Option<u64>,
 }
 
 #[derive(Debug)]
@@ -342,14 +395,6 @@ fn summary_lines(r: &InspectReport, geojson: Option<&Path>) -> Vec<String> {
             .join(" / ")
     };
     let b = &s.primitive_boundaries;
-    let f = &r.forecast;
-    let high: u64 = f.by_depth.iter().map(|d| d.risk_high).sum();
-    let elevated: u64 = f.by_depth.iter().map(|d| d.risk_elevated).sum();
-    let root = match f.root {
-        "built" => "low risk",
-        "recovered" => "rebuilt from its frontier",
-        _ => "at risk",
-    };
     let mut lines = vec![
         format!(
             "source: {} triangles, {} positions, {} components, {} primitive instances",
@@ -380,23 +425,38 @@ fn summary_lines(r: &InspectReport, geojson: Option<&Path>) -> Vec<String> {
             thousands(s.repeated_positions.closes_open_edges.edges),
             s.repeated_positions.closes_open_edges.length_m
         ),
-        format!(
+    ];
+    if let (Some(view), Some(tree), Some(f)) = (&r.hlod_view, &r.tree, &r.forecast) {
+        let high: u64 = f.by_depth.iter().map(|d| d.risk_high).sum();
+        let elevated: u64 = f.by_depth.iter().map(|d| d.risk_elevated).sum();
+        let root = match f.root {
+            "built" => "low risk",
+            "recovered" => "rebuilt from its frontier",
+            _ => "at risk",
+        };
+        lines.push(format!(
             "bake view: {} open edges after the lattice weld; {} coarse cells over {} leaves, \
              height {}",
-            thousands(r.hlod_view.open_edges),
-            thousands(r.tree.coarse_cells),
-            thousands(r.tree.leaves),
-            r.tree.height
-        ),
-        format!(
+            thousands(view.open_edges),
+            thousands(tree.coarse_cells),
+            thousands(tree.leaves),
+            tree.height
+        ));
+        lines.push(format!(
             "omission risk (an estimate, not a bake): {} high and {} elevated of {} coarse \
              cells, root {root}; certain omissions (contract past the cap): {}",
             thousands(high),
             thousands(elevated),
-            thousands(r.tree.coarse_cells),
+            thousands(tree.coarse_cells),
             thousands(f.certain_sources)
-        ),
-    ];
+        ));
+    } else {
+        lines.push(
+            "omission forecast: not run (--forecast estimates it, at most of a bake's cost; \
+             --profile applies only with it)"
+                .to_owned(),
+        );
+    }
     if let Some(weld) = &r.weld {
         lines.splice(0..0, weld.summary_lines());
     }
@@ -614,8 +674,8 @@ fn check_request(request: &InspectRequest) -> Result<Option<PathBuf>, JobError> 
     Ok(Some(output))
 }
 
-/// Inspect an admitted `mesh` source: report its topology and forecast its coarse
-/// omissions, without baking. See the module notes.
+/// Inspect an admitted `mesh` source: report its topology and, when requested, forecast
+/// its coarse omissions, without baking. See the module notes.
 pub fn inspect_mesh(
     request: InspectRequest,
     control: &RunControl,
@@ -674,71 +734,93 @@ pub fn inspect_mesh(
     };
     let emit = |event: &RunEvent<'_>| attempt.emit(event);
     let check = || attempt.check();
-    let started = std::time::Instant::now();
-    let capture_progress = StepProgress::new(&check, Some(&emit));
-    let captured = match attempt
-        .emit(&RunEvent::Progress {
-            phase: "capture",
-            done: 0,
-            total: None,
-        })
-        .map_err(super::failure)
-        .and_then(|_| full::capture_admitted(source, &config, &capture_progress))
-    {
-        Ok(captured) => captured,
-        Err(inner) => {
-            let mut failure = fail(staging, inner.error);
-            failure.secondary.extend(inner.secondary);
-            failure.retained_paths.extend(inner.retained_paths);
-            return Err(failure);
-        }
-    };
-    let capture_seconds = started.elapsed().as_secs_f64();
-    let capture_path = captured.scratch.path().to_owned();
-    // A source CRS derives the root placement from the captured origin.
-    let placed = captured.placement.as_ref().map(|p| p.transform()).or(rigid);
-    let frame = match placed {
-        Some(m) if !request.geojson_local => Frame::Wgs84(m),
-        _ => Frame::Local,
-    };
-    let result = (|| {
-        attempt.emit(&RunEvent::Progress {
-            phase: "capture",
-            done: 1,
-            total: Some(1),
-        })?;
-        run(Run {
-            request: &request,
-            config: &config,
-            settings: &settings,
-            captured: &captured,
-            budget,
-            frame: &frame,
-            geojson: staging.as_mut().map(|s| s.writer()).zip(geojson.as_deref()),
-            check: &check,
-            emit: &emit,
-            capture_seconds,
-        })
-    })();
-    let cleanup = captured.close();
-    let (report, diagnostics) = match (result, cleanup) {
-        (Ok(done), Ok(())) => done,
-        (Err(error), cleanup) => {
-            let mut failure = fail(staging, error);
-            if let Err(cleanup) = cleanup {
-                failure.secondary.push(cleanup);
+    let (report, diagnostics) = if request.forecast {
+        let started = std::time::Instant::now();
+        let capture_progress = StepProgress::new(&check, Some(&emit));
+        let captured = match attempt
+            .emit(&RunEvent::Progress {
+                phase: "capture",
+                done: 0,
+                total: None,
+            })
+            .map_err(super::failure)
+            .and_then(|_| full::capture_admitted(source, &config, &capture_progress))
+        {
+            Ok(captured) => captured,
+            Err(inner) => {
+                let mut failure = fail(staging, inner.error);
+                failure.secondary.extend(inner.secondary);
+                failure.retained_paths.extend(inner.retained_paths);
+                return Err(failure);
+            }
+        };
+        let capture_seconds = started.elapsed().as_secs_f64();
+        let capture_path = captured.scratch.path().to_owned();
+        // A source CRS derives the root placement from the captured origin.
+        let placed = captured.placement.as_ref().map(|p| p.transform()).or(rigid);
+        let frame = match placed {
+            Some(m) if !request.geojson_local => Frame::Wgs84(m),
+            _ => Frame::Local,
+        };
+        let result = (|| {
+            attempt.emit(&RunEvent::Progress {
+                phase: "capture",
+                done: 1,
+                total: Some(1),
+            })?;
+            run(Run {
+                request: &request,
+                config: &config,
+                settings: &settings,
+                captured: &captured,
+                budget,
+                frame: &frame,
+                geojson: staging.as_mut().map(|s| s.writer()).zip(geojson.as_deref()),
+                check: &check,
+                emit: &emit,
+                capture_seconds,
+            })
+        })();
+        let cleanup = captured.close();
+        match (result, cleanup) {
+            (Ok(done), Ok(())) => done,
+            (Err(error), cleanup) => {
+                let mut failure = fail(staging, error);
+                if let Err(cleanup) = cleanup {
+                    failure.secondary.push(cleanup);
+                    if capture_path.exists() {
+                        failure.retained_paths.push(capture_path);
+                    }
+                }
+                return Err(failure);
+            }
+            (Ok(_), Err(error)) => {
+                let mut failure = fail(staging, error);
                 if capture_path.exists() {
                     failure.retained_paths.push(capture_path);
                 }
+                return Err(failure);
             }
-            return Err(failure);
         }
-        (Ok(_), Err(error)) => {
-            let mut failure = fail(staging, error);
-            if capture_path.exists() {
-                failure.retained_paths.push(capture_path);
+    } else {
+        let geo = staging.as_mut().map(|s| s.writer()).zip(geojson.as_deref());
+        match run_fast(FastRun {
+            request: &request,
+            config: &config,
+            budget,
+            source,
+            rigid,
+            geojson: geo,
+            check: &check,
+            emit: &emit,
+        }) {
+            Ok(done) => done,
+            Err(failed) => {
+                let mut failure = fail(staging, failed.error);
+                failure.secondary.extend(failed.secondary);
+                failure.retained_paths.extend(failed.retained);
+                return Err(failure);
             }
-            return Err(failure);
         }
     };
     if let Err(error) = attempt
@@ -765,6 +847,350 @@ pub fn inspect_mesh(
         geojson,
         cleanup_diagnostics,
     })
+}
+
+/// What the default inspection reads: the request, the opened source, the GeoJSON candidate
+/// and the run's hooks.
+struct FastRun<'a> {
+    request: &'a InspectRequest,
+    config: &'a TreeConfig,
+    budget: MemoryBudget,
+    source: StreamSource,
+    /// The rigid placement's root transform, if any.
+    rigid: Option<[f64; 16]>,
+    /// The staged GeoJSON and its final path.
+    geojson: Option<(&'a mut std::fs::File, &'a Path)>,
+    check: &'a (dyn Fn() -> Result<(), JobError> + Sync),
+    emit: &'a (dyn Fn(&RunEvent<'_>) -> Result<(), JobError> + Sync),
+}
+
+/// A failed default inspection: its error, problems found beside it, and paths it left.
+struct FastFailure {
+    error: JobError,
+    secondary: Vec<JobError>,
+    retained: Vec<PathBuf>,
+}
+
+/// The default inspection: the source's topology read straight from the source
+/// ([`fast`]), and an opt-in weld's statement. No capture.
+fn run_fast(run: FastRun<'_>) -> Result<(InspectReport, InspectDiagnostics), FastFailure> {
+    use super::{capture, source_crs::SourceFrame, weld};
+    let FastRun {
+        request,
+        config,
+        budget,
+        source,
+        rigid,
+        geojson,
+        check,
+        emit,
+    } = run;
+    let failed = |error: JobError| FastFailure {
+        error,
+        secondary: Vec::new(),
+        retained: Vec::new(),
+    };
+    let started = std::time::Instant::now();
+    let progress = StepProgress::new(check, Some(emit)).merging_as(Step::InspectMerge);
+    let n = source.document.triangle_count() as u64;
+    let vertices: u64 = source
+        .document
+        .scene_primitives()
+        .map(|p| p.position.count as u64)
+        .sum();
+    let sorter = config.sorter(1);
+    let overflow = || failed(resource("inspection scratch bound overflows"));
+    // Scratch: the pass's files and, with a weld, the weld's own, its original positions and
+    // the audit's faces and sort.
+    let weld_scratch = match &config.weld {
+        None => Some(0),
+        Some(_) => weld::scratch_bytes(vertices)
+            .zip(weld::moves_bytes(vertices))
+            .and_then(|(a, b)| a.checked_add(b))
+            .and_then(|w| w.checked_add(weld::OriginalPositions::scratch_bytes(vertices)?))
+            .and_then(|w| w.checked_add(weld::audit_scratch_bytes(n)?))
+            .and_then(|w| {
+                w.checked_add(
+                    n.checked_mul(<weld::AuditFace as crate::spill::Record>::SIZE as u64)?,
+                )
+            }),
+    };
+    let need = fast::scratch_need(n, vertices, sorter)
+        .zip(weld_scratch)
+        .and_then(|(a, b)| a.checked_add(b))
+        .ok_or_else(overflow)?;
+    let parent = config
+        .scratch_dir
+        .clone()
+        .unwrap_or_else(crate::spill::Scratch::default_parent);
+    let volume = crate::spill::inspect_volume(&parent).map_err(|e| failed(e.into()))?;
+    // Memory-backed scratch is charged to memory before any of it is written.
+    let charged = if volume.memory_backed { need } else { 0 };
+    let ceiling = budget
+        .ceiling(super::config::available_memory())
+        .saturating_sub(charged);
+    // The source document, the run reserve, and the scan's used-vertex bitmap or the
+    // payload check's task lists (one at a time).
+    let fixed = RESERVE_BYTES
+        .saturating_add(source.json_bytes)
+        .saturating_add(capture::scan_bitmap_bytes(&source).max(source.validation_task_bytes()));
+    let weld_memory = |workers: usize| match &config.weld {
+        None => 0,
+        Some(_) => weld::MeshWeld::memory_bytes(vertices, workers, config.sorter(workers))
+            .unwrap_or(u64::MAX),
+    };
+    let one =
+        fast::memory_floor(n, vertices, 1, config.weld.is_some()).saturating_add(weld_memory(1));
+    let jobs = super::config::plan_jobs(
+        config.jobs,
+        full::host_cores(),
+        Some(ceiling),
+        0,
+        fixed.saturating_add(one),
+        fast::memory_floor(n, vertices, 2, config.weld.is_some())
+            .saturating_add(weld_memory(2))
+            .saturating_sub(one)
+            .max(1),
+    );
+    let workers = usize::try_from(jobs.jobs).unwrap_or(1).max(1);
+    let minimum = fixed
+        .saturating_add(fast::memory_floor(
+            n,
+            vertices,
+            workers,
+            config.weld.is_some(),
+        ))
+        .saturating_add(weld_memory(workers));
+    if ceiling < minimum {
+        return Err(failed(resource(format!(
+            "mesh-inspect needs at least {minimum} bytes (fixed {fixed}) but the memory budget \
+             allows {ceiling} (budget {}, memory-backed scratch {charged})",
+            budget.resolved_bytes
+        ))));
+    }
+    let available = ceiling - fixed - weld_memory(workers);
+    // Capture's order of checks, so a failing source gets capture's verdict whatever
+    // `--jobs`: the scan (every index and used position; on a failure, the first failing
+    // triangle in input order), the source CRS chosen from its bounds, then the payload
+    // check, the weld and the decoding (which reports the first failing vertex in order).
+    let mut frame = (|| {
+        progress.begin(Step::InspectScan, n)?;
+        let (_, bounds) = capture::scan_with_source_bounds(
+            &source,
+            config.sort.buffer_bytes,
+            workers,
+            &mut |done| progress.advance(done),
+        )?;
+        progress.end()?;
+        match &config.source_crs {
+            None => Ok(SourceFrame::Local),
+            Some(spec) => SourceFrame::resolve(spec, bounds),
+        }
+    })()
+    .map_err(failed)?;
+    let placement = frame.placement().map(|(p, _)| p.transform());
+    (|| {
+        progress.begin(Step::InspectValidate, 1)?;
+        source.validate_payload_parallel(config.sort.buffer_bytes, workers, &mut || {
+            progress.check()
+        })?;
+        progress.end()
+    })()
+    .map_err(failed)?;
+    let scratch = crate::spill::Scratch::create(config.scratch_dir.as_deref(), need)
+        .map_err(|e| failed(e.into()))?;
+    if let Some(stop) = &config.stop {
+        scratch.watch(stop.clone());
+    }
+    let scratch_path = scratch.path().to_owned();
+    let result = (|| -> Result<(InspectReport, InspectDiagnostics), JobError> {
+        let welded = match &config.weld {
+            None => None,
+            Some(spec) => Some(weld::weld(
+                &source,
+                &mut frame,
+                (spec, None),
+                &scratch,
+                (config.sorter(workers), workers),
+                &progress,
+            )?),
+        };
+        let moved_bytes = welded.as_ref().map_or(0, weld::Welded::moved_target_bytes);
+        if moved_bytes > available {
+            return Err(resource(format!(
+                "mesh-inspect needs {moved_bytes} bytes for the weld's moved positions but the \
+                 memory budget leaves {available}"
+            )));
+        }
+        let moved = welded
+            .as_ref()
+            .map(weld::Welded::moved_targets)
+            .transpose()?;
+        let audit = welded
+            .as_ref()
+            .map(|_| {
+                crate::spill::SequenceWriter::compressed(
+                    &scratch,
+                    "inspect-weld-faces",
+                    64 << 10,
+                    crate::spill::Layout::FULL,
+                )
+                .map(std::sync::Mutex::new)
+            })
+            .transpose()?;
+        let peak = Cell::new(0u64);
+        let stage = Stage {
+            name: "topology",
+            available: available - moved_bytes,
+            used: Cell::new(0),
+            peak: &peak,
+        };
+        let memory = |what, bytes| stage.admit(what, bytes);
+        let admit_scratch = |bound: u64| {
+            if scratch.memory_backed() && bound > charged {
+                return Err(resource(format!(
+                    "mesh-inspect needs {bound} bytes of memory-backed scratch, past the \
+                     {charged} charged to memory"
+                )));
+            }
+            crate::spill::preflight(
+                scratch.path(),
+                bound.saturating_sub(scratch.live_bytes()),
+                crate::spill::SpaceRole::Scratch,
+                crate::spill::PreflightStage::Inspection,
+            )
+            .map(|_| ())
+            .map_err(JobError::from)
+        };
+        let admit = topology::Admit {
+            memory: &memory,
+            scratch: &admit_scratch,
+        };
+        let found = fast::run(fast::Input {
+            source: &source,
+            frame: &mut frame,
+            moved: moved.as_ref(),
+            audit: audit.as_ref(),
+            scratch: &scratch,
+            sorter,
+            workers,
+            #[cfg(test)]
+            min_parts: request.test_partitions.unwrap_or(1),
+            #[cfg(not(test))]
+            min_parts: 1,
+            #[cfg(test)]
+            tables: request.test_tables,
+            #[cfg(not(test))]
+            tables: None,
+            memory: available - moved_bytes,
+            geo: geojson.is_some().then_some(topology::GeoRequest {
+                min_length: request.min_feature_length,
+                max_segments: MAX_GEOJSON_SEGMENTS,
+            }),
+            admit: &admit,
+            progress: &progress,
+        })?;
+        drop(moved);
+        let weld_report = match welded {
+            None => None,
+            Some(mut welded) => {
+                let faces = audit
+                    .ok_or_else(|| JobError::new(JobErrorKind::InvalidState, "weld faces lost"))?
+                    .into_inner()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .finish()?;
+                let audited = weld::audit_faces(
+                    n,
+                    welded.report.max_displacement_m,
+                    || Ok(faces.reader()?.map(|f| f.map_err(JobError::from))),
+                    &scratch,
+                    config.sorter(workers),
+                    &progress,
+                )?;
+                audited.write(&mut welded.report);
+                Some(welded.finish().0)
+            }
+        };
+        let frame = match placement.or(rigid) {
+            Some(m) if !request.geojson_local => Frame::Wgs84(m),
+            _ => Frame::Local,
+        };
+        let geojson_path = geojson.as_ref().map(|(_, p)| *p);
+        let mut writer = geojson.map(|(file, path)| GeoWriter::new(file, path, &frame));
+        let mut line_counts = (0u64, 0u64, 0u64);
+        if let (Some(w), Some(geo)) = (writer.as_mut(), found.geo) {
+            stage.admit("geojson_polylines", polyline_bytes(MAX_GEOJSON_SEGMENTS))?;
+            line_counts = write_lines(w, geo, &frame, check)?;
+        }
+        if let Some(w) = writer {
+            w.finish()?;
+        }
+        let report = InspectReport {
+            schema_version: SCHEMA_VERSION,
+            operation: "mesh_inspect",
+            source_coordinates: if config.source_crs.is_some() {
+                "source-crs"
+            } else {
+                "local-gltf"
+            },
+            source: found.report,
+            hlod_view: None,
+            tree: None,
+            forecast: None,
+            geojson: geojson_path.map(|_| GeoJsonSummary {
+                coordinates: frame.coordinates(),
+                min_feature_length_m: request.min_feature_length,
+                open_loops: line_counts.0,
+                seams: line_counts.1,
+                omitted_line_features: line_counts.2,
+                cells: 0,
+            }),
+            weld: weld_report,
+        };
+        let diagnostics = InspectDiagnostics {
+            requested_jobs: jobs.requested.clone(),
+            jobs: jobs.jobs,
+            jobs_limited_by: jobs.limited_by,
+            memory: InspectMemory {
+                budget,
+                ceiling_bytes: ceiling,
+                fixed_bytes: fixed,
+                memory_backed_scratch_bytes: charged,
+                capture_bound_bytes: None,
+                topology_bytes: peak.get().max(found.peak_bytes).saturating_add(moved_bytes),
+                forecast_bytes: None,
+            },
+            scratch_peak_bytes: scratch.peak_bytes(),
+            partitions: Some(found.partitions),
+            partition_workers: Some(found.workers),
+            incidence_scratch_peak_bytes: None,
+            capture_seconds: None,
+            topology_seconds: started.elapsed().as_secs_f64(),
+            forecast_seconds: None,
+        };
+        Ok((report, diagnostics))
+    })();
+    let cleanup = scratch.close().map_err(JobError::from);
+    match (result, cleanup) {
+        (Ok(done), Ok(())) => Ok(done),
+        (Err(error), cleanup) => {
+            let mut failure = failed(error);
+            if let Err(cleanup) = cleanup {
+                failure.secondary.push(cleanup);
+                if scratch_path.exists() {
+                    failure.retained.push(scratch_path);
+                }
+            }
+            Err(failure)
+        }
+        (Ok(_), Err(error)) => {
+            let mut failure = failed(error);
+            if scratch_path.exists() {
+                failure.retained.push(scratch_path);
+            }
+            Err(failure)
+        }
+    }
 }
 
 /// What the passes after capture read: the request, the captured stores, the GeoJSON
@@ -946,65 +1372,8 @@ fn run(run: Run<'_>) -> Result<(InspectReport, InspectDiagnostics), JobError> {
     let state = |e: serde_json::Error| JobError::new(JobErrorKind::InvalidState, e.to_string());
     let mut line_counts = (0u64, 0u64, 0u64);
     if let (Some(w), Some(geo)) = (writer.as_mut(), geo) {
-        let topology::GeoLines {
-            features,
-            segments,
-            omitted,
-        } = geo;
-        line_counts.2 = omitted;
-        // One feature's segments at a time (at most the segment budget), joined into
-        // ordered polylines.
         stage.admit("geojson_polylines", polyline_bytes(MAX_GEOJSON_SEGMENTS))?;
-        let mut write_feature = |feature: u32,
-                                 segments: &[([u32; 3], [u32; 3])],
-                                 w: &mut GeoWriter<'_>|
-         -> Result<(), JobError> {
-            let index = usize::try_from(feature).map_err(|_| resource("feature index"))?;
-            let f = features.get(index).ok_or_else(|| {
-                JobError::new(JobErrorKind::InvalidState, "a segment without its feature")
-            })?;
-            if f.kind == "seam" {
-                line_counts.1 += 1;
-            } else {
-                line_counts.0 += 1;
-            }
-            w.begin(&serde_json::to_value(f).map_err(state)?, "MultiLineString");
-            w.buf.push('[');
-            let p = |k: [u32; 3]| k.map(|v| f64::from(f32::from_bits(v)));
-            for (i, line) in polylines(segments).iter().enumerate() {
-                if i > 0 {
-                    w.buf.push(',');
-                }
-                w.buf.push('[');
-                for (j, point) in line.iter().enumerate() {
-                    if j > 0 {
-                        w.buf.push(',');
-                    }
-                    frame.write_point(&mut w.buf, p(*point));
-                }
-                w.buf.push(']');
-                w.spill()?;
-            }
-            w.buf.push_str("]}}");
-            w.spill()
-        };
-        let mut current: Option<u32> = None;
-        let mut held: Vec<([u32; 3], [u32; 3])> = Vec::new();
-        for (i, s) in segments.enumerate() {
-            if i % 65_536 == 0 {
-                check()?;
-            }
-            let s = s?;
-            if let Some(feature) = current.filter(|&f| f != s.feature) {
-                write_feature(feature, &held, w)?;
-                held.clear();
-            }
-            current = Some(s.feature);
-            held.push((s.pa, s.pb));
-        }
-        if let Some(feature) = current {
-            write_feature(feature, &held, w)?;
-        }
+        line_counts = write_lines(w, geo, frame, check)?;
     }
     let topology_seconds = topology_started.elapsed().as_secs_f64();
 
@@ -1066,7 +1435,7 @@ fn run(run: Run<'_>) -> Result<(InspectReport, InspectDiagnostics), JobError> {
 
     let forecast_seconds = forecast_started.elapsed().as_secs_f64();
     let report = InspectReport {
-        schema_version: 1,
+        schema_version: SCHEMA_VERSION,
         operation: "mesh_inspect",
         source_coordinates: if c.source_crs.is_some() {
             "source-crs"
@@ -1074,7 +1443,7 @@ fn run(run: Run<'_>) -> Result<(InspectReport, InspectDiagnostics), JobError> {
             "local-gltf"
         },
         source,
-        hlod_view: HlodView {
+        hlod_view: Some(HlodView {
             open_edges: forecast.incidence.source_open_edges,
             open_edges_with_shared_endpoints: forecast
                 .incidence
@@ -1082,15 +1451,15 @@ fn run(run: Run<'_>) -> Result<(InspectReport, InspectDiagnostics), JobError> {
             decoded_degenerate_triangles: forecast.incidence.decoded_degenerate,
             shared_points: forecast.incidence.shared_points,
             shared_segments: forecast.incidence.shared_segments,
-        },
-        tree: InspectTree {
+        }),
+        tree: Some(InspectTree {
             leaves: stats.leaves,
             coarse_cells: stats.internal,
             height: stats.height,
             leaf_triangles: config.leaf_triangles(),
             triangle_cap: cap as u64,
-        },
-        forecast: summarize(&forecast.cells, stats.height),
+        }),
+        forecast: Some(summarize(&forecast.cells, stats.height)),
         geojson: geojson_path.map(|_| GeoJsonSummary {
             coordinates: frame.coordinates(),
             min_feature_length_m: request.min_feature_length,
@@ -1103,24 +1472,95 @@ fn run(run: Run<'_>) -> Result<(InspectReport, InspectDiagnostics), JobError> {
     };
     let diagnostics = InspectDiagnostics {
         requested_jobs: c.jobs.requested.clone(),
-        capture_jobs: c.jobs.jobs,
-        capture_jobs_limited_by: c.jobs.limited_by,
+        jobs: c.jobs.jobs,
+        jobs_limited_by: c.jobs.limited_by,
         memory: InspectMemory {
             budget,
             ceiling_bytes: ceiling,
             fixed_bytes: fixed,
             memory_backed_scratch_bytes: charged,
-            capture_bound_bytes: c.memory.bound_bytes,
+            capture_bound_bytes: Some(c.memory.bound_bytes),
             topology_bytes: topology_peak.get(),
-            forecast_bytes: forecast_peak.get(),
+            forecast_bytes: Some(forecast_peak.get()),
         },
         scratch_peak_bytes: captured.scratch.peak_bytes(),
-        incidence_scratch_peak_bytes: forecast.incidence_scratch_peak_bytes,
-        capture_seconds,
+        partitions: None,
+        partition_workers: None,
+        incidence_scratch_peak_bytes: Some(forecast.incidence_scratch_peak_bytes),
+        capture_seconds: Some(capture_seconds),
         topology_seconds,
-        forecast_seconds,
+        forecast_seconds: Some(forecast_seconds),
     };
     Ok((report, diagnostics))
+}
+
+/// Writes the selected open loops and seams, one feature's segments at a time (at most the
+/// segment budget, admitted by the caller) joined into ordered polylines. Returns the open
+/// loops and seams written and the features the segment budget left out.
+fn write_lines(
+    w: &mut GeoWriter<'_>,
+    geo: topology::GeoLines<'_>,
+    frame: &Frame,
+    check: &dyn Fn() -> Result<(), JobError>,
+) -> Result<(u64, u64, u64), JobError> {
+    let state = |e: serde_json::Error| JobError::new(JobErrorKind::InvalidState, e.to_string());
+    let topology::GeoLines {
+        features,
+        segments,
+        omitted,
+    } = geo;
+    let mut line_counts = (0u64, 0u64, omitted);
+    let mut write_feature = |feature: u32,
+                             segments: &[([u32; 3], [u32; 3])],
+                             w: &mut GeoWriter<'_>|
+     -> Result<(), JobError> {
+        let index = usize::try_from(feature).map_err(|_| resource("feature index"))?;
+        let f = features.get(index).ok_or_else(|| {
+            JobError::new(JobErrorKind::InvalidState, "a segment without its feature")
+        })?;
+        if f.kind == "seam" {
+            line_counts.1 += 1;
+        } else {
+            line_counts.0 += 1;
+        }
+        w.begin(&serde_json::to_value(f).map_err(state)?, "MultiLineString");
+        w.buf.push('[');
+        let p = |k: [u32; 3]| k.map(|v| f64::from(f32::from_bits(v)));
+        for (i, line) in polylines(segments).iter().enumerate() {
+            if i > 0 {
+                w.buf.push(',');
+            }
+            w.buf.push('[');
+            for (j, point) in line.iter().enumerate() {
+                if j > 0 {
+                    w.buf.push(',');
+                }
+                frame.write_point(&mut w.buf, p(*point));
+            }
+            w.buf.push(']');
+            w.spill()?;
+        }
+        w.buf.push_str("]}}");
+        w.spill()
+    };
+    let mut current: Option<u32> = None;
+    let mut held: Vec<([u32; 3], [u32; 3])> = Vec::new();
+    for (i, s) in segments.enumerate() {
+        if i % 65_536 == 0 {
+            check()?;
+        }
+        let s = s?;
+        if let Some(feature) = current.filter(|&f| f != s.feature) {
+            write_feature(feature, &held, w)?;
+            held.clear();
+        }
+        current = Some(s.feature);
+        held.push((s.pa, s.pb));
+    }
+    if let Some(feature) = current {
+        write_feature(feature, &held, w)?;
+    }
+    Ok(line_counts)
 }
 
 /// The forecast's per-depth summary and top cells.

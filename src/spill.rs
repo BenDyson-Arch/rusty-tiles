@@ -9,7 +9,7 @@
 
 pub(crate) mod codec;
 /// The block codec of compressed spill files, for callers that stage their own blocks.
-pub(crate) use codec::{decode as decode_block, encode as encode_block};
+pub(crate) use codec::{decode as decode_block, encode as encode_block, Encoded};
 mod scratch;
 mod sequence;
 mod sort;

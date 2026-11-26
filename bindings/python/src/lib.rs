@@ -518,18 +518,20 @@ fn mesh_to_tileset(
 
 /// Check a `mesh` source before a bake, writing no archive: its exact-position topology
 /// (open edges and loops by size class, primitive boundaries and seams, repeated positions,
-/// connected components) and an estimated coarse omission per cell over the same cells
-/// `mesh_to_tileset` would build (pass the same profile, placement and source CRS options).
-/// `geojson` writes a `.geojson` of open loops and seams at least `min_feature_length`
-/// metres long and of the cells at risk, in WGS84, which needs `anchor` or `source_crs`;
-/// `geojson_local=True` writes local east/north metres instead (not RFC 7946). `force`
-/// replaces an existing one. Returns an `InspectResult`; its `report` is independent of
-/// `jobs`, the budget, the scratch location and the GeoJSON path. The omission forecast in
-/// it is an estimate. `callback` receives progress events, as for `mesh_to_tileset`.
+/// connected components), read straight from the source. `forecast=True` also estimates
+/// coarse omission per cell over the same cells `mesh_to_tileset` would build (pass the
+/// same profile, placement and source CRS options); it captures the source and costs most
+/// of a bake. `geojson` writes a `.geojson` of open loops and seams at least
+/// `min_feature_length` metres long (and, with the forecast, of the cells at risk), in
+/// WGS84, which needs `anchor` or `source_crs`; `geojson_local=True` writes local
+/// east/north metres instead (not RFC 7946). `force` replaces an existing one. Returns an
+/// `InspectResult`; its `report` is independent of `jobs`, the budget, the scratch location
+/// and the GeoJSON path. The omission forecast is an estimate. `callback` receives progress
+/// events, as for `mesh_to_tileset`.
 /// `weld_epsilon` and `join_primitives` inspect the source welded as `mesh_to_tileset`
 /// would weld it; `report["weld"]` then gives what was merged.
 #[pyfunction]
-#[pyo3(signature = (input, *, geojson=None, geojson_local=false, min_feature_length=tiles_core::DEFAULT_MIN_FEATURE_LENGTH, profile="balanced", jobs=None, scratch_dir=None, memory_budget_bytes=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None, height_offset=None, weld_epsilon=None, join_primitives=None, force=false, callback=None))]
+#[pyo3(signature = (input, *, geojson=None, geojson_local=false, min_feature_length=tiles_core::DEFAULT_MIN_FEATURE_LENGTH, profile="balanced", jobs=None, scratch_dir=None, memory_budget_bytes=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None, height_offset=None, weld_epsilon=None, join_primitives=None, forecast=false, force=false, callback=None))]
 #[expect(
     clippy::too_many_arguments,
     reason = "one keyword per CLI option, as mesh_to_tileset"
@@ -554,6 +556,7 @@ fn inspect_mesh(
     height_offset: Option<f64>,
     weld_epsilon: Option<f64>,
     join_primitives: Option<&str>,
+    forecast: bool,
     force: bool,
     callback: Option<Py<PyAny>>,
 ) -> PyResult<InspectResult> {
@@ -586,6 +589,7 @@ fn inspect_mesh(
     let mut request = tiles_core::InspectRequest::new(input)
         .with_profile(profile)
         .with_jobs(jobs)
+        .with_forecast(forecast)
         .with_min_feature_length(min_feature_length)
         .with_geojson_local(geojson_local)
         .with_placement(rigid_placement(anchor, orientation_xyzw, scene_offset)?)

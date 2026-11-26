@@ -1197,42 +1197,120 @@ pub(crate) fn audit(
     sorter: SortConfig,
     progress: &StepProgress<'_>,
 ) -> Result<()> {
-    let n = triangles.len();
+    let original = &welded.original;
+    let faces = || -> Result<_> {
+        Ok(triangles.reader()?.map(|t| {
+            let t = t?;
+            let mut moved = false;
+            for v in t.triangle.vertices {
+                moved |= original
+                    .moved
+                    .contains(original.vertex(t.expanded_ordinal, v)?);
+            }
+            Ok(AuditFace {
+                corners: t.triangle.positions.map(bits),
+                degenerate: t.triangle.degenerate,
+                moved,
+            })
+        }))
+    };
+    let found = audit_faces(
+        triangles.len(),
+        welded.report.max_displacement_m,
+        faces,
+        scratch,
+        sorter,
+        progress,
+    )?;
+    found.write(&mut welded.report);
+    Ok(())
+}
+
+/// One captured face as the weld audit reads it: its corner positions (f32 bits), whether
+/// they are fewer than three distinct positions, and whether a corner's vertex moved.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct AuditFace {
+    pub corners: [[u32; 3]; 3],
+    pub degenerate: bool,
+    pub moved: bool,
+}
+impl Record for AuditFace {
+    const SIZE: usize = 38;
+    fn encode(&self, out: &mut [u8]) {
+        for (c, corner) in self.corners.iter().enumerate() {
+            for (a, v) in corner.iter().enumerate() {
+                put_u32(out, 12 * c + 4 * a, *v);
+            }
+        }
+        out[36] = u8::from(self.degenerate);
+        out[37] = u8::from(self.moved);
+    }
+    fn decode(bytes: &[u8]) -> Self {
+        Self {
+            corners: std::array::from_fn(|c| {
+                std::array::from_fn(|a| get_u32(bytes, 12 * c + 4 * a))
+            }),
+            degenerate: bytes[36] != 0,
+            moved: bytes[37] != 0,
+        }
+    }
+}
+
+/// What [`audit_faces`] found, written into the weld report.
+pub(crate) struct AuditFound {
+    degenerate: u64,
+    collapsed: u64,
+    isolated: u64,
+    bound: f64,
+    coincident: u64,
+}
+impl AuditFound {
+    pub(crate) fn write(&self, report: &mut MeshWeldReport) {
+        report.degenerate_triangles = self.degenerate;
+        report.collapsed_triangles = self.collapsed;
+        report.isolated_collapses = self.isolated;
+        report.collapse_bound_m = self.bound;
+        report.coincident_triangles = self.coincident;
+    }
+}
+
+/// The weld audit (see [`audit`]) over `n` faces that `faces` lists, twice at most, in any
+/// order: the result does not depend on it. `d` is the weld's largest displacement.
+pub(crate) fn audit_faces<I: Iterator<Item = Result<AuditFace>>>(
+    n: u64,
+    d: f64,
+    faces: impl Fn() -> Result<I>,
+    scratch: &Scratch,
+    sorter: SortConfig,
+    progress: &StepProgress<'_>,
+) -> Result<AuditFound> {
     progress.begin(Step::WeldCheck, n.saturating_mul(2))?;
-    let mut faces = ExternalSorter::<Face>::new(scratch, sorter)?.observed(progress);
+    let mut sorted = ExternalSorter::<Face>::new(scratch, sorter)?.observed(progress);
     let mut collapsed: Vec<[[u32; 3]; 3]> = Vec::new();
     let (mut degenerate, mut seen) = (0u64, 0u64);
-    for t in triangles.reader()? {
-        let t = t?;
+    for f in faces()? {
+        let f = f?;
         seen += 1;
         if seen.is_multiple_of(4096) {
             progress.advance(seen)?;
         }
-        let mut any = false;
-        for v in t.triangle.vertices {
-            any |= welded
-                .original
-                .moved
-                .contains(welded.original.vertex(t.expanded_ordinal, v)?);
-        }
-        let corners = t.triangle.positions.map(bits);
-        if t.triangle.degenerate {
+        if f.degenerate {
             degenerate += 1;
-            if any {
+            if f.moved {
                 if collapsed.len() == MAX_COLLAPSED {
                     return Err(resource(format!(
                         "the weld collapses more than {MAX_COLLAPSED} triangles; use a smaller \
                          --weld-epsilon"
                     )));
                 }
-                collapsed.push(corners);
+                collapsed.push(f.corners);
             }
         } else {
-            let mut sorted = corners;
-            sorted.sort_unstable();
-            faces.push(Face {
-                corners: sorted,
-                moved: any,
+            let mut corners = f.corners;
+            corners.sort_unstable();
+            sorted.push(Face {
+                corners,
+                moved: f.moved,
             })?;
         }
     }
@@ -1246,15 +1324,15 @@ pub(crate) fn audit(
     let mut alive = vec![false; distinct.len()];
     let mut alive_segments = vec![false; segments.len()];
     if !distinct.is_empty() {
-        for (k, t) in triangles.reader()?.enumerate() {
-            let t = t?;
+        for (k, f) in faces()?.enumerate() {
+            let f = f?;
             if k.is_multiple_of(4096) {
                 progress.advance(n + k as u64)?;
             }
-            if t.triangle.degenerate {
+            if f.degenerate {
                 continue;
             }
-            let corners = t.triangle.positions.map(bits);
+            let corners = f.corners;
             for p in corners {
                 if let Ok(i) = distinct.binary_search(&p) {
                     alive[i] = true;
@@ -1272,7 +1350,6 @@ pub(crate) fn audit(
             }
         }
     }
-    let d = welded.report.max_displacement_m;
     let (mut isolated, mut bound) = (0u64, 0f64);
     for c in &collapsed {
         // On a surviving face itself (a collapsed point that is a surviving corner, or a
@@ -1300,7 +1377,7 @@ pub(crate) fn audit(
     // Coincident groups holding a moved face.
     let mut coincident = 0u64;
     let (mut group, mut size, mut any) = (None::<[[u32; 3]; 3]>, 0u64, false);
-    for (k, f) in faces.finish()?.enumerate() {
+    for (k, f) in sorted.finish()?.enumerate() {
         let f = f?;
         if k.is_multiple_of(4096) {
             progress.check()?;
@@ -1317,13 +1394,60 @@ pub(crate) fn audit(
     if size > 1 && any {
         coincident += size;
     }
-    let report = &mut welded.report;
-    report.degenerate_triangles = degenerate;
-    report.collapsed_triangles = collapsed.len() as u64;
-    report.isolated_collapses = isolated;
-    report.collapse_bound_m = bound;
-    report.coincident_triangles = coincident;
-    progress.end()
+    progress.end()?;
+    Ok(AuditFound {
+        degenerate,
+        collapsed: collapsed.len() as u64,
+        isolated,
+        bound,
+        coincident,
+    })
+}
+
+/// The position every moved vertex is captured at, by its rank among the moved ones, for
+/// reading corners in triangle order (`mesh-inspect`): 12 bytes per moved vertex
+/// ([`Welded::moved_target_bytes`]).
+pub(crate) struct MovedTargets<'a> {
+    original: &'a OriginalPositions,
+    targets: Vec<[u32; 3]>,
+}
+impl MovedTargets<'_> {
+    /// Whether vertex `vertex` of primitive instance `expanded` moved, and where to.
+    pub(crate) fn target(&self, expanded: usize, vertex: u64) -> Result<Option<[u32; 3]>> {
+        let id = self.original.vertex(expanded as u64, vertex)?;
+        Ok(self
+            .original
+            .moved
+            .contains(id)
+            .then(|| self.targets[self.original.moved.rank(id)]))
+    }
+}
+impl Welded {
+    /// Resident bytes of [`Welded::moved_targets`].
+    pub(crate) fn moved_target_bytes(&self) -> u64 {
+        (self.original.moved.ones() as u64).saturating_mul(12)
+    }
+    /// Every moved vertex's captured position, read from the move list in vertex order.
+    pub(crate) fn moved_targets(&self) -> Result<MovedTargets<'_>> {
+        let moved = &self.original.moved;
+        let mut targets = Vec::new();
+        targets
+            .try_reserve_exact(moved.ones())
+            .map_err(|_| resource("weld move table allocation failed"))?;
+        for m in self.moves.reader()? {
+            let m = m?;
+            if moved.contains(m.id as usize) {
+                targets.push(m.position);
+            }
+        }
+        if targets.len() != moved.ones() {
+            return Err(invariant("weld moves disagree with the moved vertices"));
+        }
+        Ok(MovedTargets {
+            original: &self.original,
+            targets,
+        })
+    }
 }
 
 #[cfg(test)]

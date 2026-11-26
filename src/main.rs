@@ -330,12 +330,17 @@ struct MeshInspectArgs {
     /// Replace an existing GeoJSON
     #[arg(short = 'f', long)]
     force: bool,
-    /// The bake's profile: give the same as `mesh` so cells line up
+    /// The bake's profile: with --forecast, give the same as `mesh` so cells line up
     #[arg(long, default_value = "balanced")]
     profile: TilerProfile,
-    /// Maximum capture workers or auto; the report does not depend on it
+    /// Maximum workers or auto; the report does not depend on it
     #[arg(long, default_value = "auto")]
     jobs: TilerJobs,
+    /// Also estimate coarse omissions per cell (and write the cells at risk to the GeoJSON).
+    /// This captures the source and builds the bake's border contracts: it costs most of a
+    /// bake
+    #[arg(long)]
+    forecast: bool,
     /// Owned working-data parent
     #[arg(long = "scratchDir", visible_alias = "scratch-dir")]
     scratch_dir: Option<PathBuf>,
@@ -1483,6 +1488,7 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
             let mut request = rusty_tiles::InspectRequest::new(a.input)
                 .with_profile(a.profile)
                 .with_jobs(a.jobs)
+                .with_forecast(a.forecast)
                 .with_min_feature_length(a.min_feature_length)
                 .with_geojson_local(a.geojson_local)
                 .with_output_policy(if a.force {
