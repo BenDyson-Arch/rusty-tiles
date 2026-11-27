@@ -34,6 +34,22 @@ child components from published keys, against its `droppedComponents` declaratio
 and its geometricError (exact distances); `drop_controls.py` pins an honest drop and
 its undeclared, understated and border-touching refusals for both validators.
 
+Coarse self-intersections (#420, 2026-11-26): with `--coarse-crossings`, `crossings.py`
+counts each coarse tile's face pairs that meet outside their common corners, present in
+the tile's children or new, from published keys. It clips the two closed hulls exactly
+(Fractions) and tests the clipped vertices against the hull of the common corners, an
+independent construction of native `validate --coarseCrossings`, which uses orientation
+predicates and a case analysis. The census reports and never refuses.
+`crossing_controls.py` pins the chord-through-the-floor case (four new pairs), a present
+pair, a duplicated face (one face, one pair), a collinear face, a shared-corner overlap and
+a seeded random lattice (4,150 present pairs), and requires native
+`interfaceCensus.coarseCrossings` to equal the oracle's field by field (and to be absent
+without the flag). Both count distinct faces by corner set, judge "present" against the
+children together, census tiles with content below them, and use the same budget formula
+and weights. Two gaps remain: their candidate counts differ (a grid natively, a sweep here),
+so their incomplete tiles can differ near the budget; and native also bounds each tile's
+workspace (about 28,600 face entries), where the oracle has no bound.
+
 D11 border relief (A1, 2026-10-30): `relief.py` re-derives every declared relief step
 from source incidence alone, in IEEE double like the producer:
 - the shared border graph per depth;

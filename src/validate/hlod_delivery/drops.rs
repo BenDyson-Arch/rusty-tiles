@@ -19,7 +19,10 @@
 //! Stages 0-2 and undeclared tiles keep the sampled rule described above.
 mod certificate;
 
-use super::{bad, point_bytes, read_point, sql, CanonicalPoint, Effort, Error, Store};
+use super::{
+    bad, crossings::CoarseCrossings, point_bytes, read_point, sql, CanonicalPoint, Effort, Error,
+    Store,
+};
 use std::collections::{HashMap, HashSet};
 
 /// A parent's geometricError covers a dropped key up to this relative rounding.
@@ -98,6 +101,7 @@ impl Store {
     pub(super) fn coarse_drops(
         &self,
         dropped_by_depth: &mut Vec<u64>,
+        mut crossings: Option<&mut CoarseCrossings>,
         effort: &Effort,
     ) -> Result<(), Error> {
         self.connection
@@ -119,7 +123,9 @@ impl Store {
         let mut stack: Vec<Frame> = Vec::new();
         let mut close = |frame: Frame| -> Result<(), Error> {
             match frame.content {
-                Some(c) if !c.leaf => self.recount(&c, dropped_by_depth, effort),
+                Some(c) if !c.leaf => {
+                    self.recount(&c, dropped_by_depth, crossings.as_deref_mut(), effort)
+                }
                 Some(c) if c.declared != 0 => Err(bad(
                     "coarseDrops",
                     &format!("leaf tile {} declares dropped components", c.id),
@@ -251,10 +257,13 @@ impl Store {
             .map_err(sql)
     }
 
+    /// The tile's drops against its declaration, and its self-intersection census (#420),
+    /// from one read of its faces and its children's.
     fn recount(
         &self,
         parent: &Content,
         dropped_by_depth: &mut Vec<u64>,
+        crossings: Option<&mut CoarseCrossings>,
         effort: &Effort,
     ) -> Result<(), Error> {
         let faces: Vec<[CanonicalPoint; 3]> = self
@@ -278,12 +287,21 @@ impl Store {
         let mut keys: Vec<CanonicalPoint> = Vec::new();
         // Each child face with its child's G, and the children's face count.
         let mut child_faces: Vec<([usize; 3], f64)> = Vec::new();
+        // The children's faces together by corner set, for the self-intersection census: the
+        // coarse tile replaces its children together, and leaf children together are the
+        // source, where faces of two leaves crossing is a source crossing.
+        let mut child_corners: HashSet<[CanonicalPoint; 3]> = HashSet::new();
         let (mut count_faces, mut child_g) = (0u64, 0f64);
         for &(child, leaf, g) in &parent.children {
             child_g = child_g.max(g);
             for (face, n) in self.faces(child, leaf)? {
                 effort.charge(FACE_READ_UNITS)?;
                 count_faces = count_faces.saturating_add(n);
+                if crossings.is_some() {
+                    let mut corners = face;
+                    corners.sort_unstable();
+                    child_corners.insert(corners);
+                }
                 let ids = face.map(|k| {
                     *index.entry(k).or_insert_with(|| {
                         root.push(root.len());
@@ -299,6 +317,18 @@ impl Store {
             }
         }
         drop(index);
+        if let Some(crossings) = crossings {
+            // The census's workspace is bounded by half the decoded-document allowance
+            // that the coarse replay held and has released before this walk.
+            crossings.tile(
+                (parent.id, parent.depth, parent.error),
+                &faces,
+                &child_corners,
+                self.decoded_limit / 2,
+                effort,
+            )?;
+        }
+        drop(child_corners);
         let mut present = vec![false; keys.len()];
         for (v, k) in keys.iter().enumerate() {
             if kept.contains(k) {

@@ -124,6 +124,12 @@ enum Command {
         /// Verdicts and reports do not depend on it
         #[arg(long, default_value = "auto")]
         jobs: TilerJobs,
+        /// Also count coarse self-intersections on HLOD archives
+        /// (interfaceCensus.coarseCrossings): face pairs of one coarse tile meeting outside
+        /// their common corners, present in the tile's children together or new. Reported only: no
+        /// verdict or exit code depends on it. Costs about 3-11 µs per coarse face
+        #[arg(long = "coarseCrossings", visible_alias = "coarse-crossings")]
+        coarse_crossings: bool,
     },
     /// Check converter capabilities and local CRS resources
     Doctor(DoctorArgs),
@@ -1526,8 +1532,12 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
             expect_profile,
             memory_budget,
             jobs,
+            coarse_crossings,
         } => {
             let mut request = rusty_tiles::validate::ValidationRequest::new(&input);
+            if coarse_crossings {
+                request = request.coarse_crossings();
+            }
             if let Some(bytes) = memory_budget {
                 request = request.memory_budget(bytes);
             }
