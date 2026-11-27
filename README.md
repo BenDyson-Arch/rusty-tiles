@@ -4,7 +4,7 @@
 
 rusty-tiles converts textured GLB/glTF meshes, LAS/LAZ point clouds and GeoJSON/GeoPackage vectors into 3D Tiles 1.1 archives (`.3tz`). It runs offline and needs no GDAL, PROJ or GEOS installation. It ships as a command-line tool, a Python wheel (for scripts and Blender add-ons) and a Rust library, and the CLI includes archive validation and a local Cesium preview.
 
-> **Status:** rusty-tiles is pre-1.0 and under active development. Command-line options, the Python and Rust APIs, report and `conversion.json` fields, error types and archive bytes can change in any release, including patch releases. Each such change is listed under "Breaking changes" in the [release notes](CHANGELOG.md). Pin a version for anything you depend on (`pip install rusty-tiles==0.4.1`, `install.sh --version 0.4.1`). Output archives are standard 3D Tiles 1.1, so viewers such as CesiumJS are not affected.
+> **Status:** rusty-tiles is pre-1.0 and under active development. Command-line options, the Python and Rust APIs, report and `conversion.json` fields, error types and archive bytes can change in any release, including patch releases. Each such change is listed under "Breaking changes" in the [release notes](CHANGELOG.md). Pin a version for anything you depend on (`pip install rusty-tiles==0.4.2`, `install.sh --version 0.4.2`). Output archives are standard 3D Tiles 1.1, so viewers such as CesiumJS are not affected.
 
 ![Meshes, point clouds and vectors become 3D Tiles archives. Imagery becomes COG and XYZ tiles. Elevation rasters become terrain.](docs/assets/readme-overview.svg)
 
@@ -33,7 +33,7 @@ python -m pip install rusty-tiles
 **From source** (stable Rust and a C++ compiler):
 
 ```sh
-cargo install --git https://github.com/BenDyson-Arch/rusty-tiles --tag v0.4.1 --locked
+cargo install --git https://github.com/BenDyson-Arch/rusty-tiles --tag v0.4.2 --locked
 ```
 
 The [installation guide](docs/INSTALL.md) covers every option, including the native-geospatial build below.
@@ -109,7 +109,7 @@ A separate build adds what needs GDAL, PROJ and GEOS: imagery (`raster`, to COG 
 
 ```sh
 docker run --rm --platform linux/amd64 --network none \
-  -v "$PWD:/data" -w /data ghcr.io/bendyson-arch/rusty-tiles:v0.4.1 \
+  -v "$PWD:/data" -w /data ghcr.io/bendyson-arch/rusty-tiles:v0.4.2 \
   raster -i orthophoto.tif -o imagery --max-zoom 14
 ```
 
