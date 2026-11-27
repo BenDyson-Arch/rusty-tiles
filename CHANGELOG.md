@@ -2,6 +2,328 @@
 
 All notable changes to rusty-tiles are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.4.2 - 2026-11-27
+
+### Added
+
+- HLOD: the stage report lists every coarse tile that only a retry published
+  (`lastResortRecords` in the stage manifest's `hlod` section and in the run
+  diagnostics): its first node, depth, last-resort stage (0 for fix 2 and staged
+  reduction, which previously left no per-tile record), the build that published
+  it, why the primary build did not, and the primary build's refused proposals by
+  check. Payloads, tilesets and their bytes are unchanged.
+- `rusty-tiles mesh-inspect` and Python `rusty_tiles.inspect_mesh` (returning
+  `InspectResult`): a pre-bake check of a `mesh` source that writes no archive (#348, #437).
+  - By default it reads the source once, without capturing it, and reports exact counts
+    on exact positions: open edges and loops by length class, primitive-boundary edges
+    and how many coincide with another primitive's edge, repeated positions and the
+    edges welding them would close, unwelded seams, connected components and the weld
+    preview. Used vertices and edges are counted in parallel on the `--jobs` workers,
+    within `--memory-budget`. On Walem (10 M triangles) and an 80 M-triangle copy of it,
+    with `--jobs 4`, it takes about 1% of a bake's wall time (7 s and 54 s).
+  - It checks topology and the payload only. `mesh` can still refuse a source that
+    inspects clean, on image preflight, attribute layout, member limits, the triangle
+    limit or the source-CRS Jacobian for normals and tangents.
+  - `--forecast` (Python `forecast=True`) adds an estimated coarse-omission risk per
+    cell, over the cells the bake would build. It captures the source as `mesh` does,
+    with the same cell tree and border contracts and the bake's propagation and root
+    recovery, so it costs most of a bake. Without it, `inspectReport`
+    (`schema_version` 2) has no `hlod_view`, `tree` or `forecast`, and the summary's
+    last line says the forecast was not run.
+  - The estimate is modest. On four measured bakes its omitted-cell precision was
+    0.13–1.00 and its recall 0.33–1.00, and it found 3 of 18 actual omission sources.
+    Only `certain` cells (a border contract past the triangle cap) follow the bake's
+    rule exactly, and that has been checked only on a synthetic case.
+  - `--geojson` writes the open loops and seams as ordered polylines, and, with
+    `--forecast`, the cells at risk, in WGS84. An unplaced source needs
+    `--geojson-local`, which writes labelled local metres.
+  - The report does not depend on `--jobs`. Every step reports progress with a total
+    (`inspect_scan`, `inspect_validate`, `inspect_sample`, `inspect_stream`,
+    `inspect_components`; with `--forecast`, also `inspect_contracts` and
+    `inspect_forecast`).
+- Mesh: `--report-path FILE` (Python `report_path=`) writes a versioned JSON run report
+  (`rusty_tiles_mesh_run_report`, schema version 1), rewritten atomically after each stage:
+  wall and CPU seconds, scratch peaks, `omitted_by_depth`, last-resort counts and records,
+  and the final status, so a stopped run leaves a valid partial report. The archive is
+  unchanged. A report another program holds open is retried, then reported stale in a
+  warning; a hard kill mid-write can leave a `.rusty-tiles-report-*.tmp` beside it.
+- Mesh diagnostics: `hlod.walk_utilisation` measures the coarse walk's busy and idle worker
+  seconds by cell depth and the slowest cell's share of each depth's wall time.
+  `stage_timing` holds the whole run's stage timing, only when asked for
+  (`TilerRequest::with_stage_timing`; the CLI asks when `RUSTY_TILES_STAGE_TIMING` is set).
+- `mesh --weld-epsilon METRES` and `mesh --join-primitives same-material`
+  (Python: `weld_epsilon=`, `join_primitives=`; also `mesh-inspect` and
+  `inspect_mesh`, to preview the effect) weld the source's vertex positions
+  before capture (#349). Vertices of one primitive (or, with `same-material`, of
+  primitives sharing a material) within ε pair; the classes are the connected
+  components of the pairs, and every member takes the position of the class's
+  lowest-index vertex, so the result does not depend on `--jobs` or the budget.
+  At 0 only exact repeats merge, which the bake already treats as one position.
+  Only positions move: normals, UVs, colours and provenance (`source_primitive`)
+  stay each vertex's own, so UV seams are kept. `tilerReport.weld` states the
+  merged count, the true largest displacement (a chain can exceed ε) and the
+  faces the weld collapsed or made coincident (CLI warning when non-zero).
+  Geometric error is certified against the original pre-weld source. A weld that collapses a triangle onto no surviving
+  face is refused. The exact-seam rule between output tiles is unchanged. The
+  weld is progress steps `capture_weld` and `capture_weld_check`, charged in capture's memory bound
+  (`capture_weld_bytes`) and declared scratch. Without the options, output is
+  unchanged.
+- `mesh --bbox MINX MINY MAXX MAXY` and `mesh --polygon FILE` (Python: `bbox=`,
+  `polygon=`) bake only the source triangles whose centroid lies in a box or in
+  a GeoJSON Polygon/MultiPolygon (holes allowed, even-odd rule). Boundaries are
+  half-open (west and south edges inside), so abutting regions partition the
+  source. The region is in post-node glTF x and -z for a local source, and in
+  WGS84 longitude and latitude with `--source-crs`. Triangles are not split.
+  Placement, the source CRS frame, the root cube and the position lattice's
+  origin stay the whole source's, so a subset lines up with a later full bake:
+  kept triangles' leaf positions are bit-identical in `quality` and `lossless`
+  and within the coarser per-depth position step in `fast` and `balanced`. `tilerReport.subset` states the kept count and extent; an empty
+  selection is `invalid_request`. The selection runs before any scratch exists
+  (progress step `capture_select`), and excluded triangles cost no scratch.
+  Without a region, output is unchanged.
+- Opt-in cargo feature `pure-rust-basis` encodes and decodes KTX2/Basis Universal
+  textures in pure Rust (ktx-rs 4.4.3, zstd-pure-rs 0.2.0, ruzstd 0.9.1) instead
+  of the vendored C++ encoder. Output is byte-identical to the default build; the
+  default build still uses the C++. Licences of the added crates are in
+  `licenses/THIRD_PARTY_LICENSES-pure-rust-basis.md`.
+- `validate --coarseCrossings` (Python `validate(..., coarse_crossings=True)`) counts
+  coarse self-intersections on HLOD archives in `interfaceCensus.coarseCrossings`: pairs
+  of faces of one coarse tile that meet anywhere other than a shared vertex or a shared
+  edge, decided exactly on the decoded positions. Each pair is classed as present (both
+  faces are faces of the tile's children together, so the children cross there too) or
+  new, with
+  totals, counts by cell depth and the 16 tiles with the most new pairs. It is a report
+  only: crossings within a tile's geometric error are permitted, so no verdict, warning or
+  exit code depends on it. It is off by default because it costs about 3–11 µs per
+  coarse face (9–15% more validation time on the archives measured, 41% on a dense synthetic
+  city).
+
+### Changed
+
+- Mesh capture keeps its retained triangle and corner-depth streams as
+  LZ4-compressed blocks in scratch (pure-Rust `lz4_flex`, LZ4 block format, no
+  frame). Capture writes fewer bytes, later stages re-read fewer, and measured
+  scratch is lower. Output is unchanged; declared and preflight scratch bounds
+  still count these files at their uncompressed size.
+- Mesh capture joins corner depths over the leaves directly. Only corners at
+  positions another leaf's box and occupancy cells can hold are sorted, and
+  the weld-table sort and the two full corner sorts are gone. Output is
+  identical; a stop request is honoured before each leaf.
+- Mesh capture assembles its retained triangle sequence directly. Decoded
+  vertices are kept in memory within the budget, or spilled and read through
+  block caches; triangles are bucketed by Morton prefix and sorted bucket by
+  bucket. This replaces the two corner sorts and the triangle merge sort. A
+  spilled primitive without index locality sorts its corners instead. Output
+  is unchanged.
+- Mesh capture's corner-depth join runs its leaf chunks on capture's own worker tasks
+  instead of a separate thread pool, sized by the same resolved `--jobs`. When a chunk
+  fails, the first failing chunk in leaf order is reported, whatever order the workers
+  met it in. Output is unchanged.
+- Mesh capture builds its cell tree as parallel subtrees on the capture
+  workers instead of in one serial pass. Output is identical for every worker
+  count; a stop request is honoured between units of 4,096 triangles.
+- Mesh capture's preflight scan reads each used position once, in file order,
+  after marking the used vertices from the index buffer, and payload
+  validation runs on the capture workers. An invalid source still reports
+  the same first error. Output is unchanged.
+- CI: pull requests that run the fast tier also run the Windows `Portable CLI` job (the nextest `portable` profile, doctests and the packaged release CLI), so Windows failures show on the pull request that causes them instead of on the next push or nightly run. Docs-only pull requests still skip it.
+- CI: the nightly run can also test a release integration branch with the full tier, listed in `nightly.yml`'s `branch` matrix. Its failures go to that branch's own "Full CI matrix failing on <branch>" issue, and a pass there does not start the dev build, which only develop does.
+- `mesh` coarse tiles: the coarse stage now reserves memory for one source-image decode
+  for the whole stage, instead of one per parent job, and decodes source images one at a
+  time. Large textures no longer serialise coarse jobs under the memory budget: on a
+  10 M-triangle scene with 89 8192² textures at a 4 GiB budget with `--jobs 2`, the
+  stage runs 2 jobs instead of 1, its own wall time falls by 25–34% and the whole run's by
+  20–25%. A job waiting for the decode slot stops when the run is cancelled. Archives
+  are byte-identical; `diagnostics.memory.hlod` reports the new `decode_bytes`.
+- `mesh` coarse tiles: the coarse stage no longer decodes source images. The leaf
+  stage's crop pass, which decodes each source image once, also builds the coarse
+  stage's source chain and stores only the 64×64 tiles that source triangles can be
+  sampled from; coarse pages sample those tiles. The coarse stage's plan reserves
+  their index instead of a decode slot and an image cache, so it needs less memory and
+  admits more jobs. Archives are byte-identical.
+  `diagnostics.memory.hlod.sparse_index_bytes`, `diagnostics.hlod.sparse_tile_decodes`
+  and the `coarse_*` fields of `diagnostics.leaf_delivery.crop_store` report it.
+- The large-mesh HLOD source index stores lossless triangle blocks and reconstructs
+  fine search nodes on demand. It reserves about 77.6 scratch bytes per triangle
+  at scale and reports its actual stored bytes after compression.
+- The HLOD stage admits the shared-border scratch from the graph it builds, not from a
+  per-depth worst case: once the border graph exists, the borders are admitted once, with
+  free space preflighted, for the graph, every depth's maps and the segments and owner
+  references each depth can emit. On Walem 2048 the admission falls from 1.11 GB to
+  0.57 GB (measured peak 0.36 GB). A bake short of space is refused at that point, before
+  any border level runs. Output is unchanged.
+- HLOD: D keeps no vertex on a chord that has an owner under another parent cell earlier in
+  the walk (`keep_refused_earlier` counts them). A built cell then holds its inputs only
+  until its siblings sharing its chords have built, which its parent waits for anyway, and
+  a cell builds once its earlier co-owners under other parents are final, reading their
+  splits. No wait outlasts the walk's own order, so the walk keeps its parallelism and the
+  held tiles stay within the child window's spill bound. Diagnostics report the hold
+  peaks (`keep_peak_waiting`, `keep_peak_held_triangles`) and every cell's keep rounds and
+  how they ended (`keep_records`, `keep_outcomes`), cells that a sibling's split made
+  omitted when built again (`rebuilt_omitted`), and kept vertices their chord's final
+  split dropped (`keep_dropped_at_settle`).
+- HLOD: finished coarse rows waiting for an earlier tile no longer stop the walk from
+  reading at 1,024 rows. A cell waiting for its siblings holds back the rows of their
+  whole subtrees, so up to every internal cell's row can wait: the stage now charges that
+  bound (a few kilobytes per internal cell, P1's stuck list cleared from each row) in its
+  fixed memory instead.
+- HLOD: N1 runs only where P1 did not finish its own second pass with the same seam-owner
+  licence (P1 skipped the cell, spent its work budget, or stopped at a refused first-pass
+  proposal). Where P1's second pass ran, N1 built no cell on the test inputs and cost time.
+- HLOD: each P1 record in the stage report (`p1_records`) counts the faces of a proposal the
+  contraction fold guard refused, by rule (`guardRefused`, per pass: reversed, shared face,
+  zero area, coincident, shared edge, book) and how many of them have a Steiner corner
+  (`guardSteiner`).
+- HLOD: each P1 record in the stage report (`p1_records`) now breaks the main loop's work
+  down by site (`siteWork`: initial queueing, target scans, guard checks and the refused
+  share, applying collapses, requeueing), with pop and check counts and the largest single
+  check and scan, so a cell that spends much of its budget shows where.
+- HLOD: P1 records also count refused collapse checks by reason (`refusedBy`), and a P1
+  collapse check no longer rescans a high-valence vertex's star for every target it is tried
+  against; the decisions and archives are unchanged.
+- HLOD: the root tile's error measurement runs its nearest searches in parallel. The root
+  alone builds while every other worker is idle, and its S2 searches (both directed
+  distances, the representatives, and the topology controls for moved boundaries,
+  closures and openings) now run in fixed batches of 4,096 samples, each from a fresh
+  search state. They are folded back in sampling order, so the result depends only on
+  the batch size, never on the worker count. Other tiles measure as before. On the
+  inputs measured the archive is unchanged; in general a search that exhausts its
+  budget may end differently from a fresh start, so the root's G can differ from
+  before in its last digits. The root's job holds one batch's source query, search
+  frontier and sample window (about 28 MB, part of the stage's minimum memory), and each
+  further concurrent batch (about 18 MB) is leased only when the memory budget admits it.
+- HLOD: an omission no longer costs the root, whatever the size of the frontier below it
+  (root recovery v2). Every omitted coarse cell passes up an unpublished stand-in, an N3
+  reduction of its inputs to the cap with no border contract, and the root builds over its
+  built children and those stand-ins. The root's G is measured against the source as for
+  any tile. It is delivered over the whole published frontier (at most 384 tiles), with the
+  omitted cells bypassed, and declares recovery version 2. Its declared drops are counted
+  against that frontier, as the validator recounts them. Version 1, which rebuilt the root
+  only from a complete frontier of at most 8 tiles, is no longer produced; the validator
+  still accepts it. Where every cell builds, the archive is unchanged.
+- Validation accepts recovery version 2: a frontier of at most 384 tiles with no total
+  input bound, and a tileset root with more children than the subdivision scheme's
+  branches when it declares that relation.
+- Mesh HLOD: the coarse ladder no longer recomputes work whose result it already has.
+  A later build reuses an earlier build's failed border contraction when its contraction
+  arguments are the same (`Staged`, `N1` and `N2` repeat the primary build's; `N3Recovery`
+  repeats `N3`'s when both caps are equal), `Fix2` replays the primary build's failed
+  proposals when its contraction cannot differ, and remesh round 0 reuses the full-cap
+  proposals when cleanup left the mesh unchanged. Archives are byte-identical; the run
+  diagnostics report the skipped work as `repeat_reuse`. Reuse is off while the
+  `RT_HLOD_AUDIT_DIR` sidecar records every attempt.
+- Mesh HLOD: a staged reduction (`Staged`, `N1`, `N2`) that is still above twice the
+  triangle cap after twelve steps is abandoned. Its proposal then fails without the
+  separate-sheets retry. In the measured replays, which also skipped that retry, no such
+  reduction had led to an accepted proposal and no tile changed. The coarse ladder now
+  spends less time on proposals that would fail anyway.
+- The HLOD incidence pass generates its interface items in parallel, by chunks
+  of leaves, and sorts only the items another leaf's grown box and occupancy
+  cells can hold (with every edge that has one face in its leaf). The leaves'
+  occupancy masks are kept from capture. Rows, endpoints, counts and the archive
+  are unchanged; a stop request is honoured before each leaf.
+  `diagnostics.memory.hlod.incidence_jobs` reports the item workers, and the
+  `hlod_incidence_reduce` step counts the sorted items.
+- `mesh` and `mesh-inspect` report progress, with totals, for the shared-border
+  contracts built after the incidence pass: `hlod_borders_rows`,
+  `hlod_borders_graph`, `hlod_borders_faces`, `hlod_borders_levels`,
+  `hlod_borders_publish` and, when the row sort merges, `hlod_borders_merge`.
+  These stages were silent before.
+- `mesh` leaf tiles: the leaf stage now decodes each source image once, before any
+  leaf is built, and cuts every leaf's texture crops from it into a compressed scratch
+  store that leaf pages read. Pages it covers no longer decode or cache whole source images,
+  and their memory leases no longer include a source decode. Archives are
+  byte-identical. `diagnostics.leaf_delivery.crop_store` reports the store; it is
+  `null` when the stage runs without it (memory-backed scratch, or too little memory
+  or scratch for the store).
+- Development: `#[allow]` is denied in favour of `#[expect(lint, reason = ...)]`, `unsafe` blocks need `SAFETY` comments, and `scripts/lint_debt.py` stops library code, portable and native, from gaining lossy casts, `unwrap`/`expect`, hash-order iteration or calls to the methods banned in `clippy.toml` (environment reads, host CPU counts, worker pools, deletions, wall-clock time, `process::exit` outside their owners). No output change.
+- Mesh progress: every phase now reports a total. `capture` and `hlod_incidence` count
+  triangles and `archive` its tiles, instead of a null or unit total.
+- `RUSTY_TILES_STAGE_TIMING` is read by the CLI instead of the library, which changes when
+  the file is written: only after a successful `mesh` run (a failed run, including one
+  that fails during archive writing, writes none), where the library wrote it as the
+  coarse stage ended. Its counters cover the run from its start instead of the whole
+  process; for one CLI run that is the same work. The document's format is unchanged.
+- CLI: on failure, secondary diagnostics (cleanup problems, a run report that could not
+  record the failure) are printed on stderr too, as `warning:` lines or, with
+  `--progress json`, `warning` events with `code` `secondary_diagnostic`.
+- Rust API (breaking): `TilerDiagnostics` is now `#[non_exhaustive]`, so code outside the
+  crate can no longer build it with a struct literal (it gained `stage_timing`). Read it;
+  the tiler builds it.
+- `preview` lights the scene with a fixed sun from the north-west, 35° above
+  the horizon at the scene's centre, instead of Cesium's clock-driven sun. The
+  view no longer depends on the hour the page was loaded; at night the default
+  sun lit meshes from below and left them flat.
+- CI: the Rust toolchain is pinned to 1.100.0 in `rust-toolchain.toml` and `ci/versions.env` instead of following stable, so a new Rust release can no longer fail every pull request with new lints. Every workflow installs the pinned toolchain, the wheel builds pass it to the maturin action, and the native container builds with `rust:1.100.0-trixie` (it used 1.98). `scripts/check_ci_config.py` fails when any of them differs or a workflow installs stable Rust. The toolchain is bumped in its own pull request.
+- Development: the validator oracle-parity fixture corpora under
+  `bench/architecture_audit/` (I1 implicit read, C2 decoded containment and the C1
+  context controls, 669 files) are generated at test time instead of committed.
+  `cargo test` runs `scripts/test_corpora.py`, which needs Python 3.12 or newer, and
+  checks every file against `bench/architecture_audit/generated-corpora.sha256`.
+- `mesh` leaf UASTC textures are encoded with Basis Universal's fastest ETC1
+  hints (`cPackUASTCETC1FastestHints | cPackUASTCETC1DisableFlipAndIndividual`):
+  leaf texture encode CPU drops 35% on tex3 and 56% on Walem 2048. Decodes to
+  RGBA, ASTC, BC7 and BC1/3 are unchanged; the ETC1 transcode, used only by GPUs
+  without ASTC, BC7 or S3TC, loses about 0.6–0.7 dB. Leaf KTX2 bytes change
+  (archives 0.3–0.7% smaller); coarse tiles are byte-identical.
+
+### Fixed
+
+- `rusty-tiles mesh` with `--source-crs` no longer refuses a valid source with
+  "coordinates must be finite XYZ" right after the capture scan. A run of
+  65,536 POSITION vertices that no index of a primitive uses (common when
+  several primitives share one accessor) no longer widens the scanned source
+  box to infinity, which had made the CRS origin NaN. Output for sources that
+  already converted is unchanged.
+- Coarse mesh tiles now publish a two-sided geometric error bound over the
+  original pre-weld source and decoded surfaces, including edge and face interiors.
+  Tiles with underestimated error can refine earlier in a viewer.
+- Validation: a coarse tile that keeps a source book page collinear with its edge (three
+  distinct points on a line, a surface under the published contract) unchanged is no
+  longer refused as an `interfaceWinding` overlap. A coarse page whose third corner is the
+  same point as a descendant source page's, on the same source edge and direction, now
+  corresponds to it; before, correspondence required a strictly acute wedge, which a
+  collinear page has with no page, its own copy included. A collinear page moved off its
+  source position is still refused (#442).
+- HLOD: a coarse cell whose whole build ladder fails because P1 cannot remove some child
+  border vertices onto its shared chords now keeps them instead (D). Each kept vertex splits
+  the one stored chord it lies on; every cell sharing that chord publishes the same pieces,
+  rebuilding when its own build used the chord unsplit, so seams stay exact. A piece is
+  certified over its own source subarc and admitted only within the chord's ladder-step
+  tolerance; every piece floors G as relieved chords do, and coarser relieved chords over a
+  split arc floor G with its larger finer displacement. Kept vertices and rebuilt cells are
+  reported in the diagnostics (`kept_vertices`, `rebuilt_cells`); where no cell fails, the
+  archive is unchanged.
+- HLOD: a coarse cell whose first build publishes nothing now gets one more build before
+  the retry ladder, a guard-by-construction contraction that never makes what the fold,
+  topology and interface checks refuse. A border vertex whose removal would need a new face
+  on three shared border points is replaced by an interior vertex on the leaf lattice, only
+  where its fan is one simple disk on its own border chord, the point is a private canonical
+  lattice point, orientations stay strictly positive and no new face touches another
+  outside their common vertices (exact predicates, checked again on the delivered positions). This
+  builds cells that were omitted before (#344's rock fixture: every omission and the root).
+  The stage report names the new build `p1` and records every cell P1 ran on
+  (`p1_records`: outcome, work against its limit, Steiner rescues and refusals).
+- HLOD: the contraction guard's licence for a required border chord no longer counts child
+  interface segments that both of their holders keep inside the parent. Such a segment is
+  an internal seam after the merge; mixed into the chord's exterior source path it broke
+  the path and left the chord with no licence in either direction, so every build of the
+  cell refused it.
+- HLOD: P1 no longer proposes a cell the contraction fold guard refuses for a moved book
+  wing. Removing a border vertex that is the third corner of a face on a source book edge
+  (two faces using an interior edge in one direction) kept the edge's counts but moved the
+  face, which the guard's book rule refuses; P1's collapse checks, flips and Steiner rescues
+  now apply that rule itself (`folds::book_refused`, shared with the guard). A Steiner
+  rescue refused by it counts under a new reason (`steinerRefused` index 6).
+- HLOD: P1 no longer makes a collapse that changes a boundary reaching a contract point
+  (other than shortening it by merging two of its vertices). The topology floor compares
+  the anchored path graph of such boundaries and refuses a proposal that changes it
+  (`touchingBoundaryChanged`), so a pass that made such a change usually proposed nothing
+  and its cell was omitted; P1's link and pinch tests let collapses through that cover or
+  drop such an edge on rough meshes (holes, fins, pinched loops). The refusal is P1's new
+  collapse reason 13 (`refusedBy`); on the inputs tried, passes that built before are
+  unchanged.
+
 ## 0.4.1 - 2026-11-14
 
 ### Added
