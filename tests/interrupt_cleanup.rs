@@ -148,7 +148,9 @@ fn interrupt(
         std::thread::sleep(Duration::from_millis(10));
     }
     let pid = guard.child().id() as libc::pid_t;
-    assert_eq!(unsafe { libc::kill(pid, signal) }, 0);
+    // SAFETY: kill takes plain integers and touches no memory of this process.
+    let sent = unsafe { libc::kill(pid, signal) };
+    assert_eq!(sent, 0);
     let status = guard.finish().wait().unwrap();
     let stderr = reader.join().unwrap();
     assert!(

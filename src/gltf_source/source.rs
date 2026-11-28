@@ -106,9 +106,10 @@ pub(crate) struct SourceIdentity {
     pub triangle_index: u32,
 }
 
-// `decode` is the full source admission check of the W1 model producers, which
-// read only the triangle count. The decoded IR stays whole so admission is unchanged.
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "decode is the W1 producers' full admission check; they read only the triangle count"
+)]
 #[derive(Clone, Debug)]
 pub(crate) struct Triangle {
     pub source: SourceIdentity,
@@ -122,9 +123,10 @@ pub(crate) struct Triangle {
     pub material: Option<usize>,
 }
 
-// `decode` is the full source admission check of the W1 model producers, which
-// read only the triangle count. The decoded IR stays whole so admission is unchanged.
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "decode is the W1 producers' full admission check; they read only the triangle count"
+)]
 pub(crate) struct Image {
     pub bytes: Vec<u8>,
     pub mime_type: &'static str,
@@ -147,9 +149,10 @@ pub(crate) fn original_bounds(
     original_bounds::evaluate(document, supplied_buffers, check)
 }
 
-// `decode` is the full source admission check of the W1 model producers, which
-// read only the triangle count. The decoded IR stays whole so admission is unchanged.
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "decode is the W1 producers' full admission check; they read only the triangle count"
+)]
 pub(crate) struct Geometry {
     pub node_names: Vec<Option<String>>,
     pub triangles: Vec<Triangle>,
@@ -386,6 +389,13 @@ impl Extrema {
         self.min[c] = self.min[c].min(x);
         self.max[c] = self.max[c].max(x);
         Ok(())
+    }
+    /// Adds what `other` observed (extrema of another range of the same accessor).
+    pub(crate) fn merge(&mut self, other: &Self) {
+        for c in 0..4 {
+            self.min[c] = self.min[c].min(other.min[c]);
+            self.max[c] = self.max[c].max(other.max[c]);
+        }
     }
     pub(crate) fn verify(&self, view: &AccessorView<'_>) -> Result<()> {
         if view

@@ -12,10 +12,8 @@ fn cpu() -> f64 {
         tv_nsec: 0,
     };
     // SAFETY: writable timespec, current-thread CPU clock has no external state.
-    assert_eq!(
-        unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut t) },
-        0
-    );
+    let status = unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut t) };
+    assert_eq!(status, 0);
     t.tv_sec as f64 + t.tv_nsec as f64 * 1e-9
 }
 
@@ -120,6 +118,7 @@ fn measure_tex3_efforts() {
         effort,
         transfer: Transfer::Srgb,
         mipmaps: false,
+        etc1_hints: Etc1Hints::Full,
     };
     let mut paths: Vec<_> = fs::read_dir(root)
         .unwrap()

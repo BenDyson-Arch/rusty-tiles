@@ -35,9 +35,9 @@ use limits::{LimitPlan, Sources};
 pub use resources::{BudgetReport, DiskBound, JobsReport, StorePlan, ValidationResources};
 pub use rows::{PayloadRows, PayloadRowsIter};
 pub use types::{
-    CoarseNormalCensus, ExpectedProfile, InterfaceCensus, PayloadReport, ScratchRefusal,
-    ScratchReport, ValidationFailure, ValidationLimits, ValidationReport, ValidationRequest,
-    ValidationWarning,
+    CoarseCrossingCensus, CoarseCrossingTile, CoarseNormalCensus, ExpectedProfile, InterfaceCensus,
+    PayloadReport, ScratchRefusal, ScratchReport, ValidationFailure, ValidationLimits,
+    ValidationReport, ValidationRequest, ValidationWarning,
 };
 type Error = ValidationFailure;
 use facts::{FactStore, Stored};
@@ -1327,7 +1327,10 @@ struct Check<'a> {
     /// The reference traversal of VS-B-4 (controls only): references whose precheck step
     /// passed, with their level chains, streamed after traversal as the old phase 2 did.
     #[cfg(test)]
-    #[allow(clippy::type_complexity)]
+    #[expect(
+        clippy::type_complexity,
+        reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+    )]
     deferred: Option<Vec<(Vec<LevelFacts>, u64, u64, usize)>>,
     c2: Containment,
     /// EM: one summary per completed, implicit-free external-tileset document.
@@ -2413,7 +2416,10 @@ impl Check<'_> {
 
     /// Reads, checks and charges one tileset document (VS-B-7): its root, its error, the
     /// metadata schema of an implicit root, and its live-document charge.
-    #[allow(clippy::type_complexity)]
+    #[expect(
+        clippy::type_complexity,
+        reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+    )]
     fn prepare_tileset(
         &mut self,
         name: &str,
@@ -3027,7 +3033,10 @@ impl Check<'_> {
 /// their own successful first admission (H23): byte identity is checked before any consumer
 /// event, and the accessor-value and KTX2-container passes are not repeated. Without it the
 /// payload is inspected in full again (the reference traversal of the controls).
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn stream_member(
     resources: &mut ArchiveResources<'_>,
     stream: &mut Stream,
@@ -3557,6 +3566,9 @@ fn inspect_run(
         .map_err(|error| invalid(format!("bundled schema compilation failed: {error}")))?,
         c2,
     };
+    if request.counts_coarse_crossings() {
+        check.delivery.count_crossings();
+    }
     if let Some(member) = conversion {
         check.resources.used.set(member.rank);
         if let Some(name) = check.reports["geometryReports"].as_str() {
@@ -3636,6 +3648,7 @@ fn inspect_run(
         let profile = (check.reports["operation"].as_str() == Some("mesh_tiler"))
             .then(|| check.reports["profile"].as_str())
             .flatten();
+        check.delivery.expect_surface_error(&manifest, hlod)?;
         check
             .delivery
             .expect_texture(hlod_delivery::texture::Declaration::read(
@@ -3765,6 +3778,14 @@ fn inspect_run(
                     .insert(format!("coarseNormalInversion.{suffix}"));
             }
         }
+        if c.coarse_crossings
+            .as_ref()
+            .is_some_and(|c| c.incomplete_tiles > 0)
+        {
+            check
+                .not_inspected
+                .insert("coarseCrossings.workBudget".to_string());
+        }
     }
     let warnings = census
         .as_ref()
@@ -3796,8 +3817,10 @@ fn inspect_run(
             dropped_components: c.dropped_by_depth.iter().sum(),
             dropped_by_depth: c.dropped_by_depth,
             texture_refinable_tiles: c.texture_refinable_tiles,
+            surface_error_extent_tiles: c.surface_error_extent_tiles,
             texture_bound_tiles: c.texture_bound_tiles,
             coarse_normals: coarse_normal_census(&c.coarse_normals),
+            coarse_crossings: c.coarse_crossings.as_ref().map(coarse_crossing_census),
         }),
         scratch: scratch.is_created().then(|| ScratchReport {
             memory_backed: scratch.memory_backed(),
@@ -4066,6 +4089,31 @@ mod i1_fixtures {
 /// winding (the inversion bound; producers since #336 stay within 60°, so snorm8 and
 /// position rounding cannot reach it).
 const COARSE_NORMAL_BOUND_DEGREES: u32 = 90;
+fn coarse_crossing_census(c: &hlod_delivery::CoarseCrossings) -> CoarseCrossingCensus {
+    CoarseCrossingCensus {
+        tiles: c.tiles,
+        faces: c.faces,
+        incomplete_tiles: c.incomplete_tiles,
+        crossing_tiles: c.crossing_tiles,
+        new_tiles: c.new_tiles,
+        present_pairs: c.present_by_depth.iter().sum(),
+        new_pairs: c.new_by_depth.iter().sum(),
+        present_pairs_by_depth: c.present_by_depth.clone(),
+        new_pairs_by_depth: c.new_by_depth.clone(),
+        listed_tiles: c
+            .listed
+            .iter()
+            .map(|t| CoarseCrossingTile {
+                tile: u64::try_from(t.tile).unwrap_or(0),
+                depth: t.depth as u64,
+                faces: t.faces,
+                geometric_error: t.geometric_error,
+                present_pairs: t.present,
+                new_pairs: t.new,
+            })
+            .collect(),
+    }
+}
 fn coarse_normal_census(c: &hlod_delivery::CoarseNormals) -> CoarseNormalCensus {
     CoarseNormalCensus {
         bound_degrees: COARSE_NORMAL_BOUND_DEGREES,

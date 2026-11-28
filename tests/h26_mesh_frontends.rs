@@ -164,6 +164,79 @@ fn cli_report_is_the_archive_report_with_separate_resource_diagnostics() {
     );
 }
 
+/// `--report-path` writes the run report beside the run (#353); the archive is unchanged.
+#[test]
+fn report_path_writes_the_run_report_and_leaves_the_archive_unchanged() {
+    let work = tempfile::tempdir().unwrap();
+    let input = work.path().join("mesh.glb");
+    source(&input, false);
+    let plain = work.path().join("plain.3tz");
+    let reported = work.path().join("reported.3tz");
+    let report = work.path().join("run.json");
+    let first = mesh(&input, &plain, &["--jobs", "1"]);
+    let second = mesh(
+        &input,
+        &reported,
+        &["--jobs", "1", "--report-path", report.to_str().unwrap()],
+    );
+    assert!(
+        first.status.success() && second.status.success(),
+        "{}",
+        String::from_utf8_lossy(&second.stderr)
+    );
+    assert_eq!(fs::read(&plain).unwrap(), fs::read(&reported).unwrap());
+    let envelope: Value = serde_json::from_slice(&second.stdout).unwrap();
+    let report: Value = serde_json::from_slice(&fs::read(&report).unwrap()).unwrap();
+    assert_eq!(report["schema"], "rusty_tiles_mesh_run_report");
+    assert_eq!(report["schema_version"], 1);
+    assert_eq!(report["status"], "succeeded");
+    // One leaf: no coarse stage runs.
+    let stages: Vec<&str> = report["stages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["stage"].as_str().unwrap())
+        .collect();
+    assert_eq!(stages, ["capture", "leaf_build", "archive"]);
+    // The final document uses the --json result's keys.
+    assert_eq!(report["tilerReport"], envelope["tilerReport"]);
+    assert!(report["diagnostics"].is_object());
+    // Stage timing is reported, and written, only when RUSTY_TILES_STAGE_TIMING asks.
+    assert!(envelope["diagnostics"].get("stage_timing").is_none());
+    let timing = work.path().join("timing.json");
+    let timed = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"))
+        .env("RUSTY_TILES_STAGE_TIMING", &timing)
+        .args(["--json", "mesh", "--jobs", "1", "-i"])
+        .arg(&input)
+        .arg("-o")
+        .arg(work.path().join("timed.3tz"))
+        .output()
+        .unwrap();
+    assert!(timed.status.success());
+    let timed: Value = serde_json::from_slice(&timed.stdout).unwrap();
+    let written: Value = serde_json::from_slice(&fs::read(&timing).unwrap()).unwrap();
+    assert_eq!(written["schema"], "rusty_tiles_stage_timing_v1");
+    assert_eq!(
+        written["stages"],
+        timed["diagnostics"]["stage_timing"]["stages"]
+    );
+    assert!(written["run"].get("leafStageTiming").is_some());
+    assert_eq!(
+        report["diagnostics"]["archive_bytes"],
+        envelope["diagnostics"]["archive_bytes"]
+    );
+    // A report path that is the output refuses the run as a usage error.
+    let refused = mesh(
+        &input,
+        &work.path().join("refused.3tz"),
+        &[
+            "--report-path",
+            work.path().join("refused.3tz").to_str().unwrap(),
+        ],
+    );
+    assert_eq!(refused.status.code(), Some(2));
+}
+
 #[test]
 fn jobs_and_scratch_do_not_change_published_semantic_bytes() {
     let work = tempfile::tempdir().unwrap();

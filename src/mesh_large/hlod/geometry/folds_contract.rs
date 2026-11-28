@@ -35,6 +35,13 @@ struct Segment {
 }
 
 impl Source {
+    /// `previous_interface`: the children's merged interface rows; `leaves`: the parent's
+    /// DFS leaf interval `[begin, end)`. A segment row witnesses a required chord's source
+    /// path only when a holder outside the parent shares it (`InterfaceRow::outer`). A
+    /// segment both of whose holders lie inside the parent is an internal seam after the
+    /// merge: it can join two knots of a required arc in ordinal space but is not a step of
+    /// the arc's exterior path, and mixed in it breaks the path, leaving a mandatory chord
+    /// with no licence in either direction. `[0, 0]` (no parent interval) counts every row.
     /// Expected linear hash-table work plus one O(E log E) segment sort. The
     /// temporary tables and segment array hold O(V + E) entries from at most
     /// eight capped children; required new arcs are at most the parent's 3C
@@ -44,6 +51,7 @@ impl Source {
         triangles: &[[u32; 3]],
         parent_interface: &[InterfaceRow],
         previous_interface: &[InterfaceRow],
+        leaves: [u32; 2],
         mapping_by_vertex: &[Mapping],
     ) -> Self {
         let mut source = Self::new(positions, triangles).with_boundary(parent_interface);
@@ -70,7 +78,11 @@ impl Source {
             .collect();
         let mut seen = HashSet::default();
         let mut segments = Vec::new();
-        for row in previous_interface.iter().filter(|r| !r.is_vertex()) {
+        // Only exterior rows witness a required arc's source path (`leaves`).
+        for row in previous_interface
+            .iter()
+            .filter(|r| !r.is_vertex() && r.outer(leaves[0], leaves[1]))
+        {
             let edge = (row.a.min(row.b), row.a.max(row.b));
             let (Some(&a), Some(&b)) = (vertices.get(&edge.0), vertices.get(&edge.1)) else {
                 continue;
@@ -209,16 +221,50 @@ mod tests {
         let (p, triangles, previous, mapping) = chain(&counts);
         let chord = (key(p[0]).min(key(p[3])), key(p[0]).max(key(p[3])));
         let parent = [InterfaceRow::new(0, chord.0, chord.1, 0, 1)];
-        let source = Source::for_contraction(&p, &triangles, &parent, &previous, &mapping);
+        let source = Source::for_contraction(&p, &triangles, &parent, &previous, [0, 0], &mapping);
         // The source path runs opposite to the canonical chord direction.
         assert_eq!(source.edges[&chord], [1, 2]);
         for subedge in 0..counts.len() {
             let mut lower = counts;
             lower[subedge] = [1, 0];
             let (p, triangles, previous, mapping) = chain(&lower);
-            let source = Source::for_contraction(&p, &triangles, &parent, &previous, &mapping);
+            let source =
+                Source::for_contraction(&p, &triangles, &parent, &previous, [0, 0], &mapping);
             assert_eq!(source.edges[&chord], [0, 1], "subedge {subedge}");
         }
+    }
+
+    /// The INHERITED review's City cells: a child-interface segment wholly inside the
+    /// parent (both holders in its leaf interval) joining two knots of a required arc
+    /// breaks that arc's exterior path, so the chord loses its licence in both directions.
+    /// Only rows an outside holder shares are witnesses (`leaves`); with them the
+    /// single source direction is restored, and removing a real exterior step still fails.
+    #[test]
+    fn contraction_path_ignores_internal_child_seams() {
+        let (p, triangles, mut previous, mapping) = chain(&[[1, 0]; 3]);
+        let chord = (key(p[0]).min(key(p[3])), key(p[0]).max(key(p[3])));
+        let parent = [InterfaceRow::new(0, chord.0, chord.1, 0, 1)];
+        // The parent holds leaves [5, 10); the chain rows' holders are [0, 1] (outside).
+        let counts = |previous: &[InterfaceRow], leaves| {
+            Source::for_contraction(&p, &triangles, &parent, previous, leaves, &mapping)
+                .edges
+                .get(&chord)
+                .copied()
+                .unwrap_or_default()
+        };
+        let licensed = counts(&previous, [5, 10]);
+        assert_ne!(licensed, [0, 0]);
+        // An internal shortcut between knots 0 and 2, held only by leaves 6 and 7.
+        previous.push(InterfaceRow::new(6, key(p[0]), key(p[2]), 6, 7));
+        assert_eq!(
+            counts(&previous, [0, 0]),
+            [0, 0],
+            "counted, it breaks the path"
+        );
+        assert_eq!(counts(&previous, [5, 10]), licensed);
+        // A missing exterior step is still a gap.
+        previous.remove(1);
+        assert_eq!(counts(&previous, [5, 10]), [0, 0]);
     }
 
     #[test]
@@ -230,7 +276,7 @@ mod tests {
                         triangles: &[[u32; 3]],
                         previous: &[InterfaceRow],
                         mapping: &[Mapping]| {
-            Source::for_contraction(p, triangles, &parent, previous, mapping)
+            Source::for_contraction(p, triangles, &parent, previous, [0, 0], mapping)
                 .edges
                 .contains_key(&chord)
         };
@@ -267,7 +313,7 @@ mod tests {
         mapping.extend([None; 3]);
         let n = p.len() as u32;
         let output = [[0, 2, n - 3], [0, 2, n - 2], [2, 0, n - 1]];
-        let source = Source::for_contraction(&p, &triangles, &parent, &previous, &mapping);
+        let source = Source::for_contraction(&p, &triangles, &parent, &previous, [0, 0], &mapping);
         assert!(!source.violations(&p, &output).iter().any(|v| *v));
         for subedge in 0..2 {
             let mut lower = [[2, 1]; 2];
@@ -277,7 +323,8 @@ mod tests {
             mapping.extend([None; 3]);
             let n = p.len() as u32;
             let output = [[0, 2, n - 3], [0, 2, n - 2], [2, 0, n - 1]];
-            let source = Source::for_contraction(&p, &triangles, &parent, &previous, &mapping);
+            let source =
+                Source::for_contraction(&p, &triangles, &parent, &previous, [0, 0], &mapping);
             assert!(
                 source.violations(&p, &output).iter().any(|v| *v),
                 "subedge {subedge}"
@@ -304,7 +351,7 @@ mod tests {
                 ));
             }
         }
-        let source = Source::for_contraction(&p, &triangles, &parent, &previous, &mapping);
+        let source = Source::for_contraction(&p, &triangles, &parent, &previous, [0, 0], &mapping);
         assert_eq!(source.edges[&chord], [1, 2]);
     }
 
@@ -359,7 +406,8 @@ mod tests {
             + parent.capacity() * std::mem::size_of::<InterfaceRow>()
             + mapping.capacity() * std::mem::size_of::<Mapping>();
         let ((), peak) = crate::test_alloc::peak(|| {
-            let source = Source::for_contraction(&p, &triangles, &parent, &previous, &mapping);
+            let source =
+                Source::for_contraction(&p, &triangles, &parent, &previous, [0, 0], &mapping);
             for row in &parent {
                 assert_eq!(source.edges[&(row.a, row.b)], [1, 0]);
             }

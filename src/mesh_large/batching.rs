@@ -91,7 +91,13 @@ pub(in crate::mesh_large) fn material_key(material: &Value, texture: bool) -> Va
 pub(in crate::mesh_large) struct MaterialClasses(Vec<u32>);
 
 impl MaterialClasses {
-    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+        )
+    )]
     /// No materials.
     pub(in crate::mesh_large) const EMPTY: Self = Self(Vec::new());
     pub(in crate::mesh_large) fn new(

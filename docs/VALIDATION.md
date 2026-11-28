@@ -260,6 +260,7 @@ The report's `interfaceCensus` is derived from the archive alone, using decoded 
 | `contractedBorderArcs`, `contractedBorderVertices` | Shared borders delivered as one chord over two or more leaf edges, and the leaf border vertices those chords remove |
 | `droppedComponents`, `droppedByDepth` | Child components that coarse payloads no longer hold, by delivered cell depth |
 | `textureRefinableTiles`, `textureBoundTiles` | Tiles refinable to finer texels, and those whose `geometricError` is within 1% of the texture term |
+| `coarseCrossings` | Only with `--coarseCrossings`: coarse tiles checked (`tiles`, `faces`), those over the census's own work budget (`incompleteTiles`), and face pairs meeting outside their common corners, present in the children or new (`crossingTiles`, `newTiles`, `presentPairs`, `newPairs`, the same `ByDepth`, and `listedTiles`); see [coarse self-intersections](#coarse-self-intersections) |
 | `coarseNormals` | Coarse tiles that publish `NORMAL` and their faces (`tiles`, `faces`), tiles whose `NORMAL` is not compared (`skippedTiles`), and those with a face shaded against its winding (`invertedTiles`, `invertedFaces`, and the same `ByDepth`, by cell depth), against `boundDegrees` (90); see [coarse normals](#coarse-normals) |
 
 ### Coarse normals
@@ -267,6 +268,20 @@ The report's `interfaceCensus` is derived from the archive alone, using decoded 
 For every coarse tile that publishes `NORMAL`, validation compares each face's corner normals with the face's own normal (wound by its corners, after the node transform). A corner normal more than 90° from its face means the face shades against its winding: under double-sided lighting it renders inverted. Such faces are counted in `interfaceCensus.coarseNormals` by cell depth and reported as the `coarseNormalInversion` warning. They never fail validation.
 
 The bound is 90° because that is where shading inverts, whatever smoothing a producer chose. `mesh` keeps every coarse corner normal within 60° of its face ([coarse normals](MESH.md#coarse-appearance)), so normal and position rounding stay far from the bound. Archives written before that change (issue #336) average every face at a vertex and usually carry the warning; rebuilding them removes it. Leaves are not compared: they keep the source's own normals. The comparison is charged to the existing work budget (6 units per face). It does not compare coarse orientation with the source surface, which remains not inspected. The comparison reads a `NORMAL` that is a VEC3 of floats or of normalized 8- or 16-bit integers, one per vertex, in a buffer view without an `EXT_meshopt_compression` filter. Any other coarse `NORMAL` that the earlier checks admit is not compared and never fails validation. Such tiles are counted as `skippedTiles`, and `notInspected` names the reason: `coarseNormalInversion.meshoptFilteredNormal` (for example `OCTAHEDRAL`), `.sparseNormal`, `.viewlessNormal` (zero storage without a buffer view) or `.unsupportedNormalAccessor`. `mesh` writes coarse normals the comparison reads.
+
+### Coarse self-intersections
+
+With `--coarseCrossings` (Python `coarse_crossings=True`), validation also counts, for every coarse tile, the pairs of its faces that meet anywhere other than in their common corners. Two faces may share a vertex, and meet only there, or share an edge, and meet only along it. A face that touches, pierces or overlaps another elsewhere forms an improper pair. The test is exact (adaptive orientation predicates on the decoded canonical f32 positions, with no tolerance). The faces are those the other coarse checks read, from all placements of the tile, with three distinct corners. Faces are distinct by corner set: a placement repeated at the same position, or a repeated or reversed triangle, is one face. Three collinear corners count as their segment. Two faces with the same three corners are coincident; they are folds, which the border rules and `lastResort` cover, and are not counted here.
+
+Each improper pair is *present* when both of its faces are also faces of the tile's immediate children together (for a tile over leaves, the source), so the children cross there too. Otherwise it is *new*. The two faces may come from different children. The coarse tile replaces its children together, and leaves together are the source, where two leaves' faces crossing is a source crossing. `interfaceCensus.coarseCrossings` gives the totals, the pairs by cell depth, and up to 16 `listedTiles` (most new pairs first), each with its preorder `tile` index as validation messages use it, `depth`, `faces`, `geometricError` and pairs.
+
+The census never fails validation. A coarse tile may intersect itself as long as the crossings stay within its geometric error, which bounds its distance to the source. So no verdict, warning or exit code depends on the census. It also has its own bounds per tile, separate from the validation's budgets:
+- **Work.** 2^24 units plus 2^15 per face.
+- **Workspace.** At most half the `documentDecodedBytes` allowance (128 MiB), which the coarse replay holds and has released before the census runs. That is about 28,600 face entries (placements included). The bound follows the allowance, so a smaller allowance reports more tiles as incomplete.
+
+A tile over either bound is counted in `incompleteTiles` without partial counts, and `notInspected` names `coarseCrossings.workBudget`.
+
+The census is off by default because of its cost: about 3–11 µs per coarse face on one core, in one pass. On the archives measured it added 9–15% to validation time on photogrammetry, a terrain-like scan and a 1.8M-triangle fixture, and 41% on a dense synthetic city with millions of crossing pairs.
 
 ### Border rules
 
@@ -277,6 +292,26 @@ On every coarse tile, `seamOwner` rejects new edges or faces on shared points ou
 Not inspected: contraction against source arcs, producer certificates, logical depth, topology receipts, fresh coarse UV charts, source distance, and coarse orientation outside required interfaces.
 
 ### Coarse drops
+
+An HLOD archive can declare `asset.extras.rustyTiles.surfaceErrorPolicy` as
+`hlod-certified-decoded-surface-v1`. The native validator checks its version.
+In the common capture frame it compares all six coordinate extrema of each
+rendered coarse support with the union of its decoded descendant leaf
+supports. Each difference must fit the coarse G plus the largest represented
+leaf G, with outward arithmetic. Degenerate faces contribute their endpoints.
+`surfaceErrorExtents` reports a violating tile. The census field
+`surfaceErrorExtentTiles` counts the coarse tiles checked. Archives with
+relative tile transforms get zero comparisons in this local frame check.
+
+The archive lacks the captured source. `geometricErrorAccuracy` therefore
+stays uninspected by native validation. Given an independent source manifest,
+the S5 oracle's `--certify-source-error` verifies both continuous directed
+distances using exact rational point-to-triangle predicates and a complete
+subdivision cover, or returns a violating point or a work-limit refusal. Supply
+the original pre-weld GLB or an independent analytic source manifest. A manifest
+derived from delivered leaves can check their extrema but cannot establish the
+original-source certificate. The oracle also enforces its own canonical-seam
+contract, which can reject welded coordinates.
 
 A coarse payload that drops whole components of its children declares how many in glTF `asset.extras.rustyTiles.droppedComponents`. Validation recounts the drops from decoded keys and fails `coarseDrops` (`invalid_input`) when:
 
@@ -321,7 +356,7 @@ Validation fails `lastResort` when:
 - payloads of one tile disagree on `stage` or `foldFaces`;
 - folds appear outside stage 2 or 3 or a declared ancestor of such a tile.
 
-`mesh --json` reports these in `diagnostics.hlod`: `last_resort_tiles`, `last_resort_stages` (counts for stages 1, 2 and 3), `fold_faces` and `declared_tiles` (including stage-0 tiles, with stage and fold count). Tiles are omitted only when the declared constraints alone exceed the triangle cap, or when border-touching open boundaries cannot survive stage 3. An omission propagates upward unless [descendant recovery](#descendant-recovery) succeeds. A last-resort declaration does not itself permit skipping cells or certify distance to the source.
+`mesh --json` reports these in `diagnostics.hlod`: `last_resort_tiles`, `last_resort_stages` (counts for stages 1, 2 and 3), `fold_faces` and `declared_tiles` (including stage-0 tiles, with stage and fold count). `last_resort_records` lists every tile a retry published (also in the stage manifest as `hlod.lastResortRecords`): its `first` node and `depth`, `stage` (0 for fix 2 and staged reduction, which carry no payload declaration), the publishing build (`resort`), why the primary build did not (`reason`: `contractionStalled`, `proposalsRefused`, `noProposal` or `rootCompetition`) and the primary build's refused proposals by check (`refusedDecode`, `refusedTopology`, `refusedControls`). When the root competition's candidate replaces a root a retry built, the record names `rootCandidate` but keeps the primary build's reason and counts; `rootCompetition` means the primary build itself had published that root. It is a run record; validators do not read it. Tiles are omitted only when the declared constraints alone exceed the triangle cap, or when border-touching open boundaries cannot survive stage 3. An omission propagates upward unless [descendant recovery](#descendant-recovery) succeeds. A last-resort declaration does not itself permit skipping cells or certify distance to the source.
 
 ### Texture error
 
@@ -342,8 +377,8 @@ With a number `t`, every content tile T whose mean base-colour texel spacing `s(
 
 A declared recovery root lets a coarse tile stand in for omitted descendants. It uses an explicit REPLACE ownership root. Its GLB sets `asset.extras.rustyTiles.descendantRecovery: 1`, and the root tile's `extras.recovery` holds exactly `version`, `root`, `encodedDepth`, `frontier` and `omitted`.
 
-- `version` is 1. Ownership keys hold `first`, `end`, `depth`, `leafBegin` and `leafEnd`. Each frontier entry holds a `key` and its decoded `triangles` count.
-- There are one to eight capped inputs, at most 65,536 input triangles, and one to 256 skipped ownership cells.
+- `version` is 1 or 2. Ownership keys hold `first`, `end`, `depth`, `leafBegin` and `leafEnd`. Each frontier entry holds a `key` and its decoded `triangles` count.
+- Version 1 rebuilds the root from its frontier: one to eight capped inputs and at most 65,536 input triangles. Version 2 builds the root from unpublished stand-ins of the omitted cells and delivers it over one to 384 capped frontier tiles, with no total input bound; the tileset root may then have more children than the subdivision scheme's branches. Both allow one to 256 skipped ownership cells.
 - Source and leaf intervals must form complete, disjoint covers. Internal ownership depths are at most 30; frontier leaves may reach depth 31.
 - The actual refinement children, after resolving document links, must be exactly that frontier, with G no greater than the recovered root's.
 - An explicit root or frontier tile must carry its own valid ownership label; an external document link cannot supply it. Only the generated root cell of an implicit header inherits that header's ownership.

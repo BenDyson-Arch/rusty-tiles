@@ -22,6 +22,7 @@ pub enum Command {
     Terrain,
     PointCloud,
     Mesh,
+    MeshInspect,
     GlbTo3tz,
     CreateTilesetJson,
     Convert,
@@ -30,13 +31,14 @@ pub enum Command {
 }
 
 impl Command {
-    pub const ALL: [Command; 11] = [
+    pub const ALL: [Command; 12] = [
         Self::Vector,
         Self::Raster,
         Self::RasterTileToDirectory,
         Self::Terrain,
         Self::PointCloud,
         Self::Mesh,
+        Self::MeshInspect,
         Self::GlbTo3tz,
         Self::CreateTilesetJson,
         Self::Convert,
@@ -53,6 +55,7 @@ impl Command {
             Self::Terrain => "terrain",
             Self::PointCloud => "point-cloud",
             Self::Mesh => "mesh",
+            Self::MeshInspect => "mesh-inspect",
             Self::GlbTo3tz => "glb-to-3tz",
             Self::CreateTilesetJson => "createTilesetJson",
             Self::Convert => "convert",
@@ -163,7 +166,13 @@ impl Capability {
         )
     }
     /// The first capability that is not ready, else ready.
-    #[cfg_attr(not(feature = "native-geospatial"), allow(dead_code))]
+    #[cfg_attr(
+        not(any(test, feature = "native-geospatial")),
+        expect(
+            dead_code,
+            reason = "used only by native-geospatial builds and unit tests"
+        )
+    )]
     fn all<'a>(parts: impl IntoIterator<Item = &'a Capability>) -> Self {
         parts
             .into_iter()
@@ -411,8 +420,14 @@ impl Resolver<'_> {
                 "encoding":"in-process meshopt and KTX2/Basis; PNG for lossless leaf textures",
                 "workers":"auto or a positive maximum; cores and available memory cap actual workers per stage; unknown available memory admits one worker",
                 "memberCeiling":crate::archive3tz::MEMBER_CEILING,
-                "limitations":"One static local scene with confined resources and the admitted core PBR/attribute domain. No source CRS inference or geoid conversion. Full-detail leaves sit under HLOD coarse parent tiles (simplified from their children; geometric error is a sampled source-distance estimate, not a bound) with fresh charts baked from the source appearance; coarse appearance is an approximation. CesiumJS 1.146.0 has a bounded KTX2 sRGB filtering limitation; see docs/MESH.md.",
+                "limitations":"One static local scene with confined resources and the admitted core PBR/attribute domain. No source CRS inference or geoid conversion. Full-detail leaves sit under coarse parent tiles simplified from their children. Published geometric error bounds the continuous two-sided distance between the captured source and decoded coarse surface. Fresh charts approximate source appearance. CesiumJS 1.146.0 has a bounded KTX2 sRGB filtering limitation; see docs/MESH.md.",
                 "note":"Readiness is build capability, not admission of a source, output filesystem, memory plan or viewer. No external encoder or system geospatial library is required."
+            }))),
+            Command::MeshInspect => built_in(details(json!({
+                "inputs":["glTF 2.0","GLB 2.0"],
+                "sourceCoordinates":"as mesh: the same source CRS, placement and profile options give the bake's cells",
+                "output":"JSON report (--json) and an optional GeoJSON of open loops, seams and cells at risk; no archive",
+                "limitations":"The coarse-omission forecast is an estimate from border and open-boundary density against the triangle cap, not a bake; only certain sources (a contract past the cap) are certain."
             }))),
             Command::GlbTo3tz
             | Command::CreateTilesetJson

@@ -1,7 +1,8 @@
 //! Stage timing for the large-mesh leaf producer. Diagnostics include
 //! summed per-thread wall nanoseconds, call counts and texel counters are
-//! accumulated in process-wide atomics. RUSTY_TILES_STAGE_TIMING additionally
-//! writes a JSON document at completion. Nothing here feeds output bytes.
+//! accumulated in process-wide atomics. A mesh run reports the whole-run document in its
+//! diagnostics (`stage_timing`); the CLI writes it to the file RUSTY_TILES_STAGE_TIMING
+//! names. Nothing here feeds output bytes.
 use serde_json::{json, Map, Value};
 use std::{
     sync::{
@@ -232,12 +233,17 @@ pub(crate) fn mark() -> Option<Mark> {
 /// The document (stages, counters, encode buckets and per-level work) of everything
 /// accumulated after `mark`.
 pub(crate) fn since(mark: &Option<Mark>) -> Option<Value> {
+    since_with(mark, Value::Null)
+}
+
+/// [`since`], with `extra` as the document's `run` member.
+pub(crate) fn since_with(mark: &Option<Mark>, extra: Value) -> Option<Value> {
     let now = Raw::load(totals()?);
     let delta = match mark {
         Some(Mark(start)) => now.minus(start),
         None => now,
     };
-    Some(delta.document(Value::Null))
+    Some(delta.document(extra))
 }
 
 #[derive(Clone)]
@@ -287,19 +293,6 @@ impl Raw {
             level_texels: std::array::from_fn(|k| minus(&self.level_texels[k], &o.level_texels[k])),
         }
     }
-}
-
-/// Writes the accumulated document to the configured path, when enabled.
-pub(crate) fn finish(extra: Value) {
-    let (Some(totals), Some(path)) = (totals(), std::env::var_os("RUSTY_TILES_STAGE_TIMING"))
-    else {
-        return;
-    };
-    let document = Raw::load(totals).document(extra);
-    let _ = std::fs::write(
-        path,
-        serde_json::to_vec_pretty(&document).unwrap_or_default(),
-    );
 }
 
 impl Raw {

@@ -379,6 +379,83 @@ class WheelAPI(unittest.TestCase):
         with self.assertRaises(AttributeError):
             result.output = self.root / "redirected.3tz"
 
+    def test_inspect_mesh_reports_topology_and_writes_geojson_like_the_cli(self):
+        source = self.root / "inspect.glb"
+        write_local_mesh(source)
+        geojson = self.root / "inspect.geojson"
+        events = []
+        # An unplaced source has no WGS84 position: local metres must be asked for.
+        with self.assertRaises(rusty_tiles.InvalidRequestError):
+            rusty_tiles.inspect_mesh(source, geojson=geojson)
+        self.assertFalse(geojson.exists())
+        result = rusty_tiles.inspect_mesh(
+            source, geojson=geojson, geojson_local=True, min_feature_length=1.0, jobs=1,
+            callback=events.append,
+        )
+        self.assertIsInstance(result, rusty_tiles.InspectResult)
+        self.assertTrue(result.geojson.samefile(geojson))
+        self.assertEqual(result.cleanup_diagnostics, [])
+        report = result.report
+        self.assertEqual(report["operation"], "mesh_inspect")
+        source_report = report["source"]
+        # Three separate unindexed triangles: nothing is shared.
+        self.assertEqual(source_report["triangles"], 3)
+        self.assertEqual(source_report["components"], 3)
+        self.assertEqual(source_report["positions"], 9)
+        self.assertEqual(source_report["open"]["edges"], 9)
+        self.assertEqual(source_report["open"]["loops"], 3)
+        self.assertEqual(source_report["repeated_positions"]["positions"], 0)
+        # The default inspection reads the source without capture: no forecast.
+        self.assertEqual(report["schema_version"], 2)
+        self.assertNotIn("forecast", report)
+        self.assertNotIn("tree", report)
+        self.assertEqual(report["geojson"]["open_loops"], 3)
+        self.assertEqual(report["geojson"]["coordinates"], "local_east_north_metres")
+        self.assertNotIn("path", report["geojson"])
+        document = json.loads(geojson.read_text(encoding="utf-8"))
+        self.assertEqual(document["type"], "FeatureCollection")
+        self.assertIs(document["rustyTilesFrame"]["wgs84"], False)
+        self.assertEqual(len(document["features"]), 3)
+        for feature in document["features"]:
+            (ring,) = feature["geometry"]["coordinates"]
+            self.assertEqual(len(ring), 4)
+            self.assertEqual(ring[0], ring[-1])
+        self.assertTrue(result.summary[0].startswith("source: 3 triangles"))
+        self.assertFalse(any(line.startswith("omission risk (an estimate") for line in result.summary))
+        phases = {event.get("phase") for event in events}
+        self.assertTrue({"inspect_stream", "inspect_vertices", "inspect_edges", "inspect_loops"} <= phases, phases)
+        self.assertNotIn("capture", phases)
+        # The forecast captures the source; its topology is the same.
+        forecast = rusty_tiles.inspect_mesh(source, forecast=True, jobs=1)
+        self.assertEqual(forecast.report["forecast"]["root"], "built")
+        self.assertTrue(forecast.report["forecast"]["estimate"])
+        self.assertEqual(forecast.report["source"], report["source"])
+        self.assertTrue(any(line.startswith("omission risk (an estimate") for line in forecast.summary))
+        with self.assertRaises(AttributeError):
+            result.geojson = self.root / "redirected.geojson"
+        # Deterministic: another worker count, without a GeoJSON, gives the same report.
+        again = rusty_tiles.inspect_mesh(source, jobs=None)
+        self.assertIsNone(again.geojson)
+        report.pop("geojson")
+        self.assertEqual(again.report, report)
+        with self.assertRaises(rusty_tiles.OutputExistsError):
+            rusty_tiles.inspect_mesh(source, geojson=geojson, geojson_local=True)
+        rusty_tiles.inspect_mesh(source, geojson=geojson, geojson_local=True, force=True)
+        with self.assertRaises(rusty_tiles.InvalidRequestError):
+            rusty_tiles.inspect_mesh(source, geojson=self.root / "inspect.json", geojson_local=True)
+        with self.assertRaises(rusty_tiles.InvalidRequestError):
+            rusty_tiles.inspect_mesh(source, min_feature_length=-1.0)
+        placed = rusty_tiles.inspect_mesh(
+            source, geojson=self.root / "placed.geojson", anchor=(153.02, -27.47, 25.0),
+        )
+        self.assertEqual(placed.report["geojson"]["coordinates"], "wgs84")
+        if CLI:
+            completed = subprocess.run(
+                [CLI, "--json", "mesh-inspect", "-i", str(source), "--jobs", "1"],
+                check=True, capture_output=True, text=True,
+            )
+            self.assertEqual(json.loads(completed.stdout)["inspectReport"], report)
+
     def test_tiler_provisional_profiles_and_worker_scratch_choices_preserve_bytes(self):
         source = self.root / "profiles.glb"
         write_local_mesh(source)
@@ -435,6 +512,61 @@ class WheelAPI(unittest.TestCase):
                                         source_offset_file=offset_file)
         local = rusty_tiles.mesh_to_tileset(source, self.root / "local.3tz", source_crs="local")
         self.assertNotIn("source_crs", local.report)
+
+    def test_tiler_subset_bakes_part_of_the_source_as_the_cli_does(self):
+        # Post-node centroids at x = 10.33, 13.33 and 16.33, glTF z = 3: region y = -z = -3.
+        source = self.root / "subset.glb"
+        write_local_mesh(source)
+        events = []
+        result = rusty_tiles.mesh_to_tileset(
+            source, self.root / "subset-bbox.3tz", jobs=1, bbox=(10, -4, 14, -2),
+            callback=events.append,
+        )
+        subset = result.report["subset"]
+        self.assertEqual((subset["region"], subset["coordinates"]), ("bbox", "local"))
+        self.assertEqual(subset["axes"], ["x", "-z"])
+        self.assertEqual((subset["source_triangles"], subset["kept_triangles"]), (3, 2))
+        self.assertEqual(result.report["triangles"], 2)
+        self.assertEqual(subset["extent"], [10.0, -3.0, 14.0, -3.0])
+        self.assertGreater(result.diagnostics["memory"]["capture_subset_bytes"], 0)
+        steps = {event.get("phase") for event in events}
+        self.assertIn("capture_select", steps)
+        polygon = self.root / "subset.geojson"
+        polygon.write_text(json.dumps({"type": "Feature", "properties": {}, "geometry": {
+            "type": "Polygon", "coordinates": [[[12, -4], [20, -4], [20, -2], [12, -2], [12, -4]]]}}))
+        result = rusty_tiles.mesh_to_tileset(source, self.root / "subset-polygon.3tz", jobs=1,
+                                             polygon=polygon)
+        self.assertEqual(result.report["subset"]["kept_triangles"], 2)
+        self.assertEqual((result.report["subset"]["polygons"], result.report["subset"]["rings"]), (1, 1))
+        # A region keeping nothing, a bad region and an unsupported GeoJSON type are request
+        # errors that publish nothing.
+        line = self.root / "line.geojson"
+        line.write_text(json.dumps({"type": "LineString", "coordinates": [[0, 0], [1, 1]]}))
+        for name, keywords, message in [
+            ("empty", {"bbox": (100, 100, 101, 101)}, "keeps no source triangle"),
+            ("inverted", {"bbox": (14, -4, 10, -2)}, "minx < maxx"),
+            ("both", {"bbox": (10, -4, 14, -2), "polygon": polygon}, "only one"),
+            ("line", {"polygon": line}, "LineString is not supported"),
+        ]:
+            output = self.root / f"subset-{name}.3tz"
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(rusty_tiles.InvalidRequestError, message):
+                    rusty_tiles.mesh_to_tileset(source, output, jobs=1, **keywords)
+                self.assertFalse(output.exists())
+        # Tuple conversion, as for anchor: a wrong length or a non-tuple.
+        with self.assertRaises(ValueError):
+            rusty_tiles.mesh_to_tileset(source, self.root / "x.3tz", bbox=(1, 2, 3))
+        with self.assertRaises(TypeError):
+            rusty_tiles.mesh_to_tileset(source, self.root / "x.3tz", bbox="abcd")
+        if CLI:
+            # The CLI gives the same report and archive.
+            cli_output = self.root / "subset-cli.3tz"
+            envelope = json.loads(subprocess.run(
+                [CLI, "--json", "mesh", "-i", str(source), "-o", str(cli_output), "--jobs", "1",
+                 "--bbox", "10", "-4", "14", "-2"],
+                capture_output=True, check=True, timeout=300).stdout)
+            self.assertEqual(envelope["tilerReport"]["subset"], subset)
+            self.assertEqual(cli_output.read_bytes(), (self.root / "subset-bbox.3tz").read_bytes())
 
     def test_tiler_python_request_errors_precede_source_io_and_callbacks(self):
         source = self.root / "missing.glb"
@@ -573,6 +705,29 @@ class WheelAPI(unittest.TestCase):
         self.assertNotIsInstance(caught.exception, rusty_tiles.InvalidRequestError)
         self.assertFalse(output.exists())
 
+    def test_tiler_report_path_writes_the_run_report_and_keeps_the_archive(self):
+        source = self.root / "grid.glb"
+        write_grid_mesh(source)
+        plain = self.root / "plain.3tz"
+        reported = self.root / "reported.3tz"
+        report_path = self.root / "run.json"
+        rusty_tiles.mesh_to_tileset(source, plain, jobs=1)
+        result = rusty_tiles.mesh_to_tileset(source, reported, jobs=1, report_path=report_path)
+        self.assertEqual(plain.read_bytes(), reported.read_bytes())
+        report = json.loads(report_path.read_text())
+        self.assertEqual((report["schema"], report["schema_version"], report["status"]),
+                         ("rusty_tiles_mesh_run_report", 1, "succeeded"))
+        self.assertEqual([stage["stage"] for stage in report["stages"]],
+                         ["capture", "leaf_build", "hlod_incidence", "hlod_geometry", "archive"])
+        self.assertEqual(report["tilerReport"]["tiles"], result.report["tiles"])
+        geometry = report["stages"][3]["facts"]
+        self.assertEqual(geometry["omitted_by_depth"], result.diagnostics["hlod"]["omitted_by_depth"])
+        self.assertTrue(geometry["walk_utilisation"]["by_depth"])
+        # A report path that names the output is refused before the source is read.
+        with self.assertRaises(rusty_tiles.InvalidRequestError):
+            rusty_tiles.mesh_to_tileset(source, self.root / "x.3tz", jobs=1,
+                                        report_path=self.root / "x.3tz")
+
     def test_tiler_hlod_installed_run_reports_budget_and_keeps_callback_semantics(self):
         source = self.root / "grid.glb"
         write_grid_mesh(source)
@@ -674,11 +829,73 @@ class WheelAPI(unittest.TestCase):
                                  capture_output=True, check=True, timeout=300)
         self.assertTrue(json.loads(checked.stdout)["ok"])
 
+    def test_tiler_weld_merges_near_repeats_and_uses_original_source_error(self):
+        # Two triangles meeting along an edge whose second copy sits 1 mm away.
+        source = self.root / "weld.glb"
+        points = [(0, 0, 0), (1, 0, 0), (0, 0, -1), (1.001, 0, 0), (1, 0, -1), (0.001, 0, -1)]
+        payload = b"".join(struct.pack("<3f", *point) for point in points)
+        document = {
+            "asset": {"version": "2.0"}, "scene": 0, "scenes": [{"nodes": [0]}],
+            "nodes": [{"mesh": 0}],
+            "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+            "buffers": [{"byteLength": len(payload)}],
+            "bufferViews": [{"buffer": 0, "byteLength": len(payload)}],
+            "accessors": [{"bufferView": 0, "componentType": 5126, "count": 6, "type": "VEC3",
+                           "min": [0, 0, -1], "max": [1.001, 0, 0]}],
+        }
+        encoded = json.dumps(document, separators=(",", ":")).encode()
+        encoded += b" " * (-len(encoded) % 4)
+        source.write_bytes(struct.pack("<III", 0x46546C67, 2, 28 + len(encoded) + len(payload))
+                           + struct.pack("<II", len(encoded), 0x4E4F534A) + encoded
+                           + struct.pack("<II", len(payload), 0x004E4942) + payload)
+        plain = rusty_tiles.mesh_to_tileset(source, self.root / "weld-plain.3tz", jobs=1)
+        self.assertNotIn("weld", plain.report)
+        events = []
+        result = rusty_tiles.mesh_to_tileset(source, self.root / "weld.3tz", jobs=1,
+                                             weld_epsilon=0.01, callback=events.append)
+        weld = result.report["weld"]
+        self.assertEqual((weld["epsilon_m"], weld["join_primitives"]), (0.01, "none"))
+        self.assertEqual((weld["vertices"], weld["merged_vertices"], weld["moved_vertices"]),
+                         (6, 2, 2))
+        self.assertEqual((weld["classes"], weld["largest_class"]), (2, 2))
+        self.assertTrue(0.0009 < weld["max_displacement_m"] < 0.0011, weld)
+        self.assertEqual(weld["geometric_error_term_m"], 0.)
+        self.assertGreater(result.diagnostics["memory"]["capture_weld_bytes"], 0)
+        self.assertIn("capture_weld", {event.get("phase") for event in events})
+        # Exact repeats only at 0: nothing within a millimetre is merged.
+        exact = rusty_tiles.mesh_to_tileset(source, self.root / "weld-exact.3tz", jobs=1,
+                                            join_primitives="same-material")
+        self.assertEqual(exact.report["weld"]["merged_vertices"], 0)
+        self.assertEqual(exact.report["weld"]["join_primitives"], "same-material")
+        inspected = rusty_tiles.inspect_mesh(source, weld_epsilon=0.01)
+        self.assertEqual(inspected.report["weld"], weld)
+        self.assertNotIn("weld", rusty_tiles.inspect_mesh(source).report)
+        for name, keywords, message in [
+            ("negative", {"weld_epsilon": -1.0}, "finite"),
+            ("nan", {"weld_epsilon": float("nan")}, "finite"),
+            ("mode", {"join_primitives": "all"}, "same-material"),
+        ]:
+            output = self.root / f"weld-{name}.3tz"
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(rusty_tiles.InvalidRequestError, message):
+                    rusty_tiles.mesh_to_tileset(source, output, jobs=1, **keywords)
+                self.assertFalse(output.exists())
+        if CLI:
+            cli_output = self.root / "weld-cli.3tz"
+            envelope = json.loads(subprocess.run(
+                [CLI, "--json", "mesh", "-i", str(source), "-o", str(cli_output), "--jobs", "1",
+                 "--weld-epsilon", "0.01"],
+                capture_output=True, check=True, timeout=300).stdout)
+            self.assertEqual(envelope["tilerReport"]["weld"], weld)
+            self.assertEqual(cli_output.read_bytes(), (self.root / "weld.3tz").read_bytes())
+
     def test_tiler_documented_signatures_name_only_installed_parameters(self):
         installed = set(inspect.signature(rusty_tiles.mesh_to_tileset).parameters)
         documented = {"input", "output", "profile", "jobs", "scratch_dir", "memory_budget_bytes",
                       "anchor", "orientation_xyzw", "scene_offset", "source_crs", "source_axes",
-                      "source_offset", "source_offset_file", "height_offset", "force", "callback"}
+                      "source_offset", "source_offset_file", "height_offset", "bbox", "polygon",
+                      "weld_epsilon", "join_primitives", "force", "callback",
+                      "report_path"}
         self.assertEqual(installed, documented)
         shown = io.StringIO()
         with contextlib.redirect_stdout(shown):
@@ -1887,9 +2104,21 @@ class WheelAPI(unittest.TestCase):
         self.assertEqual(str(caught.exception),
                          "implicit: unsupported external tileset content template in tileset.json")
 
+class RecordingResult(unittest.TextTestResult):
+    """Also records the tests that passed, so a runner can require a named one."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.passed = []
+
+    def addSuccess(self, test):
+        super().addSuccess(test)
+        self.passed.append(test.id())
+
+
 if __name__ == "__main__":
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(WheelAPI)
-    result = unittest.TextTestRunner(verbosity=2).run(suite)
+    result = unittest.TextTestRunner(verbosity=2, resultclass=RecordingResult).run(suite)
     evidence = {
         "python": sys.version,
         "platform": platform.platform(),
@@ -1903,6 +2132,7 @@ if __name__ == "__main__":
         "errors": len(result.errors),
         "skipped": len(result.skipped),
         "skips": [f"{test.id()}: {reason}" for test, reason in result.skipped],
+        "passed": result.passed,
         "ok": result.wasSuccessful(),
     }
     if "bpy" in sys.modules:

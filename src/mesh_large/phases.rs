@@ -5,12 +5,14 @@
 //! (`phase`, `done`, `total`, unchanged schema), and each finished phase as a `log` event
 //! naming its wall seconds and the run's elapsed seconds. The same seconds go to the run
 //! diagnostics. Diagnostics only: nothing here reaches the archive.
+use super::run_report::{RunReport, StageEntry};
 use crate::{
     runtime::RunEvent,
     spill::{SortObserver, SortProgress, SpillError},
     JobError,
 };
 use serde::Serialize;
+use serde_json::Value;
 use std::{
     cell::Cell,
     sync::Mutex,
@@ -63,12 +65,14 @@ impl PhaseSeconds {
     }
 }
 
-type Emit<'a> = dyn Fn(&RunEvent<'_>) -> Result<(), JobError> + Sync + 'a;
+pub(super) type Emit<'a> = dyn Fn(&RunEvent<'_>) -> Result<(), JobError> + Sync + 'a;
 
 /// The run's phase reporter. Calls may come from worker threads; events are emitted
 /// under one lock, so a phase's `done` counts arrive in order.
 pub(crate) struct Phases<'a> {
     emit: Option<&'a Emit<'a>>,
+    /// The run report each finished phase is written to (`--report-path`).
+    report: Option<&'a RunReport>,
     started: Instant,
     seconds: Mutex<PhaseSeconds>,
     cpu: Mutex<(Option<f64>, PhaseSeconds)>,
@@ -77,14 +81,26 @@ impl<'a> Phases<'a> {
     pub(crate) fn new(emit: &'a Emit<'a>) -> Self {
         Self::with(Some(emit))
     }
-    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+        )
+    )]
     /// Records times; emits nothing.
     pub(crate) fn silent() -> Phases<'static> {
         Phases::with(None)
     }
+    /// Also writes each finished phase to `report`.
+    pub(crate) fn reporting(mut self, report: &'a RunReport) -> Self {
+        self.report = Some(report);
+        self
+    }
     fn with(emit: Option<&'a Emit<'a>>) -> Self {
         Self {
             emit,
+            report: None,
             started: Instant::now(),
             seconds: Mutex::new(PhaseSeconds::default()),
             cpu: Mutex::new((
@@ -125,16 +141,44 @@ impl<'a> Phases<'a> {
             total,
         })
     }
-    /// A finished phase: add its wall seconds and log them.
+    /// A finished phase without report facts: add its wall seconds and log them.
+    #[cfg(test)]
     pub(crate) fn finished(&self, phase: Phase, seconds: f64) -> Result<(), JobError> {
+        self.finished_with(phase, seconds, Value::Null)
+    }
+    /// A finished phase with the facts the run report records for it (scratch peaks,
+    /// counts, worker use): add its wall seconds, log them and write the report.
+    pub(crate) fn finished_with(
+        &self,
+        phase: Phase,
+        seconds: f64,
+        facts: Value,
+    ) -> Result<(), JobError> {
         // Process CPU includes all workers and the admission work between phases.
         let now = super::resources::process_cpu_seconds();
-        {
+        let cpu_seconds = {
             let mut cpu = self.cpu.lock().unwrap_or_else(|e| e.into_inner());
-            if let (Some(start), Some(end)) = (cpu.0, now) {
-                *cpu.1.slot(phase) += (end - start).max(0.);
+            let spent = cpu.0.zip(now).map(|(start, end)| (end - start).max(0.));
+            if let Some(spent) = spent {
+                *cpu.1.slot(phase) += spent;
             }
             cpu.0 = now;
+            spent
+        };
+        if let Some(report) = self.report {
+            let warning = report.stage(StageEntry {
+                stage: phase.name(),
+                wall_seconds: seconds,
+                cpu_seconds,
+                run_elapsed_seconds: self.elapsed(),
+                facts,
+            });
+            if let Some(message) = warning {
+                self.send(&RunEvent::Warning {
+                    code: "run_report",
+                    message: &message,
+                })?;
+            }
         }
 
         let total = {
@@ -171,15 +215,25 @@ impl<'a> Phases<'a> {
 pub(crate) enum Step {
     /// Preflight scan of the selected triangles.
     Scan,
+    /// A subset bake's selection: every triangle's centroid tested, then every POSITION
+    /// element of each expanded primitive marked or mapped.
+    Select,
+    /// An opt-in weld: every expanded primitive's POSITION elements decoded and listed
+    /// (one unit per element), then every used vertex swept (one unit each).
+    Weld,
+    /// A weld's audit of the captured faces: every captured triangle read, then (when it
+    /// collapsed some) read again for the corners of surviving faces.
+    WeldCheck,
     /// Accessor payload validation before any spill (one unit).
     Validate,
-    /// Corner references read from the index accessors and sorted into runs.
+    /// Assembly: the vertices of every expanded primitive decoded (one unit per POSITION
+    /// element; the step keeps its name).
     Corners,
-    /// Merged corner references joined with their vertex attributes and sorted into runs.
+    /// Assembly: triangles keyed for the bucket histogram.
     Positions,
-    /// Merged positioned corners reassembled into triangles and sorted into runs.
+    /// Assembly: triangles built and staged in their buckets.
     Triangles,
-    /// Merged triangles written as the retained rank-ordered sequence.
+    /// Assembly: buckets sorted and written as the retained rank-ordered sequence.
     Sequence,
     /// An intermediate merge pass of one of the sorts (records rewritten).
     Merge,
@@ -187,7 +241,8 @@ pub(crate) enum Step {
     Images,
     /// The cell tree over the retained triangles.
     Tree,
-    /// The weld-depth join over every corner.
+    /// Corner depths: leaf occupancy masks, the candidate join and the rank-ordered write
+    /// (one unit per triangle each).
     CornerDepths,
     /// Leaf planning over the tree's leaves.
     LeafPlans,
@@ -200,11 +255,64 @@ pub(crate) enum Step {
     IncidenceEnds,
     /// HLOD incidence: an intermediate merge pass of one of its sorts.
     IncidenceMerge,
+    /// HLOD shared borders: incidence rows stored and sorted by item (one unit per row).
+    BordersRows,
+    /// HLOD shared borders: sorted rows reduced to the border graph (one unit per row).
+    BordersGraph,
+    /// HLOD shared borders: source faces read for face retention (one unit per retained
+    /// triangle).
+    BordersFaces,
+    /// HLOD shared borders: one contraction level per tree depth, deepest first.
+    BordersLevels,
+    /// HLOD shared borders: every tree node's publication depth (one unit per node).
+    BordersPublish,
+    /// HLOD shared borders: an intermediate merge pass of the row sort.
+    BordersMerge,
+    /// `mesh-inspect`: the source's payload checked as `mesh` checks it (one unit).
+    InspectValidate,
+    /// `mesh-inspect`: every index and used position checked, as capture's scan checks
+    /// them, and their bounds, from which a source CRS chooses its origin (one unit per
+    /// triangle).
+    InspectScan,
+    /// `mesh-inspect`: corner positions sampled to split the positions into ranges (one unit
+    /// per sample).
+    InspectSample,
+    /// `mesh-inspect`: every triangle read and its used vertices and edges written to their
+    /// position ranges (one unit per triangle).
+    InspectStream,
+    /// `mesh-inspect`: positions counted (repeated positions, position ids). By default one
+    /// unit per used source vertex, its position range sorted in memory; with the forecast,
+    /// one unit per captured triangle, its corners sorted by exact position.
+    InspectVertices,
+    /// `mesh-inspect`: triangle edges grouped by position (open edges, primitive boundaries,
+    /// seams, each range's own components). By default one unit per edge, its position range
+    /// sorted in memory; with the forecast, one unit per captured triangle, its edges keyed by
+    /// position ids and sorted.
+    InspectEdges,
+    /// `mesh-inspect`: edges between position ranges joined into components (one unit per
+    /// such edge).
+    InspectComponents,
+    /// `mesh-inspect`: open-edge loops and seams joined and measured.
+    InspectLoops,
+    /// `mesh-inspect`: an intermediate merge pass of one of its sorts.
+    InspectMerge,
+    /// `mesh-inspect`: every contract the forecast reads, gathered in one pass over the
+    /// shared-border store and sorted by node (one unit per linked item).
+    InspectContracts,
+    /// `mesh-inspect`: the coarse-omission forecast over the tree (one unit per node).
+    InspectForecast,
+    /// Leaf delivery: every leaf's source crops planned (one unit per leaf).
+    LeafCrops,
+    /// Leaf delivery: source images decoded and their crops stored (one unit per image).
+    LeafCropStore,
 }
 impl Step {
     pub(crate) fn name(self) -> &'static str {
         match self {
             Self::Scan => "capture_scan",
+            Self::Select => "capture_select",
+            Self::Weld => "capture_weld",
+            Self::WeldCheck => "capture_weld_check",
             Self::Validate => "capture_validate",
             Self::Corners => "capture_corners",
             Self::Positions => "capture_positions",
@@ -219,6 +327,25 @@ impl Step {
             Self::IncidenceReduce => "hlod_incidence_reduce",
             Self::IncidenceEnds => "hlod_incidence_ends",
             Self::IncidenceMerge => "hlod_incidence_merge",
+            Self::BordersRows => "hlod_borders_rows",
+            Self::BordersGraph => "hlod_borders_graph",
+            Self::BordersFaces => "hlod_borders_faces",
+            Self::BordersLevels => "hlod_borders_levels",
+            Self::BordersPublish => "hlod_borders_publish",
+            Self::BordersMerge => "hlod_borders_merge",
+            Self::InspectValidate => "inspect_validate",
+            Self::InspectScan => "inspect_scan",
+            Self::InspectSample => "inspect_sample",
+            Self::InspectStream => "inspect_stream",
+            Self::InspectVertices => "inspect_vertices",
+            Self::InspectEdges => "inspect_edges",
+            Self::InspectComponents => "inspect_components",
+            Self::InspectLoops => "inspect_loops",
+            Self::InspectMerge => "inspect_merge",
+            Self::InspectContracts => "inspect_contracts",
+            Self::InspectForecast => "inspect_forecast",
+            Self::LeafCrops => "leaf_crop_plan",
+            Self::LeafCropStore => "leaf_crop_store",
         }
     }
 }
@@ -267,6 +394,11 @@ impl<'a> StepProgress<'a> {
             merge: Step::Merge,
             merged: Cell::new(0),
         }
+    }
+    /// A reporter for another sequence of steps of the same phase, with the same
+    /// cancellation and event sink, reporting its merge passes as `merge`.
+    pub(crate) fn alongside(&self, merge: Step) -> Self {
+        Self::new(self.check, self.emit).merging_as(merge)
     }
     /// Reports sort merge passes as `merge` (capture's is [`Step::Merge`]).
     pub(crate) fn merging_as(mut self, merge: Step) -> Self {

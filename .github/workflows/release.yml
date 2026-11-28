@@ -39,6 +39,10 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      # rust-toolchain.toml pins the toolchain that reads Cargo.toml here.
+      - name: Install the pinned Rust toolchain
+        if: github.event_name == 'push'
+        run: rustup toolchain install --no-self-update
       - id: tag
         name: Match the tag to Cargo.toml and main
         if: github.event_name == 'push'

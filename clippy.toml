@@ -1,0 +1,18 @@
+# Methods production code must not call outside the boundary that owns them. Plain clippy runs
+# leave `disallowed_methods` off (Cargo.toml); scripts/lint_debt.py turns it on for library and
+# binary code and fails when a file gains a call, printing the reason below. Existing calls are
+# counted in scripts/lint_debt.json until they move to their owner.
+disallowed-methods = [
+    { path = "std::env::var", reason = "read environment variables where the CLI or runtime resolves its configuration, then pass the value down; lower stages consume validated values (AGENTS.md)" },
+    { path = "std::env::var_os", reason = "read environment variables where the CLI or runtime resolves its configuration, then pass the value down; lower stages consume validated values (AGENTS.md)" },
+    { path = "std::env::vars", reason = "read environment variables where the CLI or runtime resolves its configuration, then pass the value down; lower stages consume validated values (AGENTS.md)" },
+    { path = "std::env::vars_os", reason = "read environment variables where the CLI or runtime resolves its configuration, then pass the value down; lower stages consume validated values (AGENTS.md)" },
+    { path = "std::thread::available_parallelism", reason = "worker counts come from the operation's resolved `jobs` value, not from the host; local runs and tests must be able to cap them" },
+    { path = "rayon::ThreadPoolBuilder::new", reason = "build worker pools from the operation's resolved `jobs` value in the stage that owns the work; RAYON_NUM_THREADS does not reach a custom pool" },
+    { path = "rayon::ThreadPoolBuilder::build_global", reason = "the library must not change the process-wide pool; build a scoped pool from the resolved `jobs` value" },
+    { path = "std::fs::remove_file", reason = "delete only inside the job's private work directory, through cleanup.rs or the publication step; never remove published or caller-owned paths" },
+    { path = "std::fs::remove_dir", reason = "delete only inside the job's private work directory, through cleanup.rs or the publication step; never remove published or caller-owned paths" },
+    { path = "std::fs::remove_dir_all", reason = "delete only inside the job's private work directory, through cleanup.rs or the publication step; never remove published or caller-owned paths" },
+    { path = "std::time::SystemTime::now", reason = "output bytes must not depend on wall-clock time; measure durations with Instant" },
+    { path = "std::process::exit", reason = "return an Error with its exit-code category; only main.rs and the interrupt backstop end the process" },
+]

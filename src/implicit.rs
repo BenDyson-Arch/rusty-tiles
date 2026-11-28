@@ -23,7 +23,7 @@ pub use tileset::{
     rebase_payload, restore_payload, write_forest, ForestOutput, RebaseRecord, TileRole,
     WrittenContent, WrittenTile,
 };
-#[allow(unused_imports)]
+#[expect(unused_imports, reason = "not every build reads each re-export")]
 pub(crate) use tileset::{
     Availability, ChunkOutput, DocumentLink, ForestTile, ForestWriter, ImplicitNames, RootName,
     DOC_BYTES, DOC_DEPTH, DOC_NODES, MAX_LEVELS,

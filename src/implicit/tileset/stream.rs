@@ -69,7 +69,13 @@ use std::{collections::BTreeSet, path::Path};
 pub(crate) struct RootName(String);
 
 impl RootName {
-    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+        )
+    )]
     pub(crate) fn new(name: impl Into<String>) -> Result<Self, Error> {
         let name = name.into();
         if name.is_empty()
@@ -99,7 +105,13 @@ impl RootName {
 /// How a streamed implicit root names its members.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum ImplicitNames {
-    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+        )
+    )]
     /// The whole-tree writer's form under a [`RootName`] prefix.
     Prefix(RootName),
     /// The caller's templates: one content template per content slot, in slot order (content
@@ -188,7 +200,13 @@ impl<X> ForestTile<X> {
         Self::Explicit { record, children }
     }
 
-    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+        )
+    )]
     /// An implicit root named by `name` ([`ImplicitNames::Prefix`]).
     pub(crate) fn implicit(name: RootName, tree: TileTree<X>) -> Self {
         Self::named(ImplicitNames::Prefix(name), tree)
@@ -226,7 +244,13 @@ pub(crate) struct DocumentLink {
 }
 
 impl DocumentLink {
-    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+        )
+    )]
     pub(crate) fn name(&self) -> &MemberName {
         &self.name
     }
@@ -254,6 +278,9 @@ pub(crate) struct ForestWriter<'a> {
     directory: &'a Path,
     scheme: SubdivisionScheme,
     max_implicit_levels: u32,
+    /// The most children of tileset.json's root tile (the scheme's branch count unless the
+    /// caller declares more, as a recovered root refining to its whole frontier does).
+    root_children: usize,
     /// Explicit payload members listed so far.
     explicit: BTreeSet<String>,
     /// External documents written so far.
@@ -296,6 +323,7 @@ impl<'a> ForestWriter<'a> {
             directory,
             scheme,
             max_implicit_levels: MAX_LEVELS,
+            root_children: scheme.branches(),
             explicit: BTreeSet::new(),
             documents: BTreeSet::new(),
         })
@@ -305,6 +333,13 @@ impl<'a> ForestWriter<'a> {
     /// subtree height).
     pub(crate) fn with_max_implicit_levels(mut self, levels: u32) -> Self {
         self.max_implicit_levels = levels.min(MAX_LEVELS);
+        self
+    }
+
+    /// Admit up to `children` children at tileset.json's root tile (at least the scheme's
+    /// branch count), for a root delivered over a declared recovery frontier.
+    pub(crate) fn with_root_children(mut self, children: usize) -> Self {
+        self.root_children = children.max(self.scheme.branches());
         self
     }
 
@@ -518,12 +553,17 @@ impl<'a> ForestWriter<'a> {
                 "document level {depth}: a child transform must be a translation"
             )));
         }
-        if children.len() > self.scheme.branches() {
+        let most = if depth == 0 && role == ObjectRole::Tile {
+            self.root_children
+        } else {
+            self.scheme.branches()
+        };
+        if children.len() > most {
             return Err(data(format!(
                 "document level {depth}: {} children exceed the {} scheme's {}",
                 children.len(),
                 self.scheme.as_str(),
-                self.scheme.branches()
+                most
             )));
         }
         self.check_vector(record)?;

@@ -243,12 +243,29 @@ fn isolated_triangles_spill_within_the_declared_bound() {
         .with_test_spill(sort, 4096);
     let result = super::mesh_to_tileset(request, &RunControl::default()).unwrap();
     let (capture, hlod) = (&result.diagnostics.capture, &result.diagnostics.hlod);
+    // Measured: the run's peak came in the incidence pass, past every capture stage's
+    // measured peak. (Measured peaks are bytes on disk, with the retained sequences
+    // block-compressed, so they are compared with each other, not with raw declarations.)
+    let stages = capture.scratch_stage_peak_bytes;
+    let capture_peak = [
+        stages.capture,
+        stages.projection,
+        stages.images,
+        stages.tree,
+        stages.corner_depths,
+        stages.leaf_plans,
+    ]
+    .into_iter()
+    .max()
+    .unwrap();
     assert!(
-        capture.run_scratch_peak_bytes > capture.scratch_logical_need_bytes,
+        capture.run_scratch_peak_bytes > capture_peak,
         "the incidence pass outgrew every capture stage: {} vs {}",
         capture.run_scratch_peak_bytes,
-        capture.scratch_logical_need_bytes
+        capture_peak
     );
+    // Declared: the HLOD stage's bound exceeds capture's need, and the run stays within it.
+    assert!(hlod.stage_scratch_bound_bytes > capture.scratch_logical_need_bytes);
     assert!(capture.run_scratch_peak_bytes <= hlod.stage_scratch_bound_bytes);
 }
 
@@ -1054,14 +1071,11 @@ fn encoded_image_past_the_old_32_mib_ceiling_is_admitted_and_builds_identically(
                 (member.name().to_owned(), bytes)
             })
             .collect::<Vec<_>>();
-        (
-            members,
-            result.diagnostics.memory.hlod.texture_workspace_bytes,
-        )
+        (members, result.diagnostics.memory.hlod.decode_bytes)
     };
-    let (padded, padded_texture) = run("padded", Some((32 << 20) + 1));
-    let (plain, plain_texture) = run("plain", None);
-    // The coarse stage charges the largest encoded image at its actual length.
+    let (padded, padded_decode) = run("padded", Some((32 << 20) + 1));
+    let (plain, plain_decode) = run("plain", None);
+    // The coarse stage's decode slot charges the largest encoded image at its actual length.
     let largest_plain = ["a.png", "b.png"]
         .map(|n| {
             fs::metadata(work.path().join("plain").join(n))
@@ -1072,10 +1086,7 @@ fn encoded_image_past_the_old_32_mib_ceiling_is_admitted_and_builds_identically(
         .max()
         .unwrap();
     assert!(largest_plain < 1 << 20);
-    assert_eq!(
-        padded_texture - plain_texture,
-        (32 << 20) + 1 - largest_plain
-    );
+    assert_eq!(padded_decode - plain_decode, (32 << 20) + 1 - largest_plain);
     assert_eq!(padded.len(), plain.len());
     assert!(padded.iter().any(|(name, _)| name.ends_with(".glb")));
     for ((name, a), (other, b)) in padded.iter().zip(&plain) {

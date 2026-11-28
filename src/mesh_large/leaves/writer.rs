@@ -23,7 +23,6 @@ pub(super) struct EncodedLeaf {
     pub glb: Vec<u8>,
     pub bounds: Bounds,
     pub geometry_error: f64,
-    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
     /// Decoded published POSITION per PREPARED (source) primitive, in atlas order and
     /// corner order (the lattice decode the writer proves client-order exact, unchanged by
     /// H28 merging).
@@ -31,7 +30,7 @@ pub(super) struct EncodedLeaf {
     /// The NORMAL a renderer reads per prepared primitive, in corner order (empty without
     /// NORMAL): the octahedral codes decoded by the reference meshopt filter and read
     /// as normalized SHORT, or the published f32 values.
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg_attr(not(test), expect(dead_code, reason = "used only by unit tests"))]
     // Retained measurement in the bounded encoding result.
     pub normals: Vec<Vec<[f32; 3]>>,
     /// Published glTF primitives (H28: one per material class, texture set, attribute
@@ -40,6 +39,37 @@ pub(super) struct EncodedLeaf {
     /// Set by the producer for the accepted attempt (texel ownership, H28).
     pub shared_triangles: u64,
 }
+
+impl EncodedLeaf {
+    /// Convex pairing at equal barycentric coordinates covers both continuous
+    /// directions, including a source sliver paired with a decoded segment.
+    pub(super) fn original_error(
+        &self,
+        atlas: &PreparedAtlas,
+        original: &super::super::weld::OriginalPositions,
+        check: &dyn Fn() -> Result<(), JobError>,
+    ) -> Result<f64, JobError> {
+        if self.positions.len() != atlas.primitives.len() {
+            return Err(invalid("leaf certificate primitive correspondence"));
+        }
+        let mut error = 0.0_f64;
+        for (primitive, positions) in atlas.primitives.iter().zip(&self.positions) {
+            let (faces, tail) = positions.as_chunks::<3>();
+            if !tail.is_empty() || faces.len() != primitive.triangles.len() {
+                return Err(invalid("leaf certificate corner correspondence"));
+            }
+            for (i, (row, face)) in primitive.triangles.iter().zip(faces).enumerate() {
+                if i.is_multiple_of(256) {
+                    check()?;
+                }
+                for (p, q) in original.face(row)?.into_iter().zip(face) {
+                    error = error.max(super::geometry::corner_distance(p, *q));
+                }
+            }
+        }
+        Ok(error)
+    }
+}
 /// Only a measured/necessary member-size overrun may request density change.
 #[derive(Debug)]
 pub(super) enum WriteError {
@@ -47,7 +77,13 @@ pub(super) enum WriteError {
     Failure(JobError),
 }
 impl WriteError {
-    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+        )
+    )]
     pub(super) fn kind(&self) -> JobErrorKind {
         match self {
             Self::Budget(error) | Self::Failure(error) => error.kind(),
@@ -1472,7 +1508,10 @@ mod tests {
     /// Every published triangle, in published order: decoded corner bits (client order
     /// `u * s + t` in f32, or the stored f32), and its `source_primitive` and
     /// `source_triangle` rows as (node, mesh, primitive) and (primitive, triangle).
-    #[allow(clippy::type_complexity)]
+    #[expect(
+        clippy::type_complexity,
+        reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+    )]
     fn published(glb: &[u8]) -> Vec<([[u32; 3]; 3], (u64, u64, u64), (u64, u64))> {
         let (doc, bin) = parse(glb);
         let column = |table: usize, name: &str| -> Vec<u64> {
@@ -1560,7 +1599,10 @@ mod tests {
     }
     /// What the pre-H28 writer published per triangle: each prepared primitive encoded on
     /// its own by the frozen lattice, in atlas order.
-    #[allow(clippy::type_complexity)]
+    #[expect(
+        clippy::type_complexity,
+        reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+    )]
     fn per_primitive_reference(
         input: &PreparedAtlas,
         lattice: &LatticePlan,

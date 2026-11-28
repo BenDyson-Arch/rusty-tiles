@@ -7,8 +7,21 @@ boundaries. Final stack acceptance and cost require the final integrated campaig
 Sampled G is finite, nonnegative and ordered; it is not a certified maximum.
 C1 still owns resources, hashes, codecs and accessor admission, C2 owns decoded
 bounds, and I1 owns implicit availability. No H17 certificate is required for
-HLOD. `geometricErrorAccuracy` remains explicitly uninspected. Source-distance
-sampling is the separately invoked `../s2/audit.py`, never an archive certificate.
+HLOD. The archive-only validator retains `geometricErrorAccuracy` as uninspected.
+For certified archives the source-aware oracle checks all six coarse/source
+support extrema. Add `--certify-source-error` to `oracle.py ARCHIVE SOURCE`
+to require exact closed-panel covers of the two directions on every coarse
+tile. The oracle joins captured f32 source faces through checked leaf identity.
+The full certificate requires an original source GLB or independent analytic
+manifest, including the pre-weld coordinates on a moving weld. Leaf-derived
+manifests identify only a decoded reference. The separate canonical-seam checks
+retain their own admission domain.
+It refuses unsupported frames, more than 131,072 source or proxy faces per
+tile, unresolved depth 32, or exhaustion of `--work-limit`. A proved distance
+violation is `sourceSurfaceError`. An incomplete cover is `oracleWorkLimit`.
+`surface_error_controls.py` exercises a dyadic edge gap, both directions,
+point/segment supports and refusal. The older independent S2 sampling remains
+a construction diagnostic.
 
 Retain the bounded validator/facts/replay owners. Add source-identity admission
 and a disk-backed decoded delivery relation; replace ad-hoc seam probes with
@@ -20,6 +33,22 @@ D11 coarse drops (2026-10-28): `drops.py` recounts each coarse payload's dropped
 child components from published keys, against its `droppedComponents` declaration
 and its geometricError (exact distances); `drop_controls.py` pins an honest drop and
 its undeclared, understated and border-touching refusals for both validators.
+
+Coarse self-intersections (#420, 2026-11-26): with `--coarse-crossings`, `crossings.py`
+counts each coarse tile's face pairs that meet outside their common corners, present in
+the tile's children or new, from published keys. It clips the two closed hulls exactly
+(Fractions) and tests the clipped vertices against the hull of the common corners, an
+independent construction of native `validate --coarseCrossings`, which uses orientation
+predicates and a case analysis. The census reports and never refuses.
+`crossing_controls.py` pins the chord-through-the-floor case (four new pairs), a present
+pair, a duplicated face (one face, one pair), a collinear face, a shared-corner overlap and
+a seeded random lattice (4,150 present pairs), and requires native
+`interfaceCensus.coarseCrossings` to equal the oracle's field by field (and to be absent
+without the flag). Both count distinct faces by corner set, judge "present" against the
+children together, census tiles with content below them, and use the same budget formula
+and weights. Two gaps remain: their candidate counts differ (a grid natively, a sweep here),
+so their incomplete tiles can differ near the budget; and native also bounds each tile's
+workspace (about 28,600 face entries), where the oracle has no bound.
 
 D11 border relief (A1, 2026-10-30): `relief.py` re-derives every declared relief step
 from source incidence alone, in IEEE double like the producer:
@@ -407,7 +436,7 @@ running exact maximum, so it cannot raise it; floats never decide (review 4).
 Losses must fit E where cycles changed and G where a boundary was only simplified;
 a change without a witness is refused. Distances come from a complete
 box-hierarchy nearest search with certified lower bounds and exact
-Fractions. All topology losses are sampled witnesses under D2, like G itself: S1b's
+Fractions. The early-stage topology checks use sampled D2 witnesses: S1b's
 quarter-grid controls plus this checker's own deterministic barycentric level-8
 grid on every affected face. They bound a continuous maximum from below only.
 `contractedVertices` (input vertices on contracted arcs) and the complete omission

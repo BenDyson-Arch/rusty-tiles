@@ -10,10 +10,10 @@ NOTICE files must travel with every artefact:
   third_party_notices.py check [--max-bytes N] [--rust-licenses KIND] ARTEFACT...
       require every notice, byte-identical, in each .tgz/.tar.gz/.crate/.zip/.whl
       (members named .../<component>/<path>); optionally bound the artefact size.
-      --rust-licenses cli|native-geospatial|python additionally requires the generated
+      --rust-licenses cli|native-geospatial|python|pure-rust-basis additionally requires the generated
       Rust crate licence file of that kind (licenses/, scripts/third_party_licenses.py) as
       .../THIRD_PARTY_LICENSES.md or .../THIRD_PARTY_LICENSES-KIND.md; "all" is for the
-      crate, which carries all three under licenses/
+      crate, which carries all of them under licenses/
 
 Both commands first check that the list below covers every licence-like file in
 the vendored trees, so an upstream update cannot add one unnoticed.
@@ -55,7 +55,7 @@ def notice_files():
     return files
 
 
-RUST_LICENCE_KINDS = ("cli", "native-geospatial", "python")
+RUST_LICENCE_KINDS = ("cli", "native-geospatial", "python", "pure-rust-basis")
 
 
 def rust_licence_files(kind):

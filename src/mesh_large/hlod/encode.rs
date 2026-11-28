@@ -55,6 +55,19 @@ pub(crate) enum Mutation {
     /// Keep production construction but disable only root competition (control).
     #[cfg(test)]
     NoRootCompetition,
+    /// Skip P1 (`geometry::p1`): the ladder of builds alone, as before it (N1 included).
+    #[cfg(test)]
+    NoP1,
+    /// `NoP1` and `NoRootCompetition` together.
+    #[cfg(test)]
+    NoP1NoRootCompetition,
+    /// P1 records a cell its workspace estimate refuses, and the primary build, fix 2 and
+    /// the staged reduction are refused: the next build is N1.
+    #[cfg(test)]
+    P1Unfit,
+    /// As `P1Unfit`, with P1 recording a first pass that spends its work budget.
+    #[cfg(test)]
+    P1Exhausted,
     /// Weld corners on POSITION and feature ID only (the weld's own check must refuse).
     #[cfg(test)]
     WeldPositionsOnly,
@@ -71,6 +84,10 @@ pub(crate) enum Mutation {
     /// `Develop` and `NoRelief` together: develop's strategies on D11's ladder alone.
     #[cfg(test)]
     DevelopNoRelief,
+    /// `NoRelief` without root recovery: an omission reaches the root (the omission
+    /// controls; root recovery v2 has its own).
+    #[cfg(test)]
+    NoReliefNoRecovery,
     /// Publish relieved tiles without their relief floor on G.
     #[cfg(test)]
     UnflooredRelief,
@@ -91,12 +108,61 @@ pub(crate) enum Mutation {
     /// texture term.
     #[cfg(test)]
     UnderstateTextureError,
+    /// Recompute every exact repeat of the coarse ladder (the identity reference).
+    #[cfg(test)]
+    NoRepeatReuse,
+    /// Refuse (as S2 controls) every proposal of the first `k` builds of the coarse
+    /// ladder: primary, P1, fix 2, staged, N1, N2, N3. Reuse is off, since a replayed refusal
+    /// would stand for an assessment that is no longer the same.
+    #[cfg(test)]
+    RefuseBuilds(u8),
+    /// Keep no stuck border vertex (D off): a cell whose ladder fails is omitted, as before.
+    #[cfg(test)]
+    NoKeep,
+    /// The cell at this depth holding this source rank stalls (D's control): every build of
+    /// its ladder is refused and P1 reports every border vertex it must remove as stuck, so
+    /// it builds only by keeping them (`hlod::Kept`), when the flag lets it keep them.
+    #[cfg(test)]
+    KeepAt(u32, bool, u64),
+    /// `KeepAt(depth, false, 0)` with root recovery's scaffold bound at 0: the recovered
+    /// root's declaration exceeds it, so the root stays omitted (and the stage completes).
+    #[cfg(test)]
+    StallPastScaffoldBound(u32),
 }
 
 impl Mutation {
+    /// Root recovery v2: every omitted cell passes up a contract-free stand-in, and the
+    /// root builds over them, delivered over the whole frontier.
+    pub(crate) fn recovery_v2(self) -> bool {
+        self.recovery()
+    }
+
+    /// The most omitted cells a recovered root's scaffold may name (`recovery::OMITTED`).
+    pub(crate) fn scaffold_bound(self) -> usize {
+        #[cfg(test)]
+        if matches!(self, Self::StallPastScaffoldBound(_)) {
+            return 0;
+        }
+        super::recovery::OMITTED
+    }
+
+    /// The cell a test stalls, as (depth, source rank): `KeepAt` and
+    /// `StallPastScaffoldBound`.
+    #[cfg(test)]
+    pub(crate) fn stalled_at(self) -> Option<(u32, u64)> {
+        match self {
+            Self::KeepAt(d, _, rank) => Some((d, rank)),
+            Self::StallPastScaffoldBound(d) => Some((d, 0)),
+            _ => None,
+        }
+    }
+
     pub(crate) fn recovery(self) -> bool {
         #[cfg(test)]
-        if self == Self::OmitRecoveryInputNoRecovery {
+        if matches!(
+            self,
+            Self::OmitRecoveryInputNoRecovery | Self::NoReliefNoRecovery
+        ) {
             return false;
         }
         self.last_resorts()
@@ -117,10 +183,52 @@ impl Mutation {
     }
     pub(crate) fn root_competition(self) -> bool {
         #[cfg(test)]
-        if self == Self::NoRootCompetition {
+        if matches!(self, Self::NoRootCompetition | Self::NoP1NoRootCompetition) {
             return false;
         }
         self.last_resorts()
+    }
+
+    /// Whether P1 runs after a failed first build (`geometry::p1`).
+    pub(crate) fn p1(self) -> super::geometry::p1::Run {
+        use super::geometry::p1::Run;
+        #[cfg(test)]
+        match self {
+            Self::NoP1 | Self::NoP1NoRootCompetition => return Run::Off,
+            Self::P1Unfit => return Run::Unfit,
+            Self::P1Exhausted => return Run::Exhausted,
+            _ => {}
+        }
+        if self.last_resorts() {
+            Run::On
+        } else {
+            Run::Off
+        }
+    }
+
+    /// Whether a cell whose whole ladder failed keeps the border vertices P1 could not
+    /// remove (D, `hlod::Kept`). Only with P1.
+    pub(crate) fn keep_stuck(self) -> bool {
+        #[cfg(test)]
+        if matches!(
+            self,
+            Self::NoKeep | Self::KeepAt(_, false, _) | Self::StallPastScaffoldBound(_)
+        ) {
+            return false;
+        }
+        self.p1() == super::geometry::p1::Run::On
+    }
+
+    /// Whether the coarse ladder reuses exact repeats (`geometry::build_parent`).
+    pub(crate) fn reuse(self) -> bool {
+        #[cfg(test)]
+        {
+            !matches!(self, Self::NoRepeatReuse | Self::RefuseBuilds(_))
+        }
+        #[cfg(not(test))]
+        {
+            true
+        }
     }
 
     pub(crate) fn last_resorts(self) -> bool {
@@ -146,7 +254,11 @@ impl Mutation {
         #[cfg(test)]
         if matches!(
             self,
-            Self::NoRelief | Self::DevelopNoRelief | Self::MiscountFolds | Self::UndeclaredFolds
+            Self::NoRelief
+                | Self::DevelopNoRelief
+                | Self::NoReliefNoRecovery
+                | Self::MiscountFolds
+                | Self::UndeclaredFolds
         ) {
             return usize::MAX / 200;
         }

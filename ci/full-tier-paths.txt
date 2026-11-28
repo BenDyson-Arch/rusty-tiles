@@ -1,6 +1,6 @@
 # Pull requests that change a path matching one of these regular expressions (Python re,
 # matched against the whole repository-relative path) run the full CI tier: every platform,
-# the wheels and the container, not just the fast Linux tier (#346). scripts/ci_scope.py
+# the wheels and the container, not just the fast tier (#346). scripts/ci_scope.py
 # reads this file. A changed Rust file that contains platform-conditional code
 # (cfg(windows), cfg(unix), target_os and similar) anywhere in it, or whose diff adds or
 # removes such code, also runs it, whatever its path, so platform code needs no entry here.

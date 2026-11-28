@@ -102,6 +102,8 @@ fn fixture(name: &str) -> Value {
 }
 
 fn path_for(case: &Value) -> PathBuf {
+    // The fixtures are generated at test time; every read resolves its path here.
+    crate::test_corpora::ensure();
     Path::new(FIXTURE_ROOT).join(case["path"].as_str().unwrap())
 }
 

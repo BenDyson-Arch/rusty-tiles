@@ -29,6 +29,11 @@ built at or before develop `7fad70c`; `mesh-to-3tz` keeps the flag.
 
 Kept as live tooling: `oracle/` with its self-test, `witnesses/`, `acceptance/scripts/`,
 the production-mutant set (patches, `mutants.json`, scripts) and `corpus/run.py`.
+
+`controls/fixtures/` (164 small controls) is [generated](../README.md#generated-test-corpora) by
+`witnesses/generate.py --fixtures-only` through `scripts/test_corpora.py`, not committed; `controls/manifest.json`,
+`oracle-results*.json` and `amendment6.json` stay committed. `--large` writes `controls/large/` as before.
+
 Removed from the tree: `preparation/` (contract drafts v1-v3, precode reviews, primary
 fetches), `acceptance/` receipts and mutant reports, and generated `corpus/facts/`.
 

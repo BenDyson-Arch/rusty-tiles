@@ -178,8 +178,10 @@ fn interior_native_observer_panic_keeps_cause_and_restores_owners() {
     let keys = [c"CPL_TMPDIR", c"GDAL_PAM_ENABLED", c"GDAL_NUM_THREADS"];
     let snapshot = || {
         keys.map(|key| {
+            // SAFETY: `key` is a NUL-terminated literal; GDAL returns null or its own string.
             let value =
                 unsafe { gdal_sys::CPLGetThreadLocalConfigOption(key.as_ptr(), ptr::null()) };
+            // SAFETY: a non-null `value` is GDAL's terminated string, copied at once.
             (!value.is_null()).then(|| unsafe { CStr::from_ptr(value).to_bytes().to_vec() })
         })
     };
@@ -294,8 +296,10 @@ fn caller_thread_local_native_settings_are_restored_after_success_and_failure() 
     let keys = [c"CPL_TMPDIR", c"GDAL_PAM_ENABLED", c"GDAL_NUM_THREADS"];
     let snapshot = || {
         keys.map(|key| {
+            // SAFETY: `key` is a NUL-terminated literal; GDAL returns null or its own string.
             let value =
                 unsafe { gdal_sys::CPLGetThreadLocalConfigOption(key.as_ptr(), ptr::null()) };
+            // SAFETY: a non-null `value` is GDAL's terminated string, copied at once.
             (!value.is_null()).then(|| unsafe { CStr::from_ptr(value).to_bytes().to_vec() })
         })
     };
@@ -310,13 +314,15 @@ fn caller_thread_local_native_settings_are_restored_after_success_and_failure() 
             {
                 let mut seen = self.0.lock().unwrap();
                 if seen.is_none() {
+                    // SAFETY: the key is a NUL-terminated literal; GDAL returns null or its
+                    // own string.
                     let value = unsafe {
                         gdal_sys::CPLGetThreadLocalConfigOption(c"CPL_TMPDIR".as_ptr(), ptr::null())
                     };
-                    *seen = Some(
-                        (!value.is_null())
-                            .then(|| unsafe { CStr::from_ptr(value).to_bytes().to_vec() }),
-                    );
+                    // SAFETY: a non-null `value` is GDAL's terminated string, copied at once.
+                    let copy = (!value.is_null())
+                        .then(|| unsafe { CStr::from_ptr(value).to_bytes().to_vec() });
+                    *seen = Some(copy);
                 }
             }
             Ok(())
@@ -334,6 +340,7 @@ fn caller_thread_local_native_settings_are_restored_after_success_and_failure() 
     let caller_tmp = CString::new(root.path().to_str().unwrap()).unwrap();
     let values = [caller_tmp.as_c_str(), c"YES", c"3"];
     for (key, value) in keys.iter().zip(values) {
+        // SAFETY: key and value are NUL-terminated; GDAL copies them.
         unsafe { gdal_sys::CPLSetThreadLocalConfigOption(key.as_ptr(), value.as_ptr()) };
     }
     let caller = snapshot();
@@ -384,6 +391,7 @@ fn caller_thread_local_native_settings_are_restored_after_success_and_failure() 
     assert!(failure.error.message().contains("logical working"));
     assert_eq!(snapshot(), caller, "restored after admission failure");
     for key in keys {
+        // SAFETY: `key` is NUL-terminated; a null value clears the option.
         unsafe { gdal_sys::CPLSetThreadLocalConfigOption(key.as_ptr(), ptr::null()) };
     }
     assert_eq!(fs::read_dir(root.path()).unwrap().count(), 2);

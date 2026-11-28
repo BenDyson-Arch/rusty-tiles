@@ -4,6 +4,79 @@
 > gives its archive SHA-256 and the last commit that contained it
 > (`e29cd19d2f236dc688e91a80a45170d4a573e20b`). Policy: [AGENTS.md](../../AGENTS.md).
 
+## Generated test corpora
+
+The fixtures that the I1, C2 and C1-context oracle-parity tests read are generated, not committed
+(since 0.4.2; the last commit that held them is the parent of the commit that added
+`generated-corpora.sha256`). Their generators are tracked, and
+[`generated-corpora.sha256`](generated-corpora.sha256) pins every generated file: one
+`<sha256>  <path>` line per file, paths relative to this directory (`sha256sum -c` format).
+[`scripts/test_corpora.py`](../../scripts/test_corpora.py) runs the generators and writes the
+files in place, where `.gitignore` ignores them:
+
+```sh
+python3 scripts/test_corpora.py           # write every missing or different file, then verify all 669
+python3 scripts/test_corpora.py check     # verify only
+python3 scripts/test_corpora.py update    # rerun every generator, rewrite the manifest
+```
+
+Tests that read the files call it first (`src/test_corpora.rs`, once per test process), and CI
+runs it before `cargo test`. A file that is missing or differs after generation fails the run; nothing
+is skipped. A cold run takes about 2 CPU seconds and a warm one about 0.05 s. Run it yourself
+before the Python oracle, mutant and replay scripts in these directories.
+
+| Directory | Generator (run with `--fixtures-only`: fixtures only, committed records unchanged) |
+| --- | --- |
+| `implicit_read/controls/fixtures/` | `implicit_read/witnesses/generate.py` |
+| `c2_decoded_containment/witnesses/fixtures/`, `controls/fixtures/` | `c2_decoded_containment/witnesses/generate.py` |
+| `c2_decoded_containment/wb/fixtures/` | `c2_decoded_containment/wb/generate.py` (no oracle run) |
+| `c2_decoded_containment/h11/fixtures/` | `c2_decoded_containment/h11/generate.py` (no oracle run) |
+| `c2_decoded_containment/controls/slice3/fixtures/` | `controls/slice3/generate.py --pre-amendment`, fed by `controls/slice3/pre_amendment6/run.py` (the I1 generator frozen at 92e8c041 for the S3-19 controls) |
+| `c1_payload_integrity/.../context_controls/2026-10-10/fixtures/*/` | `context_controls/2026-10-10/generate.py --generate` into a temporary directory; its `manifest.json` is not copied |
+
+The records the tests compare against (each generator's `manifest.json`, `report.json`,
+`report.json.gz`, oracle results) stay committed. After an intended generator change, run the
+generator as before to update its records, then `scripts/test_corpora.py update`, and commit both
+diffs.
+
+The bytes are the same on Linux, macOS and Windows and from Python 3.12 on:
+
+- Every archive is a stored ZIP (no zlib output) with fixed timestamps. The driver runs each
+  generator under a shim that sets `ZipInfo.create_system` to 3 (Unix), the one header field the
+  standard library sets per platform, and in UTF-8 mode.
+- `.gitattributes` turns off line-ending conversion here, so pinned inputs check out byte for byte.
+- Python 3.12 made the built-in `sum()` of floats compensated, and the C2 witness builder sums
+  float products with it; 3.10 and 3.11 change six rotated-TRS controls. The driver refuses older
+  versions. Checked with CPython 3.12.16, 3.13.18 and 3.14.4 on Linux, each from an empty tree;
+  macOS and Windows first run in the portable CI matrix.
+
+### Kept committed
+
+These sit beside generated files but cannot be regenerated exactly:
+
+| File | Bytes | Reason |
+| --- | ---: | --- |
+| `c2_decoded_containment/wb/fixtures/nodes-rotated.3tz` | 6,924 | Quaternions from `random.gauss`, which calls the platform libm (`log`, `cos`, `sin`). glibc reproduces it, but no libm guarantees the last bit; a correctly rounded rewrite matches this file but changes the large twin. The generator's `COMMITTED` set leaves it alone |
+| `c2_decoded_containment/controls/slice3/fixtures/F-W4-polygons.3tz`, `S3-2.W4-polygons.3tz`, `S3-2.W4-polygons.base.3tz` | 3 x 37,304 | Derived from R's forest producer archive W4-polygons, which is not in the repository (`controls/slice3/forest.py` `INPUTS`) |
+| `c2_decoded_containment/controls/slice3/fixtures/F-W7.3tz`, `S3-4.W7.3tz`, `S3-5.W7.3tz` | 3,666 + 3,666 + 3,678 | Derived from forest archive W7, likewise external |
+| `c1_payload_integrity/.../context_controls/2026-10-10/fixtures/manifest.json` | 53,508 | Hand-amended record (labels), compiled in with `include_str!` |
+
+The rest of `c1_payload_integrity/` stays committed. Its 16 `.tar.gz`/`.json.gz` bundles (571,058
+bytes) were compressed by a different deflate implementation from the zlib that CPython ships: their
+tar and JSON content regenerates exactly, but the compressed bytes do not, and each amendment pins its
+input bundle's compressed SHA-256. The C2 amendment's corrected-205 bundle no longer reproduces at all,
+because the C2 oracle has since reclassified four b3dm cases. The stride, stride-parent and
+meshopt-header lane fixtures (124,013 bytes) regenerate exactly on Linux, but their generators write in
+place through git symlinks (which Windows checkouts do not create) and record their own SHA-256, so
+generating them needs those lane scripts reworked first. `production_controls/fixtures/meshopt-none-placeholder-gltf/tile.gltf`
+(675 bytes) is compiled in with `include_bytes!`. Primary references, receipts, decisions and runner
+copies are records.
+
+The `--large` controls (`implicit_read/controls/large/`, `c2_decoded_containment/controls/large/`,
+`wb/large/`) were never committed and are not in the manifest; tests skip them when absent, as before.
+
+## Audit
+
 Baseline production revision: `8dfd74bd87dd23c86278e98d736c3f5912c246cf`.
 See the [architecture proposal](../../docs/architecture/README.md) and
 [release-blocking issue](https://github.com/BenDyson-Arch/rusty-tiles/issues/113).

@@ -155,6 +155,12 @@ impl<'a> ScratchLedger<'a> {
 }
 
 impl ComponentLease<'_, '_> {
+    /// Test seam: the bytes admitted.
+    #[cfg(test)]
+    pub(crate) fn bytes(&self) -> u64 {
+        self.bytes
+    }
+
     /// Report the component's own live bytes: past its admission is refused, as is
     /// stage-wide live scratch past the ledger's bound.
     pub(crate) fn charge(&self, live: u64) -> Result<(), JobError> {

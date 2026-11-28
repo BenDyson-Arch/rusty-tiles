@@ -6,7 +6,9 @@
 # ghcr.io/bendyson-arch/rusty-tiles-geobase:<gdal>-<proj> (pin it by digest:
 # GEOBASE=ghcr.io/...:<gdal>-<proj>@sha256:...), or `geospatial-source`, which builds them
 # here. Versions and checksums come from ci/versions.env (scripts/check_ci_config.py).
-ARG GEOBASE=geospatial-source
+ARG GEOBASE=ghcr.io/bendyson-arch/rusty-tiles-geobase:3.12.4-9.8.1@sha256:6e158b3721758067554cf7913a6e52749fe02290b9c2af0c98ccbbb818a92ec4
+# The Rust toolchain, equal to rust-toolchain.toml (ci/versions.env RUST_VERSION).
+ARG RUST_VERSION=1.100.0
 
 # The source tarballs, checked by SHA-256. CI replaces this stage with its cached copy of the
 # same two files (--build-context geospatial-tarballs=DIR), which geospatial-source checks
@@ -45,7 +47,7 @@ RUN echo "$GDAL_SHA256  /tmp/gdal.tar.gz" | sha256sum -c - \
 
 FROM ${GEOBASE} AS geospatial-build
 
-FROM rust:1.98-trixie AS build
+FROM rust:${RUST_VERSION}-trixie AS build
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libclang-dev libsqlite3-dev libtiff-dev libgeos-dev pkg-config \
     && rm -rf /var/lib/apt/lists/*

@@ -103,6 +103,8 @@ const OTHER: [&str; 6] = [
 
 fn mesh_flags() -> BTreeSet<String> {
     let mut known = flags(&help(&["mesh"]));
+    // The guide documents `mesh-inspect` too, which takes `mesh`'s source options.
+    known.extend(flags(&help(&["mesh-inspect"])));
     known.extend(OTHER.map(String::from));
     known
 }
@@ -232,19 +234,16 @@ fn removed_surface_is_named_only_in_the_migration_section() {
 }
 
 #[test]
-fn certified_proxy_and_ledger_claims_are_gone_from_the_guide() {
+fn the_guide_describes_certified_surface_error_without_the_removed_proxy_ledger() {
     let current = current_guide(&read("docs/MESH.md"))
-        .replace("not certified", "")
-        .replace("not-certified", "")
-        .replace("not certification", "")
-        // D11 certifies source-parameter border displacement, not surface error.
-        .replace("displacement certified against those arcs", "")
         // A real report field whose name predates HLOD.
         .replace("unique_proxies", "")
         // D11's public omission count, not the removed proxy-bake surface.
         .replace("omitted_proxies", "");
+    let error = section(&current, "### Certified geometric error", false);
+    assert!(error.contains("two-sided, continuous Hausdorff"));
+    assert!(error.contains("hlod-certified-decoded-surface-v1"));
     for forbidden in [
-        "certified",
         "ledger",
         "H17",
         "H27",
@@ -374,21 +373,30 @@ fn documented_capture_steps_are_the_reported_steps() {
         .step_by(2)
         .map(String::from)
         .collect();
-    assert_eq!(steps.len(), 15, "{steps:?}");
+    assert_eq!(steps.len(), 37, "{steps:?}");
     for (document, text) in [
         ("docs/MESH.md", read("docs/MESH.md")),
         ("docs/CLI.md", read("docs/CLI.md")),
     ] {
-        // Every `capture_…` and `hlod_incidence_…` code span that is not a report field.
-        let documented: BTreeSet<String> = ["`capture_", "`hlod_incidence_"]
-            .iter()
-            .flat_map(|prefix| text.match_indices(prefix).map(|(at, _)| at))
-            .filter_map(|at| {
-                let name = &text[at + 1..];
-                Some(name[..name.find('`')?].to_owned())
-            })
-            .filter(|name| !name.ends_with("_bytes"))
-            .collect();
+        // Every `capture_…`, `hlod_incidence_…`, `hlod_borders_…`, `inspect_…` and
+        // `leaf_crop_…` code span that is not a report field.
+        let documented: BTreeSet<String> = [
+            "`capture_",
+            "`hlod_incidence_",
+            "`hlod_borders_",
+            "`inspect_",
+            "`leaf_crop_",
+        ]
+        .iter()
+        .flat_map(|prefix| text.match_indices(prefix).map(|(at, _)| at))
+        .filter_map(|at| {
+            let name = &text[at + 1..];
+            Some(name[..name.find('`')?].to_owned())
+        })
+        .filter(|name| !name.ends_with("_bytes"))
+        // The Python function, not a step.
+        .filter(|name| !name.starts_with("inspect_mesh"))
+        .collect();
         assert_eq!(documented, steps, "{document}");
     }
 }

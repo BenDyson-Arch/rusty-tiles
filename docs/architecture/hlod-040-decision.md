@@ -1,5 +1,11 @@
 # 0.4 mesh direction: classic octree HLOD
 
+**Certified publication amendment.** D2's sampled value continues to drive
+construction, candidate selection and chart sizing. Published coarse G now
+includes the two-sided continuous bound on the decoded surface. The
+[publication and S2 contract](hlod-s2-error.md) specifies the source frame,
+direct cutoff, child induction, and unchanged seam rules.
+
 Decision date: **2026-10-24**. Owner rule: **“go with best practice that doesn't
 compromise on client speed and processing speed”.** The owner adopted classic
 octree HLOD for `mesh`, replacing H17 certified geometry and H27's per-texel
@@ -648,6 +654,51 @@ output is only a first proposal that develop's checks (interface retention, the 
 topology changes, S2) still judge. Tiles the earlier builds publish are unchanged. The audit
 records only this build's accepted proposal. Walem: 48 omitted cells to 14.
 
+P1 (2026-11-18): when develop's first strategies publish nothing, before fix 2, one build
+contracts the merged children onto the parent contract and simplifies them in one
+priority-queue pass of half-edge collapses, each checked locally so that it never makes what
+the fold guard, topology check and interface check refuse: the link condition, no face turned
+over or degenerate, no directed edge or face beyond the source's multiplicity, no new edge on
+two shared points that is neither a source edge nor a required segment, no new face on three
+shared points, and no required segment without a face. A border vertex the contract removes
+collapses only along its own arc. When such a vertex is fanned only by shared points, so that
+any removal makes a face on three of them (the #344 rock deadlock), it is replaced by one
+interior Steiner vertex snapped to its canonical leaf lattice, strictly inside the fan and
+never on the contract, with a sliver face closing the chord. The rescue follows the
+independent Steiner review's predicates: the vertex's link is one simple oriented path between
+its arc neighbours, which lie on its own contract chord (the chord is the contract's, so the
+seam allowance is the contract's certificate and relief floor, unchanged); the point is the
+canonical lattice point of the replaced vertex's depth (a refused snap refuses the position),
+idempotent, and takes no key an input vertex, another Steiner vertex or a source border point
+holds; each changed face has a certified positive orientation against its old normal (the
+bridge against their sum); and each changed face meets every other live face only in their
+common vertices, decided exactly. Positions are tried in a fixed order of at most 16 and a
+failure moves to the next one. The Steiner vertex is kept at its canonical decode, and the
+final decode is accepted only if its faces still meet that condition on the delivered
+positions. P1's own directed licences between shared points are the contraction fold
+guard's (its contracted source, chord paths included), so P1 no longer proposes an edge the
+guard then refuses. The guard builds a required chord's directed licence from the children's
+interface segments along its source path. Only segments a holder outside the parent shares
+count (`InterfaceRow::outer` over the parent's leaf interval); a segment held only inside the
+parent is an internal seam after the merge and broke the exterior path (independent review,
+19 November 2026). The proposal goes through the
+same assessment as every other (decode validity, the contraction fold guard, topology
+change within the floor, S2). P1 runs only where the first strategies publish nothing. The
+chord licence correction is in the contraction guard every build uses, so a tile any build
+publishes can change where it changes what the guard accepts; on the measured inputs every
+changed payload the diff could attribute was a P1 cell or an ancestor of one. A
+second pass adds N1's seam-owner licence and publishes as declared stage 1. The stage report
+names it `p1`.
+
+N1 after P1 (2026-11-20). Where P1's second pass ran to its end, N1 built no cell on the #344
+rock, the 10M-triangle city or the photogrammetry fixture, while spending 471 CPU-s on the
+photogrammetry site. N1 now runs only where P1 did not finish that pass: P1 is off, skipped
+the cell (the contract alone exceeds the cap, or its workspace estimate exceeds the job's
+charge), spent its work budget, or stopped at a first-pass proposal that assessment refused.
+These are the cells where the seam-owner licence was never tried; without N1 they would go
+from the fold-free builds straight to N2, which admits folds. On the three inputs the output
+is byte-identical either way.
+
 **Owner amendment, 2026-10-30 — constructive last resort (A2).** Replaces omission for
 every cell whose contract fits the cap (`minimum_triangles` within it). When develop's
 strategies, fix 2 and the staged reduction all publish nothing, the cell is rebuilt in three
@@ -779,6 +830,16 @@ so the actual children are the frontier tiles through transparent document links
 The recovered relation is never encoded as an implicit hierarchy; existing supported
 subtrees below frontier tiles keep their delivery.
 
+**Owner amendment, 2026-11-24 — root recovery v2 (0.4.2).** The root is recovered
+whatever the size of the frontier below it. Every omitted cell passes up an unpublished,
+contract-free stand-in (N3 to the cap, folds admitted); the root builds over its built
+children and the stand-ins, S2-measured against the source, and declares version 2 over
+its whole published frontier (at most 384 tiles; the tileset root may refine to all of
+them). Drops are declared against that frontier, as the validators recount them. Folds a
+tile keeps from a stand-in are declared as admitted there (stage 2 or above). A
+declaration past its bounds (256 skipped cells, 64 KiB) or a stand-in that cannot reach
+the cap leaves the root omitted, as before. Version 1 is no longer produced.
+
 The root payload declares `asset.extras.rustyTiles.descendantRecovery: 1` and its
 explicit tile carries `extras.recovery`: version, root key, encoded root depth,
 frontier keys/counts and omitted ownership keys. The declaration contains at most
@@ -849,7 +910,7 @@ of the cell, far below the surface's own border noise at coarse depths.
   - Interior vertices never move. Interior relief was removed on 2026-11-02: nothing bounded
     its moves, and it omitted cells.
   - A new face or edge on border points across chords is taken only where the build's
-    `folds::Policy` admits it: never in develop's builds, and in N1–N3 only in its seam owner
+    `folds::Policy` admits it: never in develop's builds, and in P1's second pass and N1–N3 only in its seam owner
     (A2's hash split over `Contract::holders`). Relief has no owner rule of its own.
   - Each vertex collapses onto its surviving chord neighbour toward its nearer endpoint,
     each half of a chord taken from its endpoint inward, or else onto its other neighbour.

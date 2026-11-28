@@ -205,7 +205,7 @@ impl Keyword for UniqueItems {
 
 /// The keyword factory (its error type is the library's, whose size is not ours): `uniqueItems: true` is the linear check; any other value never fails
 /// an instance (the bundled schema uses only `true`).
-#[allow(clippy::result_large_err)]
+#[expect(clippy::result_large_err, reason = "the error type is jsonschema's")]
 fn factory(
     memo: Arc<Mutex<Memo>>,
 ) -> impl for<'a> Fn(

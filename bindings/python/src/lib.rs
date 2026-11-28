@@ -15,9 +15,9 @@ use tiles_core::{
     point_cloud::{PointCloudCoordinates, PointCloudCrs, PointCloudOptions, PointCloudRequest},
     tile_view::{DecodedTile, TileLimit, TileSet},
     vector::{VectorLodOptions, VectorOptions},
-    Error, JobError, JobErrorKind, JobFailure, MeshPlacement, MeshSourceCrs, ModelManifestRequest,
-    ModelWrapRequest, Observer, OutputPolicy, RunControl, RunEvent, SourceAxes, TilerJobs,
-    TilerProfile, TilerRequest,
+    Error, JobError, JobErrorKind, JobFailure, MeshPlacement, MeshSourceCrs, MeshSubset, MeshWeld,
+    ModelManifestRequest, ModelWrapRequest, Observer, OutputPolicy, RunControl, RunEvent,
+    SourceAxes, TilerJobs, TilerProfile, TilerRequest,
 };
 
 create_exception!(rusty_tiles, TilesError, PyException);
@@ -307,6 +307,38 @@ impl TilerResult {
     }
 }
 
+/// One mesh inspection: its deterministic `report`, the run's `diagnostics`, the installed
+/// `geojson` path (`None` when none was requested), the CLI's human `summary` lines and
+/// `cleanup_diagnostics`.
+#[pyclass(frozen, module = "rusty_tiles")]
+struct InspectResult {
+    #[pyo3(get)]
+    geojson: Option<PathBuf>,
+    #[pyo3(get)]
+    summary: Vec<String>,
+    report: Value,
+    diagnostics: Value,
+    cleanup_diagnostics: Vec<CleanupDiagnostic>,
+}
+
+#[pymethods]
+impl InspectResult {
+    #[getter]
+    fn report(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        json_to_python(py, &self.report)
+    }
+
+    #[getter]
+    fn diagnostics(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        json_to_python(py, &self.diagnostics)
+    }
+
+    #[getter]
+    fn cleanup_diagnostics(&self) -> Vec<CleanupDiagnostic> {
+        self.cleanup_diagnostics.clone()
+    }
+}
+
 fn tiler_request_error(py: Python<'_>, error: JobError) -> PyErr {
     job_failure_to_python(
         py,
@@ -372,10 +404,23 @@ fn tiler_memory_budget(py: Python<'_>, budget: Option<Bound<'_, PyAny>>) -> PyRe
 /// Stream an admitted static mesh into one Tiles 1.1 .3tz: local metre/Y-up, or a declared
 /// source CRS mapped at capture. Profiles are provisional; jobs is a resource-capped
 /// maximum, and None means auto. memory_budget_bytes is a declared ceiling in bytes, never
-/// raised; None resolves the lesser of 4 GiB and half the detected headroom.
+/// raised; None resolves the lesser of 4 GiB and half the detected headroom. report_path
+/// writes the run report (the CLI's --report-path): JSON rewritten atomically as each stage
+/// finishes, so a stopped run leaves a valid partial report.
+/// bbox (minx, miny, maxx, maxy) or polygon (a GeoJSON Polygon/MultiPolygon file) bakes only the
+/// triangles whose centroid lies inside: post-node glTF x and -z for a local source, WGS84
+/// longitude and latitude with a source CRS; placement and tiling stay the whole source's.
+/// weld_epsilon (metres; 0 merges exact repeats) welds source vertex positions before
+/// capture, within each primitive, or each material with join_primitives="same-material"
+/// (alone, it welds exact repeats): a merged vertex takes its class's lowest-index position
+/// and keeps its own normal, UVs and colour. report["weld"] gives the merged count and
+/// largest displacement. Geometric error is certified against the original source.
 #[pyfunction]
-#[pyo3(signature = (input, output, *, profile="balanced", jobs=None, scratch_dir=None, memory_budget_bytes=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None, height_offset=None, force=false, callback=None))]
-#[allow(clippy::too_many_arguments)]
+#[pyo3(signature = (input, output, *, profile="balanced", jobs=None, scratch_dir=None, memory_budget_bytes=None, report_path=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None, height_offset=None, bbox=None, polygon=None, weld_epsilon=None, join_primitives=None, force=false, callback=None))]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one keyword per CLI option, as inspect_mesh"
+)]
 fn mesh_to_tileset(
     py: Python<'_>,
     input: PathBuf,
@@ -384,6 +429,7 @@ fn mesh_to_tileset(
     jobs: Option<Bound<'_, PyAny>>,
     scratch_dir: Option<PathBuf>,
     memory_budget_bytes: Option<Bound<'_, PyAny>>,
+    report_path: Option<PathBuf>,
     anchor: Option<(f64, f64, f64)>,
     orientation_xyzw: Option<(f64, f64, f64, f64)>,
     scene_offset: Option<(f64, f64, f64)>,
@@ -392,6 +438,10 @@ fn mesh_to_tileset(
     source_offset: Option<Vec<f64>>,
     source_offset_file: Option<PathBuf>,
     height_offset: Option<f64>,
+    bbox: Option<(f64, f64, f64, f64)>,
+    polygon: Option<PathBuf>,
+    weld_epsilon: Option<f64>,
+    join_primitives: Option<&str>,
     force: bool,
     callback: Option<Py<PyAny>>,
 ) -> PyResult<TilerResult> {
@@ -422,6 +472,11 @@ fn mesh_to_tileset(
         height_offset,
     )
     .map_err(|error| tiler_request_error(py, error))?;
+    let bbox = bbox.map(|(minx, miny, maxx, maxy)| [minx, miny, maxx, maxy]);
+    let subset = MeshSubset::from_parameters(bbox.as_ref().map(|b| &b[..]), polygon.as_deref())
+        .map_err(|error| tiler_request_error(py, error))?;
+    let weld = MeshWeld::from_parameters(weld_epsilon, join_primitives)
+        .map_err(|error| tiler_request_error(py, error))?;
     let mut request = TilerRequest::new(input, output)
         .with_profile(profile)
         .with_jobs(jobs)
@@ -434,11 +489,20 @@ fn mesh_to_tileset(
     if let Some(source_crs) = source_crs {
         request = request.with_source_crs(source_crs);
     }
+    if let Some(subset) = subset {
+        request = request.with_subset(subset);
+    }
+    if let Some(weld) = weld {
+        request = request.with_weld(weld);
+    }
     if let Some(path) = scratch_dir {
         request = request.with_scratch_dir(path);
     }
     if let Some(bytes) = memory_budget {
         request = request.with_memory_budget(bytes);
+    }
+    if let Some(path) = report_path {
+        request = request.with_report_path(path);
     }
     let result = run_job(py, callback, |run| {
         tiles_core::mesh_to_tileset(request, run)
@@ -446,6 +510,115 @@ fn mesh_to_tileset(
     Ok(TilerResult {
         output: result.output,
         archive: true,
+        report: serde_json::json!(result.report),
+        diagnostics: serde_json::json!(result.diagnostics),
+        cleanup_diagnostics: cleanup_diagnostics(result.cleanup_diagnostics),
+    })
+}
+
+/// Check a `mesh` source before a bake, writing no archive: its exact-position topology
+/// (open edges and loops by size class, primitive boundaries and seams, repeated positions,
+/// connected components), read straight from the source. `forecast=True` also estimates
+/// coarse omission per cell over the same cells `mesh_to_tileset` would build (pass the
+/// same profile, placement and source CRS options); it captures the source and costs most
+/// of a bake. `geojson` writes a `.geojson` of open loops and seams at least
+/// `min_feature_length` metres long (and, with the forecast, of the cells at risk), in
+/// WGS84, which needs `anchor` or `source_crs`; `geojson_local=True` writes local
+/// east/north metres instead (not RFC 7946). `force` replaces an existing one. Returns an
+/// `InspectResult`; its `report` is independent of `jobs`, the budget, the scratch location
+/// and the GeoJSON path. The omission forecast is an estimate. `callback` receives progress
+/// events, as for `mesh_to_tileset`.
+/// `weld_epsilon` and `join_primitives` inspect the source welded as `mesh_to_tileset`
+/// would weld it; `report["weld"]` then gives what was merged.
+#[pyfunction]
+#[pyo3(signature = (input, *, geojson=None, geojson_local=false, min_feature_length=tiles_core::DEFAULT_MIN_FEATURE_LENGTH, profile="balanced", jobs=None, scratch_dir=None, memory_budget_bytes=None, anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None, height_offset=None, weld_epsilon=None, join_primitives=None, forecast=false, force=false, callback=None))]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one keyword per CLI option, as mesh_to_tileset"
+)]
+fn inspect_mesh(
+    py: Python<'_>,
+    input: PathBuf,
+    geojson: Option<PathBuf>,
+    geojson_local: bool,
+    min_feature_length: f64,
+    profile: &str,
+    jobs: Option<Bound<'_, PyAny>>,
+    scratch_dir: Option<PathBuf>,
+    memory_budget_bytes: Option<Bound<'_, PyAny>>,
+    anchor: Option<(f64, f64, f64)>,
+    orientation_xyzw: Option<(f64, f64, f64, f64)>,
+    scene_offset: Option<(f64, f64, f64)>,
+    source_crs: Option<&str>,
+    source_axes: Option<&str>,
+    source_offset: Option<Vec<f64>>,
+    source_offset_file: Option<PathBuf>,
+    height_offset: Option<f64>,
+    weld_epsilon: Option<f64>,
+    join_primitives: Option<&str>,
+    forecast: bool,
+    force: bool,
+    callback: Option<Py<PyAny>>,
+) -> PyResult<InspectResult> {
+    let profile = profile
+        .parse::<TilerProfile>()
+        .map_err(|error| tiler_request_error(py, error))?;
+    let jobs = tiler_jobs(py, jobs)?;
+    let memory_budget = tiler_memory_budget(py, memory_budget_bytes)?;
+    let source_axes = source_axes
+        .map(|axes| match axes {
+            "xyz" => Ok(SourceAxes::Xyz),
+            "y-up" => Ok(SourceAxes::YUp),
+            _ => Err(tiler_request_error(
+                py,
+                JobError::new(
+                    JobErrorKind::InvalidRequest,
+                    "source_axes must be xyz or y-up",
+                ),
+            )),
+        })
+        .transpose()?;
+    let source_crs = MeshSourceCrs::from_parameters(
+        source_crs,
+        source_axes,
+        source_offset.as_deref(),
+        source_offset_file.as_deref(),
+        height_offset,
+    )
+    .map_err(|error| tiler_request_error(py, error))?;
+    let mut request = tiles_core::InspectRequest::new(input)
+        .with_profile(profile)
+        .with_jobs(jobs)
+        .with_forecast(forecast)
+        .with_min_feature_length(min_feature_length)
+        .with_geojson_local(geojson_local)
+        .with_placement(rigid_placement(anchor, orientation_xyzw, scene_offset)?)
+        .with_output_policy(if force {
+            OutputPolicy::Replace
+        } else {
+            OutputPolicy::CreateNew
+        });
+    if let Some(path) = geojson {
+        request = request.with_geojson(path);
+    }
+    if let Some(weld) = MeshWeld::from_parameters(weld_epsilon, join_primitives)
+        .map_err(|error| tiler_request_error(py, error))?
+    {
+        request = request.with_weld(weld);
+    }
+    if let Some(source_crs) = source_crs {
+        request = request.with_source_crs(source_crs);
+    }
+    if let Some(path) = scratch_dir {
+        request = request.with_scratch_dir(path);
+    }
+    if let Some(bytes) = memory_budget {
+        request = request.with_memory_budget(bytes);
+    }
+    let result = run_job(py, callback, |run| tiles_core::inspect_mesh(request, run))?;
+    Ok(InspectResult {
+        summary: result.summary_lines(),
+        geojson: result.geojson,
         report: serde_json::json!(result.report),
         diagnostics: serde_json::json!(result.diagnostics),
         cleanup_diagnostics: cleanup_diagnostics(result.cleanup_diagnostics),
@@ -991,10 +1164,12 @@ impl ValidationPayloadsIter {
 /// lesser of 4 GiB and half the detected headroom) sizes the scratch stores, as for
 /// `mesh_to_tileset`; `jobs` (a positive int, default `None` for auto) caps parallel workers.
 /// Neither changes a verdict or any report member outside `resources` and `scratch`.
+/// `coarse_crossings=True` also counts coarse self-intersections on HLOD archives
+/// (`interfaceCensus.coarseCrossings`); no verdict depends on it.
 /// `callback` receives progress events; raising from it (or Ctrl-C) stops the validation and
 /// the exception propagates.
 #[pyfunction]
-#[pyo3(signature = (input, *, lazy_payloads = false, max_volume = None, scratch_dir = None, expect_profile = None, memory_budget_bytes = None, jobs = None, callback = None))]
+#[pyo3(signature = (input, *, lazy_payloads = false, max_volume = None, scratch_dir = None, expect_profile = None, memory_budget_bytes = None, jobs = None, coarse_crossings = false, callback = None))]
 #[allow(clippy::too_many_arguments)]
 fn validate(
     py: Python<'_>,
@@ -1005,6 +1180,7 @@ fn validate(
     expect_profile: Option<String>,
     memory_budget_bytes: Option<Bound<'_, PyAny>>,
     jobs: Option<Bound<'_, PyAny>>,
+    coarse_crossings: bool,
     callback: Option<Py<PyAny>>,
 ) -> PyResult<Py<PyAny>> {
     use tiles_core::validate::{ExpectedProfile, LimitKey, ValidationFailure, ValidationRequest};
@@ -1034,6 +1210,9 @@ fn validate(
     }
     if let Some(profile) = expected {
         request = request.expect_profile(profile);
+    }
+    if coarse_crossings {
+        request = request.coarse_crossings();
     }
     if let Some(mapping) = max_volume {
         let mapping = mapping
@@ -1467,6 +1646,7 @@ fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PackageResult>()?;
     module.add_class::<PackageReceipt>()?;
     module.add_class::<TilerResult>()?;
+    module.add_class::<InspectResult>()?;
     module.add_class::<ModelWrapResult>()?;
     module.add_class::<ModelManifestResult>()?;
     module.add_class::<RasterDirectoryResult>()?;
@@ -1497,6 +1677,7 @@ fn rusty_tiles(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.py().get_type::<UnsupportedError>(),
     )?;
     module.add_function(wrap_pyfunction!(mesh_to_tileset, module)?)?;
+    module.add_function(wrap_pyfunction!(inspect_mesh, module)?)?;
     module.add_function(wrap_pyfunction!(raster_tile_to_directory, module)?)?;
     module.add_function(wrap_pyfunction!(glb_to_3tz, module)?)?;
     module.add_function(wrap_pyfunction!(model_to_manifest, module)?)?;

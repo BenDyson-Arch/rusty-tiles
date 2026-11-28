@@ -7,7 +7,7 @@
 //! exceeds the tolerance uses per-vertex Jacobians. Every later stage sees local metres
 //! only; the root transform carries ENU to ECEF.
 use crate::{
-    crs::Transform,
+    crs::{PureTransform, Transform},
     crs_jacobian,
     georef::{ecef_to_cartographic, EnuFrame, SourceAxes, SourceOffset},
     gltf_source::source::within_local_domain,
@@ -15,7 +15,7 @@ use crate::{
     JobError, JobErrorKind, MeshPlacement,
 };
 use serde::Serialize;
-use std::{io::Read, mem::Discriminant, path::Path};
+use std::{io::Read, mem::Discriminant, path::Path, sync::Arc};
 
 type Result<T> = std::result::Result<T, JobError>;
 type Columns = [[f64; 3]; 3];
@@ -308,7 +308,7 @@ pub(crate) struct CrsFrame {
     frame: EnuFrame,
     placement: ResolvedPlacement,
     report: MeshSourceCrsReport,
-    lattice: Lattice,
+    lattice: Arc<Lattice>,
 }
 
 /// Capture's coordinate frame: identity rounding, or a resolved source CRS.
@@ -392,9 +392,9 @@ impl SourceFrame {
             frame: EnuFrame::new(origin),
             placement,
             report,
-            lattice: Lattice::default(),
+            lattice: Arc::default(),
         });
-        frame.lattice = frame.build_lattice(min, max)?;
+        frame.lattice = Arc::new(frame.build_lattice(min, max)?);
         frame.report.jacobian_lattice_cells = frame.lattice.cells.map(|n| n as u64);
         frame.report.jacobian_exact_cells =
             frame.lattice.exact.iter().filter(|e| **e).count() as u64;
@@ -417,6 +417,56 @@ impl SourceFrame {
         }
     }
 
+    /// A copy of this frame that worker threads can share, or `None` for a native source
+    /// CRS: its GDAL/PROJ handles stay on the thread that made them. A copy holds a clone
+    /// of the resolved portable transform and shares the resolved lattice, so it maps every
+    /// vertex as this frame does.
+    pub(crate) fn portable(&self) -> Option<PortableFrame> {
+        match self {
+            Self::Local => Some(PortableFrame::Local),
+            Self::Crs(frame) => match &frame.operation {
+                Transform::Pure(operation) => Some(PortableFrame::Crs(Box::new(PortableCrs {
+                    operation: (**operation).clone(),
+                    axes: frame.axes,
+                    offset: frame.offset,
+                    horizontal_step: frame.horizontal_step,
+                    degrees_per_unit: frame.degrees_per_unit,
+                    frame: frame.frame,
+                    placement: frame.placement.clone(),
+                    report: frame.report.clone(),
+                    lattice: Arc::clone(&frame.lattice),
+                }))),
+                #[cfg(feature = "native-geospatial")]
+                Transform::Native(_) => None,
+            },
+        }
+    }
+
+    /// WGS84 geodetic longitude and latitude in degrees of a post-node source position:
+    /// the position plus the source offset mapped through the CRS to ECEF, then converted
+    /// in f64 ([`ecef_lon_lat`]). Only a CRS frame has them.
+    pub(crate) fn lon_lat(&mut self, world: [f64; 3]) -> Result<[f64; 2]> {
+        match self {
+            Self::Local => Err(JobError::new(
+                JobErrorKind::InvalidState,
+                "a local source has no geographic coordinates",
+            )),
+            Self::Crs(frame) => Ok(ecef_lon_lat(frame.checked_ecef(world)?)),
+        }
+    }
+
+    /// [`Self::vertex`]'s position (without a Jacobian) and, for a CRS frame, the
+    /// position's [`Self::lon_lat`], from one mapping.
+    pub(crate) fn locate(&mut self, world: [f64; 3]) -> Result<([f32; 3], Option<[f64; 2]>)> {
+        match self {
+            Self::Local => Ok((self.vertex(world, false)?.0, None)),
+            Self::Crs(frame) => {
+                let (position, ecef) = frame.mapped(world)?;
+                Ok((position, Some(ecef_lon_lat(ecef))))
+            }
+        }
+    }
+
     /// A position, rounded once to f32, and, when requested in CRS mode, its Jacobian.
     pub(crate) fn vertex(
         &mut self,
@@ -426,6 +476,51 @@ impl SourceFrame {
         match self {
             Self::Local => Ok((world.map(|x| x as f32), None)),
             Self::Crs(frame) => frame.vertex(world, jacobian),
+        }
+    }
+}
+
+/// A [`SourceFrame`] without native handles, so it can be shared by worker threads; each
+/// task makes its own [`SourceFrame`] from it with [`PortableFrame::frame`].
+pub(crate) enum PortableFrame {
+    Local,
+    Crs(Box<PortableCrs>),
+}
+
+pub(crate) struct PortableCrs {
+    operation: PureTransform,
+    axes: SourceAxes,
+    offset: SourceOffset,
+    horizontal_step: f64,
+    degrees_per_unit: Option<f64>,
+    frame: EnuFrame,
+    placement: ResolvedPlacement,
+    report: MeshSourceCrsReport,
+    lattice: Arc<Lattice>,
+}
+
+impl PortableFrame {
+    /// A frame for one task. A portable transform carries no state between batches (a
+    /// promotion to native PROJ fails the capture either way), so a fresh one per task maps
+    /// exactly as one long-lived frame would.
+    pub(crate) fn frame(&self) -> SourceFrame {
+        match self {
+            Self::Local => SourceFrame::Local,
+            Self::Crs(crs) => {
+                let operation = Transform::Pure(Box::new(crs.operation.clone()));
+                SourceFrame::Crs(Box::new(CrsFrame {
+                    kind: std::mem::discriminant(&operation),
+                    operation,
+                    axes: crs.axes,
+                    offset: crs.offset,
+                    horizontal_step: crs.horizontal_step,
+                    degrees_per_unit: crs.degrees_per_unit,
+                    frame: crs.frame,
+                    placement: crs.placement.clone(),
+                    report: crs.report.clone(),
+                    lattice: Arc::clone(&crs.lattice),
+                }))
+            }
         }
     }
 }
@@ -538,9 +633,17 @@ impl CrsFrame {
         Ok(lattice)
     }
 
-    fn vertex(&mut self, world: [f64; 3], jacobian: bool) -> Result<([f32; 3], Option<Jacobian>)> {
+    /// The WGS84 ECEF position of `world`, checked to stay on the capture's operation.
+    fn checked_ecef(&mut self, world: [f64; 3]) -> Result<[f64; 3]> {
         let ecef = self.ecef(world).map_err(source_error)?;
         self.check_kind()?;
+        Ok(ecef)
+    }
+
+    /// The local ENU (glTF Y-up) position of `world`, in the mesh domain and rounded once
+    /// to f32, and its checked WGS84 ECEF position.
+    fn mapped(&mut self, world: [f64; 3]) -> Result<([f32; 3], [f64; 3])> {
+        let ecef = self.checked_ecef(world)?;
         let local = crs_jacobian::to_y_up(self.frame.to_enu(ecef));
         if !local.iter().all(|v| within_local_domain(*v)) {
             return Err(JobError::new(
@@ -548,6 +651,11 @@ impl CrsFrame {
                 "source CRS position maps outside the local mesh domain",
             ));
         }
+        Ok((local.map(|v| v as f32), ecef))
+    }
+
+    fn vertex(&mut self, world: [f64; 3], jacobian: bool) -> Result<([f32; 3], Option<Jacobian>)> {
+        let (position, ecef) = self.mapped(world)?;
         let jacobian = if jacobian {
             let (cell, t) = self.lattice.locate(world);
             let interpolated = (!self.lattice.exact[self.lattice.cell_index(cell)])
@@ -564,7 +672,7 @@ impl CrsFrame {
         } else {
             None
         };
-        Ok((local.map(|v| v as f32), jacobian))
+        Ok((position, jacobian))
     }
 
     /// The per-vertex Jacobian, bypassing the lattice (accuracy audits).
@@ -573,6 +681,29 @@ impl CrsFrame {
         let ecef = self.ecef(world).unwrap();
         Jacobian(self.exact(world, ecef).unwrap())
     }
+}
+
+/// WGS84 geodetic longitude and latitude in degrees of an ECEF position, in f64: the
+/// longitude from `atan2(y, x)`, the latitude from Bowring's estimate refined by two fixed-point
+/// steps of `φ = atan2(z + e²·N(φ)·sin φ, p)` (well below 1e-12° near the Earth's surface).
+/// Deterministic, and stable at the poles.
+pub(crate) fn ecef_lon_lat(ecef: [f64; 3]) -> [f64; 2] {
+    const A: f64 = 6_378_137.0;
+    const F: f64 = 1.0 / 298.257_223_563;
+    let [x, y, z] = ecef;
+    let e2 = F * (2.0 - F);
+    let b = A * (1.0 - F);
+    let ep2 = (A * A - b * b) / (b * b);
+    let p = x.hypot(y);
+    let theta = (z * A).atan2(p * b);
+    let (sin, cos) = theta.sin_cos();
+    let mut lat = (z + ep2 * b * sin * sin * sin).atan2(p - e2 * A * cos * cos * cos);
+    for _ in 0..2 {
+        let s = lat.sin();
+        let n = A / (1.0 - e2 * s * s).sqrt();
+        lat = (z + e2 * n * s).atan2(p);
+    }
+    [y.atan2(x).to_degrees(), lat.to_degrees()]
 }
 
 fn relative_error(want: &Columns, got: &Columns) -> f64 {

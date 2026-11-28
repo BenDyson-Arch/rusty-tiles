@@ -93,14 +93,20 @@ impl Spilled {
             Ok(b)
         };
         let header = read(24)?;
-        // Published G and the texture sums (D5 amendment A3).
-        let extra = read(24)?;
+        // Published and certified G, texture sums, optional decoded coordinates.
+        let extra = read(32)?;
         let word = |i: usize| f64::from_le_bytes(extra[i * 8..i * 8 + 8].try_into().unwrap());
+        let surface_error = word(3);
+        let override_flag = read(1)?[0];
         let sizes: [usize; 4] = std::array::from_fn(|i| {
             u32::from_le_bytes(header[i * 4..i * 4 + 4].try_into().unwrap()) as usize
         });
         let [vertices, triangles, primitives, interfaces] = sizes;
+        let overrides = if override_flag == 1 { vertices } else { 0 };
         if triangles as u64 != self.triangles
+            || override_flag > 1
+            || !surface_error.is_finite()
+            || surface_error < 0.
             || vertices > 3 * triangles
             || primitives > triangles
             || interfaces > 6 * triangles
@@ -117,18 +123,27 @@ impl Spilled {
             interface: Vec::with_capacity(interfaces),
             geometric_error: f64::from_le_bytes(header[16..24].try_into().unwrap()),
             published_error: word(0),
+            surface_error,
+            decoded_override: Vec::with_capacity(overrides),
             texture: crate::mesh_large::hlod::texture_error::Sums {
                 area: word(1),
                 texels: word(2),
             },
             lease: None,
         };
+        let point = |bytes: &[u8]| {
+            std::array::from_fn(|i| {
+                let k = 4 * i;
+                f32::from_le_bytes([bytes[k], bytes[k + 1], bytes[k + 2], bytes[k + 3]])
+            })
+        };
         for _ in 0..vertices {
             let b = read(13)?;
             tile.ells.push(b[0]);
-            tile.positions.push(std::array::from_fn(|i| {
-                f32::from_le_bytes(b[1 + i * 4..5 + i * 4].try_into().unwrap())
-            }));
+            tile.positions.push(point(&b[1..13]));
+        }
+        for _ in 0..overrides {
+            tile.decoded_override.push(point(&read(12)?));
         }
         for _ in 0..triangles {
             let b = read(16)?;
@@ -195,7 +210,8 @@ impl<'l, 's> Manager<'l, 's> {
         if self.lease.is_none() {
             self.lease = Some(self.ledger.admit("s1b-held-tiles", self.bound)?);
         }
-        let size = 48
+        let size = 57
+            + 12 * tile.decoded_override.len() as u64
             + 13 * tile.positions.len() as u64
             + 16 * tile.triangles.len() as u64
             + 24 * tile.primitives.len() as u64
@@ -220,13 +236,20 @@ impl<'l, 's> Manager<'l, 's> {
             tile.published_error,
             tile.texture.area,
             tile.texture.texels,
+            tile.surface_error,
         ] {
             writer.append(&v.to_le_bytes())?;
         }
+        writer.append(&[u8::from(!tile.decoded_override.is_empty())])?;
         for (p, ell) in tile.positions.iter().zip(&tile.ells) {
             writer.append(&[*ell])?;
             for c in p {
                 writer.append(&c.to_le_bytes())?;
+            }
+        }
+        for p in &tile.decoded_override {
+            for value in p {
+                writer.append(&value.to_le_bytes())?;
             }
         }
         for (t, r) in tile.triangles.iter().zip(&tile.representative) {
@@ -331,6 +354,8 @@ mod tests {
             interface: vec![InterfaceRow::new(1, key(p[0]), key(p[1]), 1, 3)],
             geometric_error: 0.125,
             published_error: 0.5,
+            surface_error: 0.375,
+            decoded_override: vec![[0.25, 1., 0.]; 3],
             texture: crate::mesh_large::hlod::texture_error::Sums {
                 area: 2.,
                 texels: 3.,
@@ -346,6 +371,8 @@ mod tests {
         assert_eq!(loaded.interface[0].a, key(p[0]));
         assert_eq!(loaded.geometric_error, 0.125);
         assert_eq!(loaded.published_error, 0.5);
+        assert_eq!(loaded.surface_error, 0.375);
+        assert_eq!(loaded.delivered_positions(), [[0.25, 1., 0.]; 3]);
         assert_eq!((loaded.texture.area, loaded.texture.texels), (2., 3.));
         assert_eq!(manager.stats.tiles, 1);
         assert!(manager.stats.peak_bytes > 0);

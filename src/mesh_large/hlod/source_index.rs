@@ -1,8 +1,8 @@
 //! Bounded source-surface index shared by S2 measurement and S3 appearance.
 //! Source ranks refer to captured (pre-leaf-quantization) triangles. Queries are clipped
-//! to the tile's descendant range, with distance then source-rank ties; no facing or
-//! material restrictions. Disk sequences use capture's scratch owner. Each query owns
-//! a fixed cache; no allocation scales with the source or with the tile's source range.
+//! to the tile's descendant range across materials and facings. Distance ties use
+//! provenance, expanded ordinal and rank. Capture owns the spill files. The shared
+//! directory grows with the source, and each query has a fixed cache.
 use super::{
     resource,
     scratch::ComponentLease,
@@ -15,22 +15,44 @@ use crate::{
         full::FullCaptured,
         records::{Bounds, Provenance},
     },
-    spill::{RandomRecords, Record, Sequence, SequenceWriter},
+    spill::{Layout, RandomRecords, Record, Sequence, SequenceWriter},
     JobError,
 };
 use rustc_hash::FxHashMap as HashMap;
 use std::collections::VecDeque;
 
 pub(crate) const BLOCK: usize = 256;
+// The spill codec uses a quarter of its buffer per block. Align a positioned
+// read of one fine BVH with a single compressed block.
+const TRIANGLE_BUFFER: usize = 4 * BLOCK * Triangle::SIZE;
 const CACHE_BLOCKS: usize = 64;
 const CACHE_NODES: usize = 16384;
 const RESIDENT_CACHE_BLOCKS: usize = 384;
 /// Includes both caches, compact and full-row I/O, build workspace, stacks and slack.
 pub(crate) const QUERY_BYTES: u64 = 16 << 20;
-pub(crate) const BUILD_BYTES: u64 = 2 << 20;
-/// Compact triangles plus <= one fine node per two triangles, upper nodes and slack.
+/// One build block and its workspaces, plus the shared codec directory. Each
+/// block has an eight-byte offset and a one-byte storage flag. The factor of
+/// three covers both vector allocations during growth, with a sentinel and
+/// minimum capacities covered by the fixed workspace.
+pub(crate) fn build_bytes(n: u64) -> u64 {
+    (2u64 << 20).saturating_add(
+        n.div_ceil(BLOCK as u64)
+            .saturating_add(1)
+            .saturating_mul(27),
+    )
+}
+
+fn index_bytes(triangles: u64, nodes: u64) -> Option<u64> {
+    triangles
+        .checked_mul(Triangle::SIZE as u64)?
+        .checked_add(nodes.checked_mul(Node::SIZE as u64)?)
+}
+
+/// Incompressible triangle blocks are stored raw. A full binary tree on b
+/// nonempty blocks has b leaves and b - 1 branches.
 pub(crate) fn scratch_need(n: u64) -> Option<u64> {
-    n.checked_mul(160)?.checked_add(1 << 20)
+    let blocks = n.div_ceil(BLOCK as u64);
+    index_bytes(n, blocks + blocks.saturating_sub(1))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -39,18 +61,17 @@ pub(crate) struct Triangle {
     pub rank: u64,
     pub order: (Provenance, u64),
     pub material: u32,
-    pub controls: u32,
+    pub controls: u8,
     area_bits: u64,
 }
 impl Triangle {
     pub(crate) fn new(p: [[f32; 3]; 3], rank: u64) -> Self {
-        let q = p.map(|p| p.map(f64::from));
-        let n = cross(sub(q[1], q[0]), sub(q[2], q[0]));
+        let bits = p.map(|p| p.map(f32::to_bits));
         Self {
             material: u32::MAX,
             controls: 0,
-            area_bits: (0.5 * dot(n, n).sqrt()).to_bits(),
-            bits: p.map(|p| p.map(f32::to_bits)),
+            area_bits: Self::area_bits(bits),
+            bits,
             rank,
             order: (
                 Provenance {
@@ -60,6 +81,11 @@ impl Triangle {
                 0,
             ),
         }
+    }
+    fn area_bits(bits: [[u32; 3]; 3]) -> u64 {
+        let p = bits.map(|p| p.map(|x| f64::from(f32::from_bits(x))));
+        let n = cross(sub(p[1], p[0]), sub(p[2], p[0]));
+        (0.5 * dot(n, n).sqrt()).to_bits()
     }
     #[inline(always)]
     pub(crate) fn positions(self) -> [V3; 3] {
@@ -113,7 +139,7 @@ pub(crate) fn mark_controls(triangles: &mut [Triangle]) {
 }
 
 impl Record for Triangle {
-    const SIZE: usize = 88;
+    const SIZE: usize = 77;
     fn encode(&self, b: &mut [u8]) {
         for (v, o) in self
             .bits
@@ -133,19 +159,19 @@ impl Record for Triangle {
         b[56..64].copy_from_slice(&self.order.0.triangle.to_le_bytes());
         b[64..72].copy_from_slice(&self.order.1.to_le_bytes());
         b[72..76].copy_from_slice(&self.material.to_le_bytes());
-        b[76..80].copy_from_slice(&self.controls.to_le_bytes());
-        b[80..88].copy_from_slice(&self.area_bits.to_le_bytes());
+        b[76] = self.controls;
     }
     fn decode(b: &[u8]) -> Self {
+        let bits = std::array::from_fn(|i| {
+            std::array::from_fn(|j| {
+                u32::from_le_bytes(b[(i * 3 + j) * 4..(i * 3 + j + 1) * 4].try_into().unwrap())
+            })
+        });
         Self {
             material: u32::from_le_bytes(b[72..76].try_into().unwrap()),
-            controls: u32::from_le_bytes(b[76..80].try_into().unwrap()),
-            area_bits: u64::from_le_bytes(b[80..88].try_into().unwrap()),
-            bits: std::array::from_fn(|i| {
-                std::array::from_fn(|j| {
-                    u32::from_le_bytes(b[(i * 3 + j) * 4..(i * 3 + j + 1) * 4].try_into().unwrap())
-                })
-            }),
+            controls: b[76],
+            area_bits: Self::area_bits(bits),
+            bits,
             rank: u64::from_le_bytes(b[36..44].try_into().unwrap()),
             order: (
                 Provenance {
@@ -159,7 +185,7 @@ impl Record for Triangle {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 struct Node {
     lo: [u32; 3],
     hi: [u32; 3],
@@ -172,6 +198,42 @@ struct Node {
     area_bits: u64,
 }
 impl Node {
+    fn span(triangles: &[Triangle], start: usize) -> Self {
+        let mut bounds = Bounds::EMPTY;
+        let (mut first, mut end) = (u64::MAX, 0);
+        for t in triangles {
+            for p in t.bits {
+                bounds.include(p.map(f32::from_bits));
+            }
+            first = first.min(t.rank);
+            end = end.max(t.rank + 1);
+        }
+        Self {
+            lo: bounds.min.map(f32::to_bits),
+            hi: bounds.max.map(f32::to_bits),
+            first,
+            end,
+            start: start as u32,
+            count: triangles.len() as u32,
+            area_bits: triangles.iter().map(|t| t.area()).sum::<f64>().to_bits(),
+            ..Self::default()
+        }
+    }
+    fn branch(a: Node, b: Node, left: u64, right: u64, start: usize) -> Self {
+        let mut bounds = a.bounds();
+        bounds.union(&b.bounds());
+        Self {
+            lo: bounds.min.map(f32::to_bits),
+            hi: bounds.max.map(f32::to_bits),
+            first: a.first.min(b.first),
+            end: a.end.max(b.end),
+            left,
+            right,
+            start: start as u32,
+            count: 0,
+            area_bits: (a.area() + b.area()).to_bits(),
+        }
+    }
     fn area(&self) -> f64 {
         f64::from_bits(self.area_bits)
     }
@@ -253,29 +315,11 @@ impl Surface {
         }
         let mut nodes = Vec::with_capacity(triangles.len().div_ceil(4) * 2 + 1);
         fn build(t: &mut [Triangle], base: usize, nodes: &mut Vec<Node>) -> usize {
-            let mut b = Bounds::EMPTY;
-            let (mut first, mut end) = (u64::MAX, 0);
-            for t in t.iter() {
-                for p in t.bits {
-                    b.include(p.map(f32::from_bits));
-                }
-                first = first.min(t.rank);
-                end = end.max(t.rank + 1);
-            }
             let at = nodes.len();
-            nodes.push(Node {
-                lo: b.min.map(f32::to_bits),
-                hi: b.max.map(f32::to_bits),
-                first,
-                end,
-                left: 0,
-                right: 0,
-                start: base as u32,
-                count: t.len() as u32,
-                area_bits: t.iter().map(|t| t.area()).sum::<f64>().to_bits(),
-            });
+            let node = Node::span(t, base);
+            nodes.push(node);
             if t.len() > 4 {
-                let ext = b.extent();
+                let ext = node.bounds().extent();
                 let axis = (0..3).max_by(|&a, &b| ext[a].total_cmp(&ext[b])).unwrap();
                 let mid = t.len() / 2;
                 let centre = |t: &Triangle| t.positions().iter().map(|p| p[axis]).sum::<f64>();
@@ -293,6 +337,30 @@ impl Surface {
         }
         build(&mut triangles, 0, &mut nodes);
         Ok(Self { triangles, nodes })
+    }
+    /// The writer already partitioned these rows into contiguous median halves.
+    /// Recreate preorder node IDs, leaf spans, rank ranges and search boxes
+    /// bottom-up in linear time. Area queries use the persisted upper nodes or
+    /// individual triangles, so they retain the writer's original addition order.
+    fn from_ordered_block(triangles: Vec<Triangle>) -> Self {
+        fn restore(t: &[Triangle], base: usize, nodes: &mut Vec<Node>) -> usize {
+            let at = nodes.len();
+            if t.len() <= 4 {
+                nodes.push(Node::span(t, base));
+            } else {
+                nodes.push(Node::default());
+                let mid = t.len() / 2;
+                let left = restore(&t[..mid], base, nodes);
+                let right = restore(&t[mid..], base + mid, nodes);
+                nodes[at] =
+                    Node::branch(nodes[left], nodes[right], left as u64, right as u64, base);
+            }
+            at
+        }
+        let leaves = triangles.len().next_power_of_two().div_ceil(4);
+        let mut nodes = Vec::with_capacity(2 * leaves - 1);
+        restore(&triangles, 0, &mut nodes);
+        Self { triangles, nodes }
     }
     pub(crate) fn charge(&self) -> usize {
         self.triangles.capacity() * std::mem::size_of::<Triangle>()
@@ -596,8 +664,9 @@ fn make_hit(p: V3, t: Triangle, index: usize) -> Hit {
         material: t.material,
     }
 }
-/// Immutable disk index. Construction streams rank-ordered blocks, holding O(log N)
-/// upper nodes and one 256-triangle fine BVH. Readers/caches belong to each admitted job.
+/// Immutable disk index. Construction streams rank-ordered blocks with one
+/// 256-triangle fine BVH, O(log N) upper nodes and one codec offset/flag per
+/// block. Readers and their caches belong to each admitted job.
 pub(crate) struct SourceIndex {
     nodes: Sequence<Node>,
     triangles: Sequence<Triangle>,
@@ -613,10 +682,12 @@ struct IndexWriter<'l, 'w, 'a> {
 impl IndexWriter<'_, '_, '_> {
     /// Charge the bytes written so far plus `nodes` and `triangles` records about to be.
     fn admit(&self, nodes: u64, triangles: u64) -> Result<(), JobError> {
-        let bytes = (self.nodes.len() + nodes)
-            .checked_mul(Node::SIZE as u64)
-            .zip((self.triangles.len() + triangles).checked_mul(Triangle::SIZE as u64))
-            .and_then(|(a, b)| a.checked_add(b))
+        let bytes = self
+            .triangles
+            .len()
+            .checked_add(triangles)
+            .zip(self.nodes.len().checked_add(nodes))
+            .and_then(|(t, n)| index_bytes(t, n))
             .ok_or_else(|| resource("source index size overflows"))?;
         self.lease.charge(bytes)
     }
@@ -635,7 +706,12 @@ impl SourceIndex {
     ) -> Result<Self, JobError> {
         let mut out = IndexWriter {
             nodes: SequenceWriter::new(&captured.scratch, "hlod-source-nodes", 65536)?,
-            triangles: SequenceWriter::new(&captured.scratch, "hlod-source-triangles", 65536)?,
+            triangles: SequenceWriter::compressed(
+                &captured.scratch,
+                "hlod-source-triangles",
+                TRIANGLE_BUFFER,
+                Layout::FULL,
+            )?,
             lease,
         };
         let mut reader = captured
@@ -665,19 +741,15 @@ impl SourceIndex {
                 }
                 mark_controls(&mut tris);
                 let s = Surface::new(tris)?;
-                out.admit(s.nodes.len() as u64 + 1, s.triangles.len() as u64)?;
-                let offset = out.nodes.len();
-                for n in &s.nodes {
-                    out.nodes.push(n)?;
-                }
+                out.admit(1, s.triangles.len() as u64)?;
                 for t in &s.triangles {
                     out.triangles.push(t)?;
                 }
                 let mut node = s.nodes[0];
                 node.first = first;
                 node.end = *rank;
-                node.left = offset;
-                node.right = s.nodes.len() as u64;
+                node.left = 0;
+                node.right = 0;
                 node.start = 0;
                 node.count = count as u32;
                 let id = out.nodes.len();
@@ -688,19 +760,7 @@ impl SourceIndex {
             let left_count = (count.div_ceil(BLOCK as u64) / 2) * BLOCK as u64;
             let (a, na) = build(left_count, rank, reader, out, check)?;
             let (b, nb) = build(count - left_count, rank, reader, out, check)?;
-            let mut bounds = na.bounds();
-            bounds.union(&nb.bounds());
-            let n = Node {
-                lo: bounds.min.map(f32::to_bits),
-                hi: bounds.max.map(f32::to_bits),
-                first: na.first,
-                end: nb.end,
-                left: a,
-                right: b,
-                start: 0,
-                count: 0,
-                area_bits: (na.area() + nb.area()).to_bits(),
-            };
+            let n = Node::branch(na, nb, a, b, 0);
             out.admit(1, 0)?;
             let id = out.nodes.len();
             out.nodes.push(&n)?;
@@ -718,6 +778,9 @@ impl SourceIndex {
             triangles: out.triangles.finish()?,
             root,
         })
+    }
+    pub(super) fn stored_bytes(&self) -> u64 {
+        self.nodes.stored_bytes() + self.triangles.stored_bytes()
     }
     pub(crate) fn query<'a>(
         &'a self,
@@ -886,9 +949,9 @@ impl SourceQuery<'_> {
         self.region.push(Region { node, children });
         Ok(at)
     }
-    // Charge actual vector capacities and conservative hash allocation bounds,
-    // plus 128 KiB for handles, allocator headers and an in-flight replacement block.
-    // Refuse rather than letting a cache/backend change exceed the admitted workspace.
+    // Charge actual vector capacities and conservative hash allocation bounds, the
+    // compressed readers' block caches, plus 128 KiB for handles, allocator headers and an
+    // in-flight replacement block.
     fn check_charge(&self) -> Result<(), JobError> {
         use std::mem::size_of;
         let bytes = self.node_cache.capacity() * 2 * (size_of::<(u64, Node)>() + 1)
@@ -899,9 +962,12 @@ impl SourceQuery<'_> {
             + self.node_buf.capacity() * size_of::<Node>()
             + self.tri_buf.capacity() * size_of::<Triangle>()
             + self.full_buf.capacity() * size_of::<FullTriangle>()
-            + self.block_bytes
+            + self.block_bytes;
+        let bytes = bytes as u64
+            + crate::spill::random_cache_bound(Triangle::SIZE, 1)
+            + crate::spill::random_cache_bound(FullTriangle::SIZE, 1)
             + (128 << 10);
-        if bytes as u64 > QUERY_BYTES {
+        if bytes > QUERY_BYTES {
             return Err(resource(format!(
                 "source query cache needs {bytes} bytes, admitted {QUERY_BYTES}"
             )));
@@ -949,35 +1015,7 @@ impl SourceQuery<'_> {
                 continue;
             }
             if n.count > 0 {
-                if !self.blocks.contains_key(&n.first) {
-                    self.nodes.read(
-                        n.left,
-                        n.right as usize,
-                        &mut self.encoded,
-                        &mut self.node_buf,
-                    )?;
-                    self.triangles.read(
-                        n.first,
-                        n.count as usize,
-                        &mut self.encoded,
-                        &mut self.tri_buf,
-                    )?;
-                    let surface = Surface {
-                        nodes: self.node_buf.clone(),
-                        triangles: self.tri_buf.clone(),
-                    };
-                    if self.blocks.len() == self.block_limit {
-                        let old = self
-                            .blocks
-                            .remove(&self.block_fifo.pop_front().unwrap())
-                            .unwrap();
-                        self.block_bytes -= old.charge();
-                    }
-                    self.block_fifo.push_back(n.first);
-                    self.block_bytes += surface.charge();
-                    self.blocks.insert(n.first, surface);
-                    self.check_charge()?;
-                }
+                self.load_block(&n)?;
                 let previous = best.rank;
                 let surface = &self.blocks[&n.first];
                 surface.nearest(p, self.key, &mut best);
@@ -1023,22 +1061,10 @@ impl SourceQuery<'_> {
             return Ok(());
         }
         let _cpu = super::cpu_profile::start(super::cpu_profile::Stage::FineLoad, n.count as usize);
-        self.nodes.read(
-            n.left,
-            n.right as usize,
-            &mut self.encoded,
-            &mut self.node_buf,
-        )?;
-        self.triangles.read(
-            n.first,
-            n.count as usize,
-            &mut self.encoded,
-            &mut self.tri_buf,
-        )?;
-        let surface = Surface {
-            nodes: self.node_buf.clone(),
-            triangles: self.tri_buf.clone(),
-        };
+        let mut triangles = Vec::with_capacity(n.count as usize);
+        self.triangles
+            .read(n.first, n.count as usize, &mut self.encoded, &mut triangles)?;
+        let surface = Surface::from_ordered_block(triangles);
         if self.blocks.len() == self.block_limit {
             let old = self
                 .blocks
@@ -1343,6 +1369,97 @@ pub(crate) fn distance2(a: V3, b: V3) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn compact_source_rows_preserve_coordinate_bits_area_and_full_identity() {
+        let tiny = f32::from_bits(1);
+        for p in [
+            [[0., -0., tiny]; 3],
+            [[0.; 3], [1e8, 0., 0.], [1e8, 1., 0.]],
+            [[tiny, 0., 0.], [0., -tiny, 0.], [0., 0., tiny]],
+            [[f32::MAX, 0., 1.], [-f32::MAX, 0., -1.], [1., f32::MAX, 1.]],
+        ] {
+            let mut t = Triangle::new(p, u64::MAX - 1);
+            t.order = (
+                Provenance {
+                    node: u32::MAX,
+                    mesh: 0x8765_4321,
+                    primitive: 0xffff_4321,
+                    triangle: u64::MAX,
+                },
+                1u64 << 62,
+            );
+            t.material = 0xfedc_ba98;
+            t.controls = 0b101;
+            let mut row = [0; Triangle::SIZE];
+            t.encode(&mut row);
+            let decoded = Triangle::decode(&row);
+            assert_eq!(decoded, t);
+            let p = p.map(|p| p.map(f64::from));
+            let [a, b, c] = cross(sub(p[1], p[0]), sub(p[2], p[0]));
+            assert_eq!(
+                decoded.area().to_bits(),
+                (0.5 * (a * a + b * b + c * c).sqrt()).to_bits()
+            );
+        }
+    }
+
+    #[test]
+    fn ordered_source_rows_restore_every_fine_search_node() {
+        let rows: Vec<_> = (0..BLOCK)
+            .map(|i| {
+                let p = |j| {
+                    [
+                        ((i * 41 + j * 13) % 157) as f32,
+                        ((i * 23 + j) % 61) as f32,
+                        (i % 3) as f32,
+                    ]
+                };
+                Triangle::new([p(0), p(1), p(i % 5)], (1u64 << 55) + i as u64)
+            })
+            .collect();
+        for count in 1..=BLOCK {
+            let original = Surface::new(rows[..count].to_vec()).unwrap();
+            let restored = Surface::from_ordered_block(original.triangles.clone());
+            assert_eq!(restored.triangles, original.triangles);
+            assert_eq!(restored.nodes.len(), original.nodes.len());
+            for (&old, &new) in original.nodes.iter().zip(&restored.nodes) {
+                // Fine node areas are unused. The rank-order root area lives in the upper index.
+                assert_eq!(
+                    Node {
+                        area_bits: old.area_bits,
+                        ..new
+                    },
+                    old,
+                    "block length {count}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn compact_source_admission_bounds_raw_blocks_and_the_codec_directory() {
+        assert_eq!(
+            crate::spill::block_records(Triangle::SIZE, TRIANGLE_BUFFER),
+            BLOCK as u64
+        );
+        for (n, upper_nodes) in [
+            (0, 0),
+            (1, 1),
+            (255, 1),
+            (256, 1),
+            (257, 3),
+            (512, 3),
+            (513, 5),
+            (828_000_000, 6_468_749),
+        ] {
+            let need = scratch_need(n).unwrap();
+            assert_eq!(need, 77 * n + 72 * upper_nodes);
+            assert!(2 * need <= 160 * n + (1 << 20));
+            assert!(build_bytes(n) >= 2 * (1 << 20) + 27 * n.div_ceil(256));
+        }
+        assert_eq!(scratch_need(u64::MAX), None);
+    }
+
     #[test]
     fn node_distance_matches_the_f64_max_formulation_bit_for_bit() {
         let reference = |n: &Node, p: V3| -> f64 {

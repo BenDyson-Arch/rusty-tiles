@@ -38,12 +38,15 @@
 use super::{identity, invalid, spill_failure, Budget, Error, ScratchRefusal};
 mod borders;
 mod bulk;
+mod crossings;
+pub(crate) use crossings::CoarseCrossings;
 mod drops;
 pub(super) mod recovery;
 mod replay;
 #[cfg(test)]
 pub(super) use replay::JOB_DECODE_BYTES;
 pub(super) use replay::{Fetch, Payloads};
+mod surface_error;
 pub(super) mod texture;
 mod ticks;
 mod vfs;
@@ -690,6 +693,7 @@ impl Incidence {
 }
 #[derive(Default, Debug)]
 struct Surface {
+    extent: Option<surface_error::Extent>,
     points: BTreeSet<CanonicalPoint>,
     edges: BTreeMap<CanonicalEdge, Incidence>,
     /// Nondegenerate faces by key (at most the capped payload's triangles), read
@@ -722,6 +726,9 @@ impl Surface {
     }
     /// Another placement of the same tile: union of points, summed incidences.
     fn merge(&mut self, other: Surface, cap: usize) -> Result<(), Error> {
+        if let Some(bounds) = other.extent {
+            surface_error::Extent::include(&mut self.extent, bounds);
+        }
         for p in other.points {
             if self.points.insert(p) {
                 self.reserve(64, cap)?;
@@ -751,6 +758,13 @@ impl Surface {
         work.charge(12)?;
         add_count(&mut self.triangles, 1)?;
         let p = [canonical(xyz[0])?, canonical(xyz[1])?, canonical(xyz[2])?];
+        // Include repeated-corner and collinear faces in the geometric support.
+        for k in p {
+            surface_error::Extent::include(
+                &mut self.extent,
+                surface_error::Extent::point(k.map(|v| f64::from(f32::from_bits(v)))),
+            );
+        }
         // Three distinct collinear keys ARE a surface under the published
         // combinatorial contract. Only repeated canonical corners are excluded.
         if p[0] == p[1] || p[1] == p[2] || p[2] == p[0] {
@@ -810,9 +824,12 @@ pub(super) struct DecodedInterfaceCensus {
     /// D5 amendment A3: refinable content tiles, and those whose G is within 1% of the
     /// texture-implied error (0 without a declaration).
     pub(super) texture_refinable_tiles: u64,
+    pub(super) surface_error_extent_tiles: u64,
     pub(super) texture_bound_tiles: u64,
     /// Coarse NORMAL census (a warning, never a failure).
     pub(super) coarse_normals: CoarseNormals,
+    /// Coarse self-intersections (#420), when requested: reported, never a failure.
+    pub(super) coarse_crossings: Option<crossings::CoarseCrossings>,
 }
 /// Coarse tiles publishing NORMAL, and those with faces some corner NORMAL of which points
 /// more than 90° from the face (the face is shaded against its own winding), by cell depth.
@@ -1217,6 +1234,7 @@ pub(super) struct Store {
     profile_exclusion: Option<&'static str>,
     /// The declared texture-error rule (D5 amendment A3).
     texture: texture::Declaration,
+    certified_surface: bool,
     decoded_limit: usize,
     census: Option<DecodedInterfaceCensus>,
     /// Original vertex rows, appended per payload at ingest; the alias pass consumes them.
@@ -1225,6 +1243,8 @@ pub(super) struct Store {
     buffer_bytes: usize,
     resources: Resources,
     pool: replay::Pool,
+    /// Count coarse self-intersections (#420, opt-in).
+    crossings: bool,
 }
 /// The sizes of one store, from the validation's memory plan (#342).
 #[derive(Clone, Copy, Debug)]
@@ -1274,6 +1294,7 @@ impl Store {
             common_root: None,
             profile_exclusion: None,
             texture: texture::Declaration::Absent,
+            certified_surface: false,
             decoded_limit: 0,
             census: None,
             originals: None,
@@ -1281,7 +1302,12 @@ impl Store {
             buffer_bytes: config.buffer_bytes,
             pool: replay::Pool::new(resources.workers, resources.window_bytes),
             resources,
+            crossings: false,
         })
+    }
+    /// Also count coarse self-intersections (`interfaceCensus.coarseCrossings`).
+    pub(super) fn count_crossings(&mut self) {
+        self.crossings = true;
     }
     /// Create the disk store and replay the pending rows into it, once.
     fn materialize(&mut self) -> Result<(), Error> {
@@ -1318,6 +1344,7 @@ impl Store {
             .map_err(sql)?;
         connection.execute_batch("PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF;
             CREATE TABLE tiles(id INTEGER PRIMARY KEY,parent INTEGER,world BLOB NOT NULL,refine INTEGER,placeholder INTEGER NOT NULL DEFAULT 0,last INTEGER,leaf INTEGER,error REAL,diagonal REAL,cell INTEGER,rank_first INTEGER,ownership_depth INTEGER,ownership_invalid INTEGER NOT NULL DEFAULT 0,implicit_root INTEGER NOT NULL DEFAULT 0,recovery TEXT);
+            CREATE TABLE surface_extents(tile INTEGER PRIMARY KEY,x REAL,y REAL,z REAL,xx REAL,yy REAL,zz REAL);
             CREATE TABLE recovery_cells(id INTEGER PRIMARY KEY,first INTEGER NOT NULL,last INTEGER NOT NULL);
             CREATE TABLE refs(tile INTEGER NOT NULL,rank INTEGER NOT NULL);
             CREATE TABLE payloads(rank INTEGER PRIMARY KEY,identity_present INTEGER NOT NULL,triangle_present INTEGER NOT NULL,primitive_rows INTEGER NOT NULL DEFAULT 0,triangles INTEGER NOT NULL DEFAULT 0,digest BLOB NOT NULL,dropped INTEGER NOT NULL DEFAULT 0,last_stage INTEGER NOT NULL DEFAULT 0,fold_faces INTEGER NOT NULL DEFAULT 0,recovery INTEGER NOT NULL DEFAULT 0,texture_area REAL NOT NULL DEFAULT 0,texture_texels REAL NOT NULL DEFAULT 0);
@@ -1991,7 +2018,10 @@ impl Store {
                 "D4 coarse source_primitive table exceeds 8192 rows",
             ));
         }
-        let mut census = DecodedInterfaceCensus::default();
+        let mut census = DecodedInterfaceCensus {
+            coarse_crossings: self.crossings.then(Default::default),
+            ..Default::default()
+        };
         effort.ticks.pass()?;
         self.triangle_cap(&mut census)?;
         effort.ticks.pass()?;
@@ -2030,9 +2060,14 @@ impl Store {
         effort.ticks.pass()?;
         self.check_coarse(&mut census, &mut images, effort, read)?;
         effort.ticks.pass()?;
-        self.coarse_drops(&mut census.dropped_by_depth, effort)?;
+        self.coarse_drops(
+            &mut census.dropped_by_depth,
+            census.coarse_crossings.as_mut(),
+            effort,
+        )?;
         effort.ticks.pass()?;
         self.border_pairs(images, effort)?;
+        census.surface_error_extent_tiles = self.surface_error_extents(effort)?;
         Ok(Some(census))
     }
     fn hierarchy(&self, effort: &Effort) -> Result<(), Error> {
@@ -2603,6 +2638,7 @@ impl Store {
                 read,
             )?;
             let tile: i64 = row.get(0).map_err(sql)?;
+            self.record_extent(tile, surface.extent, effort)?;
             self.record_leaf(tile, &surface, &mut leaves, effort)?;
             // Every leaf face by corner set, so coincident source groups are found
             // across leaves too (they license coincident coarse faces above).
@@ -2689,7 +2725,10 @@ impl Store {
         drop(ahead_query);
         self.load_edge_faces(faces)
     }
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+    )]
     fn require_ancestors(
         &self,
         mut tile: i64,
@@ -2723,7 +2762,6 @@ impl Store {
         }
         Ok(())
     }
-    #[allow(clippy::too_many_arguments)]
     fn shared_point(
         &self,
         key: &[u8],
@@ -2792,7 +2830,10 @@ impl Store {
         }
         Ok(())
     }
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+    )]
     fn segment_group(
         &self,
         key: &[u8],
@@ -3047,6 +3088,7 @@ impl Store {
             let tile: Option<i64> = row.map(|r| r.get(0)).transpose().map_err(sql)?;
             if current.as_ref().map(|c| c.0) != tile {
                 if let Some((tile, surface)) = current.take() {
+                    self.record_extent(tile, surface.extent, effort)?;
                     // The merged coarse faces, for the coarse-drop recount (drops.rs).
                     let mut face = self
                         .connection

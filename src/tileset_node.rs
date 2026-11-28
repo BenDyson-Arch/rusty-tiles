@@ -189,7 +189,7 @@ impl GeometricError {
 pub(crate) enum Refine {
     Replace,
     // Point clouds refine by ADD; they write through the JSON shim until they migrate.
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg_attr(not(test), expect(dead_code, reason = "used only by unit tests"))]
     Add,
 }
 
@@ -1161,7 +1161,6 @@ impl<X: Serialize> TileTree<X> {
     /// A tile whose children occupy explicit implicit slots (sparse or packed octants), in
     /// the given order. A slot above [`MAX_CHILD_SLOT`] or a slot shared by two children is
     /// refused; the forest also refuses a slot outside its scheme (4 to 7 in a quadtree).
-    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn with_slots(
         record: TileRecord<X>,
         children: Vec<(u8, TileTree<X>)>,
@@ -1266,7 +1265,7 @@ enum DocumentKind {
     /// declaration (`rustyTiles.lod`) in `asset.extras`.
     Root {
         build_state: Option<[u8; 32]>,
-        hlod: bool,
+        hlod: Option<&'static str>,
         /// The HLOD texture-error rule (`rustyTiles.textureError`, D5 amendment A3).
         texture_error: Option<Value>,
     },
@@ -1298,7 +1297,7 @@ impl TilesetDocument {
         Self {
             kind: DocumentKind::Root {
                 build_state: None,
-                hlod: false,
+                hlod: None,
                 texture_error: None,
             },
             geometric_error,
@@ -1340,14 +1339,18 @@ impl TilesetDocument {
     /// Declare the archive an HLOD delivery (`asset.extras.rustyTiles.lod = "hlod"`), which
     /// makes a validator hold every payload to HLOD identity and continuity, and the
     /// texture-error rule its coarse G was published under (`textureError`).
-    pub(crate) fn declaring_hlod(mut self, texture: Option<Value>) -> Result<Self, Error> {
+    pub(crate) fn declaring_hlod(
+        mut self,
+        surface_policy: &'static str,
+        texture: Option<Value>,
+    ) -> Result<Self, Error> {
         match &mut self.kind {
             DocumentKind::Root {
                 hlod,
                 texture_error,
                 ..
             } => {
-                *hlod = true;
+                *hlod = Some(surface_policy);
                 *texture_error = texture;
             }
             DocumentKind::External => {
@@ -1388,8 +1391,8 @@ impl TilesetDocument {
         } = &self.kind
         {
             let mut extras = Map::new();
-            if *hlod {
-                let mut declared = serde_json::json!({"lod": "hlod"});
+            if let Some(policy) = hlod {
+                let mut declared = serde_json::json!({"lod": "hlod", "surfaceErrorPolicy": policy});
                 if let Some(rule) = texture_error {
                     declared["textureError"] = rule.clone();
                 }
@@ -1788,12 +1791,15 @@ mod record_tests {
         );
         assert_eq!(head["geometricError"].to_string(), "2.5");
         assert!(is_data(external.clone().with_build_state([0; 32])).contains("build state"));
-        let declared = document.clone().declaring_hlod(None).unwrap();
+        let declared = document
+            .clone()
+            .declaring_hlod("test-policy", None)
+            .unwrap();
         assert_eq!(
             Value::Object(declared.head())["asset"].to_string(),
-            r#"{"extras":{"rustyTiles":{"lod":"hlod"}},"version":"1.1"}"#
+            r#"{"extras":{"rustyTiles":{"lod":"hlod","surfaceErrorPolicy":"test-policy"}},"version":"1.1"}"#
         );
-        assert!(is_data(external.declaring_hlod(None)).contains("declares"));
+        assert!(is_data(external.declaring_hlod("test-policy", None)).contains("declares"));
         let empty = TilesetDocument::root(GeometricError::new(1.).unwrap(), []);
         assert!(!empty.head().contains_key("extensionsUsed"));
     }

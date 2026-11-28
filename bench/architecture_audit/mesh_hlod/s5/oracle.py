@@ -2,7 +2,7 @@
 """Published-byte/source oracle for directories and .3tz, including implicit forests.
 
 Archive-sized state is disk backed. No producer facts or interface locks are read.
-This checks topology/identity/attributes, not a source-distance certificate.
+The optional exact geometric-error audit covers complete decoded and source faces.
 Generate independent source expectations with source_manifest.py.
 """
 import argparse
@@ -300,7 +300,8 @@ def check_leaf(f,manifest,stats=None,*,geometry=True):
 
 
 def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='root',profile='hlod',producer_manifest=None,
-          border_audit=None,producer_report=None,triangle_cap=8192):
+          border_audit=None,producer_report=None,triangle_cap=8192,certify_source_error=False,
+          coarse_crossings=False):
     """Check every published cell. Only one payload/tile is decoded at a time.
 
     root frame removes the archive's common placement, conjugating relative tile
@@ -314,6 +315,9 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
     from source_manifest import load_manifest
     with load_manifest(expected) as manifest, Archive(root) as archive, tempfile.TemporaryDirectory(prefix='s5-oracle-',dir=scratch) as temporary:
         metadata=manifest.get('metadata',{})
+        if certify_source_error:
+            require(metadata.get('sourceKind') != 'baselineLeaves', 'oracleDomain',
+                    'continuous original-source error requires an original GLB or independent analytic source manifest')
         require(coordinate_frame=='root' and metadata.get('coordinateFrame','root')=='root'
                 and metadata.get('transform16',IDENTITY)==IDENTITY,
                 'oracleDomain','sourceCanonical: exact D1 source topology requires root-frame capture coordinates without post-capture transform16; world placement after f32 capture is not a canonical-key frame')
@@ -487,6 +491,10 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
             # A2: verified stage-3 (N3) tiles may drop at any size (last_resort.py).
             n3={tid for tid,(stage,_,_) in getattr(store,'last_resort',{}).items() if stage==3}
             result['coarseDrops']=drops.inspect(store,tiles,archive,require,distance2,n3)
+            # Coarse self-intersections, when asked: reported, never refused (crossings.py, #420).
+            if coarse_crossings:
+                import crossings
+                result['coarseCrossings']=crossings.inspect(store,tiles,archive)
             # Upward omission, single first-renderable cover and empty-cell
             # refinement, from the same independent expansion (omission.py).
             from omission import inspect as inspect_omission, Failure as OmissionFailure
@@ -503,6 +511,12 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
             # D5 amendment A3: declared texture term, from pages, UVs and the hierarchy.
             for t in tiles:t['textureDigest'].sort()
             result['textureError']=texture_error.inspect(tiles,texture_declared,require)
+            import surface_error
+            surface_policy=doc.get('asset',{}).get('extras',{}).get('rustyTiles',{}).get('surfaceErrorPolicy')
+            require(surface_policy in (None,surface_error.POLICY),'surfaceErrorPolicy','unsupported declaration')
+            if surface_policy or certify_source_error:
+                result['sourceSurfaceError']=surface_error.inspect(store,tiles,certify_source_error,distance2,require,IDENTITY)
+                result['sourceSurfaceError']['reference']=metadata.get('sourceKind','analyticSource')
             result['representativeTies']=ties
             result.update(ok=True,leafTriangles=leaf_count,tiles=len(tiles),representatives=representatives,
                           coordinateFrame=coordinate_frame,profile=profile,
@@ -512,6 +526,8 @@ def audit(root,expected,*,scratch=None,work_limit=300_000_000,coordinate_frame='
             result['uninspected']=(['textured leaf UV/source-pixel correspondence: crop/repack transforms require independent image-content proof']
                                    if attributes['leafTexcoordCorrespondenceUninspected'] else [])
             result['uninspected'].append('coarse face-interior orientation without a unique exact coincident descendant-leaf face is uninspected; directed retained-border witnesses certify only edge direction, not face-interior orientation; no continuous source-surface mapping is certified')
+            if not certify_source_error:
+                result['uninspected'].append('continuous two-sided source geometric error (use --certify-source-error)')
             return result
         finally:
             store.close()
@@ -533,13 +549,16 @@ if __name__=='__main__':
     p.add_argument('--producer-manifest',help='S1 stage manifest.json; compared only after independent derivation')
     p.add_argument('--border-audit',help='S1b borders.jsonl audit sidecar: an index whose claims are re-derived')
     p.add_argument('--producer-report',help='producer run report naming the audit sidecar hash/bytes')
+    p.add_argument('--certify-source-error',action='store_true',help='require exact continuous two-sided covers against captured source triangles')
     p.add_argument('--triangle-cap',type=int,default=8192,help='hard payload cap the A1 relief trigger is a share of')
+    p.add_argument('--coarse-crossings',action='store_true',help='also count coarse self-intersections (crossings.py), as native validate --coarse-crossings')
     a=p.parse_args()
     try:
         print(json.dumps(audit(a.root,a.expected,scratch=a.scratch,work_limit=a.work_limit,
                               coordinate_frame=a.coordinate_frame,profile=a.profile,producer_manifest=a.producer_manifest,
                               border_audit=a.border_audit,producer_report=a.producer_report,
-                              triangle_cap=a.triangle_cap),sort_keys=True))
+                              triangle_cap=a.triangle_cap,certify_source_error=a.certify_source_error,
+                              coarse_crossings=a.coarse_crossings),sort_keys=True))
     except Failure as e:
         print(json.dumps(dict(ok=False,check=e.check,detail=e.detail)))
         raise SystemExit(1)

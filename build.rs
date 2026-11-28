@@ -1,6 +1,18 @@
 use std::path::PathBuf;
 
 fn main() {
+    println!("cargo:rerun-if-changed=src/mesh_large/hlod/certify.cpp");
+    let mut cert = cc::Build::new();
+    cert.cpp(true).std("c++17").opt_level(3).debug(false);
+    if cert.get_compiler().is_like_msvc() {
+        cert.flag("/fp:strict").flag("/EHsc");
+    } else {
+        cert.flag("-ffp-contract=off")
+            .flag("-fexceptions")
+            .flag("-fno-fast-math");
+    }
+    cert.file("src/mesh_large/hlod/certify.cpp")
+        .compile("rt_surface_cert");
     compile_basisu();
     #[cfg(feature = "native-geospatial")]
     {
@@ -173,6 +185,13 @@ fn compile_basisu() {
 
     let mut cxx = cc::Build::new();
     configure(&mut cxx, true, &[&silence]);
+    // Test-only shim entry points, compiled only with feature pure-rust-basis: the shadow
+    // tests' oracle (rt_basisu_encode_mips_oracle) and the basis_compress2 reference the shim's
+    // own parameter setup is checked against (rt_basisu_selftest_compress2). Other builds do
+    // not compile them.
+    if std::env::var_os("CARGO_FEATURE_PURE_RUST_BASIS").is_some() {
+        cxx.define("RT_BASISU_ENCODE_ORACLE", None);
+    }
     cxx.files(BASISU_CXX_SOURCES.iter().map(|source| vendor.join(source)))
         .file(native.join("rt_basisu_shim.cpp"))
         .objects(guarded_objects)

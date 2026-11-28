@@ -528,6 +528,8 @@ struct Census {
     /// A2 last-resort tiles, and those whose declared fold faces differ from their recount.
     last_resort_tiles: usize,
     fold_declaration_mismatches: usize,
+    /// Tiles a retry published, each with its record (`last_resort_records`).
+    retried_tiles: usize,
     leaves: usize,
     coarse: usize,
     max_depth: u32,
@@ -800,10 +802,12 @@ fn census(dir: &Path) -> Census {
         assert!(stage <= 3);
         fold_declaration_mismatches += usize::from(r["foldFaces"].as_u64().unwrap_or(0) != recount);
     }
+    let retried_tiles = last_resort_records(dir).len();
     let leaves: Vec<&Tile> = tiles.iter().filter(|t| t.leaf).collect();
     let mut c = Census {
         last_resort_tiles,
         fold_declaration_mismatches,
+        retried_tiles,
         leaves: leaves.len(),
         coarse: tiles.len() - leaves.len(),
         packed_leaves: rows(&dir.join("leaves.jsonl"))
@@ -1798,6 +1802,8 @@ fn parent_jobs_allocate_within_their_charge() {
             interface: Vec::new(),
             geometric_error: 0.,
             published_error: 0.,
+            surface_error: 0.,
+            decoded_override: Vec::new(),
             texture: Default::default(),
             lease: None,
         };
@@ -1898,8 +1904,11 @@ fn parent_jobs_allocate_within_their_charge() {
                     relief_floor: 0.,
                 },
                 &|_| Ok(None),
+                &crate::mesh_large::leaves::geometry::LatticePlan::float_for_tests(),
                 &mut |_| Ok(true),
                 &|| Ok(()),
+                true,
+                true,
                 true,
             )
         });
@@ -1991,6 +2000,8 @@ fn border_midpoint_keeps_its_canonical_decode_regression() {
         interface: vec![row(a), row(b)],
         geometric_error: 0.,
         published_error: 0.,
+        surface_error: 0.,
+        decoded_override: Vec::new(),
         texture: Default::default(),
         lease: None,
     };
@@ -2068,6 +2079,8 @@ fn coarse_weld_keeps_uv_and_normal_seams() {
         interface: Vec::new(),
         geometric_error: 0.,
         published_error: 0.,
+        surface_error: 0.,
+        decoded_override: Vec::new(),
         texture: Default::default(),
         lease: None,
     };
@@ -2610,6 +2623,8 @@ fn adversarial_held_tile_fits_its_admitted_charge() {
         interface: Vec::with_capacity(6 * n),
         geometric_error: 0.,
         published_error: 0.,
+        surface_error: 0.,
+        decoded_override: Vec::new(),
         texture: Default::default(),
         lease: None,
     };
@@ -2948,7 +2963,7 @@ fn a_parent_whose_interface_cannot_fit_is_omitted_not_refused() {
         &work.path().join("capped"),
         &Run {
             cap: 12,
-            mutation: Mutation::NoRelief,
+            mutation: Mutation::NoReliefNoRecovery,
             ..Run::default()
         },
     )
@@ -3249,7 +3264,7 @@ fn omitted_cells_refine_whenever_they_are_visible() {
             &work.path().join(format!("cap{cap}")),
             &Run {
                 cap,
-                mutation: Mutation::NoRelief,
+                mutation: Mutation::NoReliefNoRecovery,
                 ..Run::default()
             },
         )
@@ -3483,16 +3498,23 @@ fn default_public_path_publishes_hlod_coarse_tiles_without_h17_records() {
         let name = member.name().to_owned();
         let mut bytes = Vec::new();
         member.read_to_end(&mut bytes).unwrap();
-        for retired in [
-            &b"proxy_source"[..],
-            b"lod_vanished",
-            b"lod_filled",
-            b"certif",
-        ] {
+        for retired in [&b"proxy_source"[..], b"lod_vanished", b"lod_filled"] {
             assert!(
                 !bytes.windows(retired.len()).any(|w| w == retired),
                 "{name} holds {}",
                 String::from_utf8_lossy(retired)
+            );
+        }
+        if name == "tileset.json" {
+            let root: Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(
+                root["asset"]["extras"]["rustyTiles"]["surfaceErrorPolicy"],
+                super::certify::POLICY
+            );
+        } else {
+            assert!(
+                !bytes.windows(6).any(|w| w == b"certif"),
+                "{name} carries a certificate record"
             );
         }
         if !name.ends_with(".glb") {
@@ -3705,7 +3727,10 @@ fn with_source_index<R>(
     let lease = ledger
         .admit(source_index::SourceIndex::COMPONENT, need)
         .unwrap();
+    let before = captured.scratch.live_bytes();
     let index = source_index::SourceIndex::build(captured, &lease, &|| Ok(())).unwrap();
+    assert_eq!(index.stored_bytes(), captured.scratch.live_bytes() - before);
+    assert!(index.stored_bytes() <= need);
     ledger.check().unwrap();
     f(&index)
 }
@@ -3750,7 +3775,7 @@ fn measured_positions_must_match_decoded_glb_bits() {
 fn source_index_matches_exhaustive_with_range_clipping_and_ties() {
     use super::{
         error::Nearest,
-        source_index::{bary, closest, distance2, Hit, Triangle},
+        source_index::{bary, closest, distance2, mark_controls, Hit, Surface, Triangle, BLOCK},
     };
     let work = tempfile::tempdir().unwrap();
     let input = write_gltf(&work.path().join("src"), &thin_islands());
@@ -3761,10 +3786,29 @@ fn source_index_matches_exhaustive_with_range_clipping_and_ties() {
         .unwrap()
         .map(Result::unwrap)
         .collect();
+    let mut ordered = Vec::new();
+    for (block, rows) in source.chunks(BLOCK).enumerate() {
+        let mut triangles: Vec<_> = rows
+            .iter()
+            .enumerate()
+            .map(|(i, row)| {
+                let mut t = Triangle::new(row.triangle.positions, (block * BLOCK + i) as u64);
+                t.order = (row.triangle.source, row.expanded_ordinal);
+                t.material = row.material;
+                t
+            })
+            .collect();
+        mark_controls(&mut triangles);
+        ordered.extend(Surface::new(triangles).unwrap().triangles);
+    }
     with_source_index(&captured, |index| {
+        // This repetitive source also exercises actual compressed storage.
+        let n = captured.triangles.len();
+        assert!(index.stored_bytes() < (88 * n) / 2);
         let mut random = 0x7159ac23u32;
         for (first, end) in [
             (0, source.len()),
+            (0, BLOCK),
             (17, 300),
             (250, 520),
             (source.len() - 13, source.len()),
@@ -3780,13 +3824,27 @@ fn source_index_matches_exhaustive_with_range_clipping_and_ties() {
             let mut paged = index.paged_query(&captured, key).unwrap();
             let mut budgeted = index.query(&captured, key).unwrap();
             let mut nearest = Nearest::new();
-            let streamed: Vec<_> = query.surface().unwrap().map(|t| t.unwrap().rank).collect();
-            let mut streamed_sorted = streamed.clone();
-            streamed_sorted.sort_unstable();
-            assert_eq!(
-                streamed_sorted,
-                (first as u64..end as u64).collect::<Vec<_>>()
-            );
+            let streamed: Vec<_> = query.surface().unwrap().map(Result::unwrap).collect();
+            let expected: Vec<_> = ordered
+                .iter()
+                .copied()
+                .filter(|t| (first as u64..end as u64).contains(&t.rank))
+                .map(|mut t| {
+                    let block = t.rank / BLOCK as u64 * BLOCK as u64;
+                    if key.first > block || key.end < block + BLOCK as u64 {
+                        t.controls = 7;
+                    }
+                    t
+                })
+                .collect();
+            assert_eq!(streamed, expected);
+            if first == 0 && end == BLOCK {
+                let area = source[..BLOCK]
+                    .iter()
+                    .map(|row| Triangle::new(row.triangle.positions, 0).area())
+                    .sum::<f64>();
+                assert_eq!(query.area().unwrap().to_bits(), area.to_bits());
+            }
             for _ in 0..40 {
                 let mut unit = || {
                     random ^= random << 13;
@@ -3998,7 +4056,7 @@ fn omitted_cells_are_not_measured_and_errors_stay_monotone() {
             &work.path().join(format!("cap{cap}")),
             &Run {
                 cap,
-                mutation: Mutation::NoRelief,
+                mutation: Mutation::NoReliefNoRecovery,
                 ..Run::default()
             },
         )
@@ -4089,7 +4147,7 @@ fn omitted_cells_are_not_measured_and_errors_stay_monotone() {
 }
 
 #[test]
-fn delivery_refuses_understated_and_incomplete_sampled_error() {
+fn delivery_refuses_understated_or_incomplete_surface_certificates_and_sampling() {
     let work = tempfile::tempdir().unwrap();
     let input = write_gltf(&work.path().join("src"), &sheet());
     let dir = stage(
@@ -4103,7 +4161,7 @@ fn delivery_refuses_understated_and_incomplete_sampled_error() {
     )
     .unwrap();
     let original = rows(&dir.join("proxies.jsonl"));
-    for mutation in 0..12 {
+    for mutation in 0..16 {
         let mut damaged = original.clone();
         let row = damaged.last_mut().unwrap();
         match mutation {
@@ -4133,6 +4191,14 @@ fn delivery_refuses_understated_and_incomplete_sampled_error() {
             // not silently become a frontier when the producer reported no omissions.
             10 => damaged.retain(|r| r["depth"].as_u64().unwrap() != 0),
             11 => damaged.clear(),
+            12 => {
+                row.as_object_mut().unwrap().remove("certificate");
+            }
+            13 => row["certificate"]["referenceTriangles"] = json!(1),
+            14 => {
+                row["certificate"]["toProxy"] = json!(row["geometricError"].as_f64().unwrap() + 1.)
+            }
+            15 => row["certificate"]["inherited"] = json!(1.),
             _ => {
                 for row in damaged
                     .iter_mut()
@@ -4173,6 +4239,7 @@ fn delivery_refuses_understated_and_incomplete_sampled_error() {
             5 => assert!(message.contains("invalid S2 sample counts"), "{message}"),
             9 => assert!(message.contains("source triangles scheduled"), "{message}"),
             10 | 11 => assert!(message.contains("omission counts differ"), "{message}"),
+            12..=15 => assert!(message.contains("decoded-surface certificate"), "{message}"),
             _ => {}
         }
         assert!(!output.exists());
@@ -4549,7 +4616,7 @@ fn tmpfs_exhaustion_is_admitted_before_border_or_frontier_writes() {
     config.jobs = Jobs::Fixed(NonZeroUsize::new(1).unwrap());
     let settings = test_settings(300);
     let generous = MemoryBudget::resolve(Some(8 << 30)).unwrap();
-    let disk_min = super::plan(&captured, &config, &generous, &settings)
+    let disk_min = super::plan(&captured, &config, &generous, &settings, None)
         .unwrap()
         .minimum_bytes;
     let need = super::memory_backed_need(&captured, &config, settings.cap, false).unwrap();
@@ -4583,6 +4650,7 @@ fn tmpfs_exhaustion_is_admitted_before_border_or_frontier_writes() {
         &config,
         &MemoryBudget::resolve(Some(exact - 1)).unwrap(),
         &settings,
+        None,
     )
     .unwrap_err();
     assert_eq!(denied.kind(), JobErrorKind::ResourceLimit);
@@ -4592,6 +4660,7 @@ fn tmpfs_exhaustion_is_admitted_before_border_or_frontier_writes() {
         &config,
         &MemoryBudget::resolve(Some(exact)).unwrap(),
         &settings,
+        None,
     )
     .unwrap();
     assert_eq!(allowed.minimum_bytes, exact);
@@ -4900,6 +4969,7 @@ fn d11_holey_sheet_builds_every_cell_with_the_last_resort() {
         assert!(omission_receipt(&name, &dir), "{name}");
         let c = census(&dir);
         assert!(c.last_resort_tiles > 0, "{name}: {c:?}");
+        assert!(c.retried_tiles > 0, "{name}: {c:?}");
         assert_directed_census(&name, &c, run.cap);
         published_and_valid(&name, &dir, work.path());
     }
@@ -4919,7 +4989,26 @@ fn published_and_valid(name: &str, dir: &Path, work: &Path) {
     )
     .unwrap();
     drop(file);
-    inspect(ValidationRequest::new(&output).expect_profile(ExpectedProfile::Hlod)).unwrap();
+    let plain =
+        inspect(ValidationRequest::new(&output).expect_profile(ExpectedProfile::Hlod)).unwrap();
+    // The opt-in self-intersection census (#420) reports and changes nothing else.
+    let counted = inspect(
+        ValidationRequest::new(&output)
+            .expect_profile(ExpectedProfile::Hlod)
+            .coarse_crossings(),
+    )
+    .unwrap();
+    let census = |r: &crate::validate::ValidationReport| r.interface_census.clone().unwrap();
+    let (mut with, without) = (census(&counted), census(&plain));
+    assert!(without.coarse_crossings.is_none(), "{name}");
+    let crossings = with.coarse_crossings.take().unwrap();
+    assert_eq!(crossings.incomplete_tiles, 0, "{name}: {crossings:?}");
+    assert_eq!(with, without, "{name}");
+    assert_eq!(
+        (counted.ok, &counted.warnings, &counted.checks),
+        (plain.ok, &plain.warnings, &plain.checks),
+        "{name}"
+    );
     let shape = refinement_shape(&output);
     assert_eq!(
         shape.empty_below_content + shape.error_inversions,
@@ -5188,8 +5277,8 @@ fn city(n: usize) -> Vec<Mesh> {
 /// and each costs about ten triangles under the guards, so at the test cap the coarse
 /// cells, and the root, could not fit (all omitted before D11 coarse drops). Now border-free
 /// buildings go smallest first, each payload declares its drops, published G covers
-/// every dropped key, and the archive validates. Understated G or an undeclared drop is
-/// refused by the validator.
+/// every dropped key, and the archive validates. Removing construction drop controls
+/// still leaves a certified surface. An undeclared drop is refused.
 #[test]
 fn a_city_too_dense_for_the_cap_keeps_its_root_through_coarse_drops() {
     let work = tempfile::tempdir().unwrap();
@@ -5221,10 +5310,14 @@ fn a_city_too_dense_for_the_cap_keeps_its_root_through_coarse_drops() {
                 ..test_settings(300)
             });
         crate::mesh_large::mesh_to_tileset(request, &RunControl::default()).unwrap();
-        let e = inspect(ValidationRequest::new(&output))
-            .unwrap_err()
-            .to_string();
-        assert!(e.contains("coarseDrops"), "{mutation:?}: {e}");
+        let result = inspect(ValidationRequest::new(&output));
+        if mutation == Mutation::UnderstateDropError {
+            let census = result.unwrap().interface_census.unwrap();
+            assert!(census.dropped_components > 0 && census.surface_error_extent_tiles > 0);
+        } else {
+            let message = result.unwrap_err().to_string();
+            assert!(message.contains("coarseDrops"), "{message}");
+        }
     }
 }
 
@@ -5293,6 +5386,8 @@ fn ordinary_drops_under_pressure_go_smallest_first() {
         interface: vec![],
         geometric_error: 0.,
         published_error: 0.,
+        surface_error: 0.,
+        decoded_override: Vec::new(),
         texture: Default::default(),
         lease: None,
     };
@@ -5312,8 +5407,11 @@ fn ordinary_drops_under_pressure_go_smallest_first() {
             &[cap, cap],
             &contract,
             &|_| Ok(None),
+            &crate::mesh_large::leaves::geometry::LatticePlan::float_for_tests(),
             &mut |_| Ok(true),
             &|| Ok(()),
+            true,
+            true,
             true,
         )
         .unwrap()
@@ -5432,6 +5530,8 @@ fn a_drop_order_that_would_empty_the_tile_fails_the_attempt() {
         interface: vec![],
         geometric_error: 0.,
         published_error: 0.,
+        surface_error: 0.,
+        decoded_override: Vec::new(),
         texture: Default::default(),
         lease: None,
     };
@@ -5451,8 +5551,11 @@ fn a_drop_order_that_would_empty_the_tile_fails_the_attempt() {
             &[cap, cap],
             &contract,
             &|_| Ok(None),
+            &crate::mesh_large::leaves::geometry::LatticePlan::float_for_tests(),
             &mut |_| Ok(true),
             &|| Ok(()),
+            true,
+            true,
             true,
         )
         .unwrap();
@@ -5871,6 +5974,182 @@ fn a_noisy_folded_sheet_builds_every_coarse_tile() {
     published_and_valid("noisy folded sheet", &dir, work.path());
 }
 
+/// Stage without the audit sidecar (exact-repeat reuse is off while it records every
+/// attempt): every published byte, and the reuse the walk counted.
+fn stage_unaudited(
+    input: &Path,
+    out: &Path,
+    jobs: usize,
+    mutation: Mutation,
+) -> (BTreeMap<String, Vec<u8>>, super::RepeatReuse) {
+    let run = Run::default();
+    let scratch = out.with_extension("scratch");
+    fs::create_dir_all(&scratch).unwrap();
+    let request = LeafOutputRequest::new(input, out, run.profile)
+        .with_jobs(NonZeroUsize::new(jobs).unwrap())
+        .with_scratch_dir(&scratch)
+        .with_leaf_triangles(run.leaf_triangles)
+        .with_hlod_settings(Settings {
+            audit_dir: None,
+            cap: run.cap,
+            mutation,
+            nearest_steps: run.nearest_steps,
+            sampling: run.sampling,
+        });
+    let result = mesh_to_leaf_payloads(request, &RunControl::default()).unwrap();
+    assert_eq!(
+        fs::read_dir(&scratch).unwrap().count(),
+        0,
+        "scratch is cleaned up"
+    );
+    let resources: Value =
+        serde_json::from_slice(&fs::read(result.output.join("resources.json")).unwrap()).unwrap();
+    let reuse = &resources["hlod"]["diagnostics"]["repeat_reuse"];
+    let count = |field: &str| reuse[field].as_u64().unwrap();
+    (
+        published(&result.output),
+        super::RepeatReuse {
+            contractions: count("contractions"),
+            replayed_calls: count("replayed_calls"),
+            round_zero_calls: count("round_zero_calls"),
+        },
+    )
+}
+
+/// Exact-repeat reuse (`geometry::build_parent`): `Fix2` replaying the primary build's proposal
+/// calls, remesh round 0 repeating the full-cap calls, and a later build repeating an earlier
+/// failed contraction. Every published byte equals a run that recomputes all of them, at one
+/// and at four jobs. These fixtures reach the first two; none fails the primary contraction
+/// and `Fix2` both, which the third needs, so it has a geometry-level control
+/// (`a_repeated_failed_contraction_is_reused_with_the_same_outcome`).
+#[test]
+fn exact_repeat_reuse_publishes_identical_bytes() {
+    let work = tempfile::tempdir().unwrap();
+    let mut fixtures: Vec<(String, Vec<Mesh>)> = vec![
+        (
+            "folded 72x2".into(),
+            vec![folded_sheet(72, 2, 0.02, 0.0003, 0)],
+        ),
+        (
+            "folded 72x3".into(),
+            vec![folded_sheet(72, 3, 0.02, 0.0001, 4)],
+        ),
+        (
+            "folded 48x5".into(),
+            vec![folded_sheet(48, 5, 0.02, 0.001, 7)],
+        ),
+    ];
+    for layout in [26, 77, 2, 113] {
+        fixtures.push((format!("city block {layout}"), city_block(layout)));
+    }
+    let mut total = super::RepeatReuse::default();
+    for (i, (name, meshes)) in fixtures.iter().enumerate() {
+        let input = write_gltf(&work.path().join(format!("src{i}")), meshes);
+        let (reference, none) = stage_unaudited(
+            &input,
+            &work.path().join(format!("{i}-reference")),
+            1,
+            Mutation::NoRepeatReuse,
+        );
+        assert_eq!(
+            none.contractions + none.replayed_calls + none.round_zero_calls,
+            0
+        );
+        for jobs in [1, 4] {
+            let (bytes, reuse) = stage_unaudited(
+                &input,
+                &work.path().join(format!("{i}-{jobs}")),
+                jobs,
+                Mutation::None,
+            );
+            assert_eq!(
+                reference.keys().collect::<Vec<_>>(),
+                bytes.keys().collect::<Vec<_>>(),
+                "{name}"
+            );
+            for (member, b) in &bytes {
+                assert!(
+                    reference[member] == *b,
+                    "{name}, {jobs} jobs: {member} differs"
+                );
+            }
+            eprintln!("{name}, {jobs} jobs: {reuse:?}");
+            if jobs == 1 {
+                total.contractions += reuse.contractions;
+                total.replayed_calls += reuse.replayed_calls;
+                total.round_zero_calls += reuse.round_zero_calls;
+            }
+        }
+    }
+    eprintln!("total reuse: {total:?}");
+    assert!(total.replayed_calls > 0, "{total:?}");
+    assert!(total.round_zero_calls > 0, "{total:?}");
+}
+
+/// Every tile a retry published, from the stage manifest, checked against the payload
+/// declarations and the stage's count: `(first, depth, stage, resort)`. A record's stage
+/// follows from its build, and a primary build that refused no proposal was refused for
+/// its contraction or had no proposal.
+fn last_resort_records(dir: &Path) -> Vec<(u64, u64, u64, String)> {
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    let resources: Value =
+        serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
+    let diagnostics = &resources["hlod"]["diagnostics"];
+    let records = manifest["hlod"]["lastResortRecords"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(
+        diagnostics["last_resort_records"].as_array().unwrap(),
+        &records
+    );
+    assert_eq!(
+        records.len() as u64,
+        diagnostics["last_resort_tiles"].as_u64().unwrap()
+    );
+    let out: Vec<_> = records
+        .iter()
+        .map(|r| {
+            let (stage, resort) = (r["stage"].as_u64().unwrap(), r["resort"].as_str().unwrap());
+            let expected: &[u64] = match resort {
+                "fix2" | "staged" => &[0],
+                // P1: its default pass (0) or with N1's seam-owner licence (1).
+                "p1" => &[0, 1],
+                "n1" => &[1],
+                "n2" => &[2],
+                "n3" | "n3Recovery" | "rootCandidate" => &[3],
+                other => panic!("unknown resort {other}"),
+            };
+            assert!(expected.contains(&stage), "{r}");
+            let refused: u64 = ["refusedDecode", "refusedTopology", "refusedControls"]
+                .iter()
+                .map(|k| r[k].as_u64().unwrap())
+                .sum();
+            match r["reason"].as_str().unwrap() {
+                "contractionStalled" | "noProposal" => assert_eq!(refused, 0, "{r}"),
+                // The primary build published; it may have refused proposals before.
+                "rootCompetition" => assert_eq!(resort, "rootCandidate", "{r}"),
+                "proposalsRefused" => assert!(refused > 0, "{r}"),
+                other => panic!("unknown reason {other}"),
+            }
+            (
+                r["first"].as_u64().unwrap(),
+                r["depth"].as_u64().unwrap(),
+                stage,
+                resort.to_string(),
+            )
+        })
+        .collect();
+    for (first, depth, stage, _) in last_resort_tiles(dir).into_iter().filter(|t| t.2 > 0) {
+        assert!(
+            out.iter().any(|r| (r.0, r.1, r.2) == (first, depth, stage)),
+            "declared last resort f{first}-d{depth} stage {stage} has no record"
+        );
+    }
+    out
+}
+
 /// The A2 last-resort tiles of a staged run: `(first, depth, stage, fold faces)`.
 fn last_resort_tiles(dir: &Path) -> Vec<(u64, u64, u64, u64)> {
     rows(&dir.join("proxies.jsonl"))
@@ -5931,7 +6210,8 @@ fn last_resort_case(
 
 /// D1/D11 amendment A2, stage N1. On three noisy sheets folded onto one another, a
 /// depth-1 cell fits only once it may create new faces and edges on the shared points
-/// of the seam segments it owns; no fold is admitted. Develop omits it. On D11's ladder
+/// of the seam segments it owns, or (P1) once a Steiner vertex replaces the border vertex
+/// whose removal needs them; no fold is admitted. Develop omits it. On D11's ladder
 /// alone (relief off) the cells still omitted are border-bound: their contracts leave the
 /// cap no room. With border relief (A1) those borders relax, and the root builds too.
 #[test]
@@ -5940,12 +6220,24 @@ fn n1_builds_a_seam_bound_cell_on_the_segments_it_owns() {
     let name = "N1 folded sheets";
     let sheet = folded_sheet(96, 3, 0., 0.0001, 23);
     let (develop, dir) = last_resort_case(name, sheet.clone(), &work.path().join("d11"), false);
-    let n1: Vec<_> = last_resort_tiles(&dir)
+    // Develop omits them; P1 (its default or seam-owner pass) or N1 builds them now.
+    let seam_bound: Vec<_> = last_resort_records(&dir)
         .into_iter()
-        .filter(|t| t.2 == 1)
+        .filter(|r| !develop.contains(&(r.0, r.1)))
         .collect();
-    assert!(!n1.is_empty(), "{name}: {:?}", last_resort_tiles(&dir));
-    assert!(n1.iter().all(|t| !develop.contains(&(t.0, t.1))), "{name}");
+    assert!(
+        !seam_bound.is_empty(),
+        "{name}: {:?}",
+        last_resort_records(&dir)
+    );
+    // Some of them are seam-bound cells P1 or N1 builds without a fold (stage at most 1);
+    // the others are ancestors that only inherited the omission.
+    assert!(
+        seam_bound
+            .iter()
+            .any(|r| r.3 == "n1" || (r.3 == "p1" && r.2 <= 1)),
+        "{name}: {seam_bound:?}"
+    );
     let (_, relieved) = last_resort_case(name, sheet, &work.path().join("relief"), true);
     assert!(
         rows(&relieved.join("proxies.jsonl"))
@@ -6284,7 +6576,7 @@ fn coarse_mask_charge_restores_five_automatic_workers_at_four_gib() {
 }
 
 /// Paired production-construction control: all leaves and non-root payloads stay
-/// byte-identical, while roots may only improve G or replace an own-build omission.
+/// byte-identical, while the root decision may improve construction G or replace an own-build omission.
 fn root_pair(layout: u64, jobs: usize, evidence: Option<&Path>) {
     let work = tempfile::tempdir().unwrap();
     let input = write_gltf(&work.path().join("src"), &city_block(layout));
@@ -6310,14 +6602,15 @@ fn root_pair(layout: u64, jobs: usize, evidence: Option<&Path>) {
             .expect("no lost root");
         if new.get("rootCompetition").is_some() {
             assert!(
-                new["geometricError"].as_f64().unwrap() <= old["geometricError"].as_f64().unwrap()
+                new["constructionError"].as_f64().unwrap()
+                    <= old["constructionError"].as_f64().unwrap()
             );
             let r = &new["rootCompetition"];
-            assert_eq!(r["baselineG"], old["geometricError"]);
+            assert_eq!(r["baselineG"], old["constructionError"]);
             if r["accepted"] == true {
                 assert!(
-                    new["geometricError"].as_f64().unwrap()
-                        <= 0.99 * old["geometricError"].as_f64().unwrap()
+                    new["constructionError"].as_f64().unwrap()
+                        <= 0.99 * old["constructionError"].as_f64().unwrap()
                 );
             }
             if r["accepted"] != true {
@@ -6365,7 +6658,9 @@ fn root_competition_city_sweep() {
 
 /// The bounded natural search found no own-root recovery: N3 is already part of
 /// incumbent construction. These are the closest actual refusals, not injected
-/// failures: a challenger that fails prepare, and a propagated descendant omission.
+/// failures: a challenger that fails prepare, and a propagated descendant omission. P1 is
+/// off: it builds both cells before the ladder (`every_ladder_build_publishes_with_its_record`
+/// covers the candidate's record).
 #[test]
 fn root_competition_preserves_natural_guard_and_descendant_refusals() {
     for (name, source) in [
@@ -6374,7 +6669,8 @@ fn root_competition_preserves_natural_guard_and_descendant_refusals() {
     ] {
         let work = tempfile::tempdir().unwrap();
         let input = write_gltf(&work.path().join("src"), &source);
-        let dirs = [Mutation::NoRootCompetition, Mutation::None].map(|mutation| {
+        // Without P1, which now builds these cells before the ladder reaches N3.
+        let dirs = [Mutation::NoP1NoRootCompetition, Mutation::NoP1].map(|mutation| {
             stage(
                 &input,
                 &work.path().join(format!("{mutation:?}")),
@@ -6403,9 +6699,15 @@ fn root_competition_preserves_natural_guard_and_descendant_refusals() {
                 .unwrap();
             assert_eq!(root["rootCompetition"]["reason"], "prepare_refused");
             assert_eq!(root["rootCompetition"]["accepted"], false);
-            assert_eq!(root["geometricError"], root["rootCompetition"]["baselineG"]);
+            assert_eq!(
+                root["constructionError"],
+                root["rootCompetition"]["baselineG"]
+            );
         } else {
-            assert!(rr.iter().all(|r| r["depth"] != 0));
+            // Root recovery v2: the propagated omission no longer costs the root, which
+            // declares version 2 over the published frontier.
+            let root = rr.iter().find(|r| r["depth"] == 0).unwrap();
+            assert_eq!(root["recovery"]["version"], 2, "{root}");
             let manifest: Value =
                 serde_json::from_slice(&fs::read(dirs[1].join("manifest.json")).unwrap()).unwrap();
             let h = &manifest["hlod"];
@@ -6480,8 +6782,148 @@ fn root_competition_fills_a_forced_own_build_omission_and_is_job_invariant() {
     assert_eq!(root["rootCompetition"]["accepted"], true);
     assert!(root["rootCompetition"]["baselineG"].is_null());
     assert!(root["geometricError"].as_f64().unwrap() >= root["childrenError"].as_f64().unwrap());
+    // The candidate is recorded as the build that published the root.
+    let depth = root["depth"].as_u64().unwrap();
+    assert!(
+        last_resort_records(&dirs[0])
+            .iter()
+            .any(|r| (r.1, r.2, r.3.as_str()) == (depth, 3, "rootCandidate")),
+        "{:?}",
+        last_resort_records(&dirs[0])
+    );
     assert_eq!(published(&dirs[0]), published(&dirs[1]));
     published_and_valid("recovered root", &dirs[0], work.path());
+}
+
+/// Each build of the ladder publishes with its own record. Refusing every proposal of the
+/// first k builds (as S2's controls would) makes the next build publish: P1, fix 2,
+/// staged reduction, N1, N2, N3. Its record names that build and stage, gives the primary
+/// build's refusal as the reason, and counts the refused primary proposals by check.
+#[test]
+fn every_ladder_build_publishes_with_its_record() {
+    let work = tempfile::tempdir().unwrap();
+    let source = grid((16, 16), (0., 100.), (0., 100.), &bump, [0.4, 0.5, 0.3, 1.]);
+    let input = write_gltf(&work.path().join("src"), &[source]);
+    for (k, resorts, want) in [
+        (1u8, &["p1"][..], &[0u64, 1][..]),
+        (2, &["fix2"][..], &[0][..]),
+        (3, &["staged"][..], &[0][..]),
+        (4, &["n1"][..], &[1][..]),
+        (5, &["n2"][..], &[2][..]),
+        (6, &["n3", "n3Recovery"][..], &[3][..]),
+    ] {
+        let dir = stage(
+            &input,
+            &work.path().join(format!("refuse-{k}")),
+            &Run {
+                leaf_triangles: 64,
+                cap: 100,
+                mutation: Mutation::RefuseBuilds(k),
+                budget: Some(4 << 30),
+                ..s2_run()
+            },
+        )
+        .unwrap();
+        let census = census(&dir);
+        assert!(census.retried_tiles > 0, "k={k}: {census:?}");
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+        let records = manifest["hlod"]["lastResortRecords"].as_array().unwrap();
+        let forced: Vec<_> = records
+            .iter()
+            .filter(|r| resorts.contains(&r["resort"].as_str().unwrap()))
+            .collect();
+        assert!(!forced.is_empty(), "k={k}: {records:?}");
+        for r in &forced {
+            assert!(want.contains(&r["stage"].as_u64().unwrap()), "k={k}: {r}");
+            assert_eq!(r["reason"], "proposalsRefused", "k={k}: {r}");
+            assert!(r["refusedControls"].as_u64().unwrap() > 0, "k={k}: {r}");
+            assert_eq!(r["refusedDecode"], 0, "k={k}: {r}");
+            assert_eq!(r["refusedTopology"], 0, "k={k}: {r}");
+        }
+        // P1's own record: its proposal built the cell (k = 1) or assessment refused it,
+        // within its work limit.
+        let resources: Value =
+            serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
+        let p1 = resources["hlod"]["diagnostics"]["p1_records"]
+            .as_array()
+            .unwrap();
+        let outcome = if k == 1 { "built" } else { "refused" };
+        assert!(p1.iter().any(|r| r["outcome"] == outcome), "k={k}: {p1:?}");
+        for r in p1 {
+            let limit = r["workLimit"].as_u64().unwrap();
+            assert_ne!(r["outcome"], "exhausted", "k={k}: {r}");
+            assert!(r["work"][0].as_u64().unwrap() <= limit, "k={k}: {r}");
+            assert!(r["passes"].as_u64().unwrap() <= 2, "k={k}: {r}");
+        }
+        if k == 6 {
+            published_and_valid("refused ladder", &dir, work.path());
+        }
+    }
+}
+
+/// N1 runs where P1 could not try its seam-owner licence to the end: P1's workspace estimate
+/// refuses the cell, or its first pass spends the work budget. With the primary build, fix 2
+/// and the staged reduction refused, N1 publishes the same cells as when P1's proposal is
+/// refused after its first pass (`RefuseBuilds(4)`), not N2.
+#[test]
+fn n1_builds_where_p1_does_not_complete() {
+    let work = tempfile::tempdir().unwrap();
+    let source = grid((16, 16), (0., 100.), (0., 100.), &bump, [0.4, 0.5, 0.3, 1.]);
+    let input = write_gltf(&work.path().join("src"), &[source]);
+    let run = |mutation: Mutation, name: &str| {
+        let dir = stage(
+            &input,
+            &work.path().join(name),
+            &Run {
+                leaf_triangles: 64,
+                cap: 100,
+                mutation,
+                budget: Some(4 << 30),
+                ..s2_run()
+            },
+        )
+        .unwrap();
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+        let resources: Value =
+            serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
+        let mut resorts: Vec<(String, u64)> = manifest["hlod"]["lastResortRecords"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| {
+                (
+                    r["resort"].as_str().unwrap().to_owned(),
+                    r["stage"].as_u64().unwrap(),
+                )
+            })
+            .collect();
+        resorts.sort();
+        let p1: Vec<String> = resources["hlod"]["diagnostics"]["p1_records"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["outcome"].as_str().unwrap().to_owned())
+            .collect();
+        (resorts, p1)
+    };
+    let (reference, _) = run(Mutation::RefuseBuilds(4), "refuse-4");
+    assert!(
+        reference.iter().any(|(r, s)| r == "n1" && *s == 1),
+        "{reference:?}"
+    );
+    for (mutation, outcome, name) in [
+        (Mutation::P1Unfit, "skipped", "unfit"),
+        (Mutation::P1Exhausted, "exhausted", "exhausted"),
+    ] {
+        let (resorts, p1) = run(mutation, name);
+        assert_eq!(resorts, reference, "{name}");
+        assert!(
+            !p1.is_empty() && p1.iter().all(|o| o == outcome),
+            "{name}: {p1:?}"
+        );
+    }
 }
 
 /// Inject one depth-1 construction failure; recovery must use its complete leaves,
@@ -6584,10 +7026,8 @@ fn coarse_decode_charge_follows_the_largest_encoded_image() {
     };
     let (base, chain) = super::source_decode_bytes(&[info(512, 256, 1), info(64, 64, 1)]);
     assert_eq!(chain, super::bake::chain_bytes(512, 256));
-    assert_eq!(
-        base,
-        super::bake::CHAIN_READER_BYTES + 512 * 256 * 16 + 1 + chain
-    );
+    // The chain reader is each job's; the decode transient is the stage's one slot.
+    assert_eq!(base, 512 * 256 * 16 + 1 + chain);
     for encoded in [100, 32 << 20, (32 << 20) + 1, 1 << 30] {
         // The small image carries the largest encoded length; texels still come from the
         // large one.
@@ -6596,4 +7036,686 @@ fn coarse_decode_charge_follows_the_largest_encoded_image() {
         assert_eq!(same_chain, chain);
         assert_eq!(decode, base - 1 + encoded, "{encoded}");
     }
+}
+
+/// A snap-boundary adversary. A coarse sheet meets a patch sixteen times denser along a
+/// seam, so leaves of different depths share corners and those snap at the shallower leaf's
+/// step. Every coordinate is a multiple of 2^-7, so corners sit on half lattice steps (ties)
+/// and on leaf box faces. A copy far from the origin adds f32 rounding of canonical values.
+fn snap_sheet() -> Vec<Mesh> {
+    let ridge = |x: f32, z: f32| (x * 8.).round() / 128. + (z * 4.).floor() / 64.;
+    let colour = [0.5, 0.5, 0.5, 1.];
+    vec![
+        grid((16, 16), (0., 64.), (0., 64.), &ridge, colour),
+        grid((256, 256), (64., 80.), (0., 16.), &ridge, colour),
+        grid((32, 32), (4096., 4160.), (0., 64.), &ridge, colour),
+    ]
+}
+
+/// A named mesh fixture with its leaf size and an optional subset and weld.
+type Fixture = (
+    &'static str,
+    Vec<Mesh>,
+    u64,
+    Option<crate::mesh_large::MeshSubset>,
+    Option<crate::mesh_large::MeshWeld>,
+);
+
+/// [`sheet`] as a triangle soup: each triangle with its own three vertices, jittered by up
+/// to 2 mm, so a weld of 1 cm merges them back (to each class's lowest-index position).
+fn soup_sheet() -> Vec<Mesh> {
+    sheet()
+        .into_iter()
+        .map(|m| {
+            let mut out = Mesh {
+                positions: Vec::new(),
+                indices: Vec::new(),
+                color: m.color,
+            };
+            for (i, &v) in m.indices.iter().enumerate() {
+                let p = m.positions[v as usize];
+                let jitter = |k: usize| ((i * 7 + k * 13) % 5) as f32 * 0.0005 - 0.001;
+                out.indices.push(out.positions.len() as u32);
+                out.positions
+                    .push([p[0] + jitter(0), p[1] + jitter(1), p[2] + jitter(2)]);
+            }
+            out
+        })
+        .collect()
+}
+
+/// Triangles of [`sheet`].
+fn sheet_triangles() -> u64 {
+    sheet().iter().map(|m| m.indices.len() as u64 / 3).sum()
+}
+
+/// The incidence pass sorts only the items another leaf may hold. Its rows, open-edge
+/// endpoints and counts equal sorting every item, for 1, 2, 3 and 8 item workers, on every
+/// mesh fixture (seams, T-junctions, books, collinear and coincident sheets, packed leaves
+/// and synthetic depths, mixed densities) and the snap-boundary sheet, in snapped and float
+/// profiles. On the larger fixtures the filter sorts fewer items than every one.
+#[test]
+fn incidence_filter_matches_sorting_every_item() {
+    use crate::mesh_large::{
+        config::{Jobs, TreeConfig},
+        full,
+        hlod::interfaces::{self, SORTED_ITEMS, SORT_EVERY_ITEM},
+        phases::StepProgress,
+    };
+    let bbox = crate::mesh_large::MeshSubset::bbox(&[10., -80., 70., -20.]).unwrap();
+    let weld = crate::mesh_large::MeshWeld::new(0.01).unwrap();
+    let fixtures: Vec<Fixture> = vec![
+        ("sheet", sheet(), 64, None, None),
+        // A few large leaves: fewer chunks than 64 workers.
+        ("sheet_large_leaves", sheet(), 1024, None, None),
+        ("t_junction", t_junction(), 16, None, None),
+        ("book", book(), 16, None, None),
+        ("collinear", collinear(), 16, None, None),
+        ("back_to_back", back_to_back(), 16, None, None),
+        ("thin_islands", thin_islands(), 64, None, None),
+        ("cluster", cluster(), 64, None, None),
+        ("packed", packed(), 16, None, None),
+        ("jagged_sheet", jagged_sheet(), 64, None, None),
+        (
+            "back_to_back_mismatched",
+            back_to_back_mismatched(),
+            16,
+            None,
+            None,
+        ),
+        ("triple_stack", triple_stack(), 16, None, None),
+        ("fin", fin(), 16, None, None),
+        ("closed_box", closed_box(), 16, None, None),
+        ("noisy_sheet", noisy_sheet(), 64, None, None),
+        ("snap_sheet", snap_sheet(), 64, None, None),
+        // A subset bake: only the triangles whose centroid lies in the box are kept.
+        ("sheet_bbox", sheet(), 64, Some(bbox), None),
+        // A welded bake: positions within the epsilon are merged before capture.
+        ("soup_sheet_weld", soup_sheet(), 64, None, Some(weld)),
+    ];
+    let work = tempfile::tempdir().unwrap();
+    let mut fewer_chunks_than_workers = false;
+    for (name, meshes, leaf_triangles, subset, weld) in fixtures {
+        let input = write_gltf(&work.path().join(name), &meshes);
+        for profile in [Profile::Balanced, Profile::Quality] {
+            let mut config = TreeConfig::new(profile).with_leaf_triangles(leaf_triangles);
+            config.jobs = Jobs::Fixed(NonZeroUsize::new(1).unwrap());
+            config.subset = subset.clone();
+            config.weld = weld;
+            let captured = full::capture(&input, &config, &mut || Ok(())).unwrap();
+            // The options took effect: a strict subset, a weld that moved positions.
+            if let Some(report) = &captured.report.subset {
+                assert!(
+                    captured.triangles.len() < sheet_triangles(),
+                    "{name}: {report:?}"
+                );
+            }
+            if let Some(report) = &captured.report.weld {
+                assert!(
+                    report.merged_vertices + report.moved_vertices > 0,
+                    "{name}: {report:?}"
+                );
+            }
+            let pass = |workers: usize, every: bool| {
+                SORT_EVERY_ITEM.with(|e| e.set(every));
+                let (rows, stats, ends) = interfaces::build(
+                    &captured.scratch,
+                    interfaces::Sorters::uniform(config.sorter(1)),
+                    &captured.tree.nodes,
+                    &captured.triangles,
+                    &captured.corner_depths,
+                    &captured.lattice,
+                    &captured.leaf_index,
+                    workers,
+                    &|_| Ok(()),
+                    StepProgress::silent(),
+                )
+                .unwrap();
+                SORT_EVERY_ITEM.with(|e| e.set(false));
+                let rows: Vec<_> = rows.map(Result::unwrap).collect();
+                let ends: Vec<_> = ends.reader().unwrap().map(Result::unwrap).collect();
+                let sorted = SORTED_ITEMS.with(std::cell::Cell::get);
+                ((rows, serde_json::to_value(stats).unwrap(), ends), sorted)
+            };
+            let (every, all) = pass(1, true);
+            assert_eq!(all, every.1["items"].as_u64().unwrap(), "{name}");
+            let mut fewest = u64::MAX;
+            // 64 workers: more than the chunks of the smaller fixtures.
+            for workers in [1, 2, 3, 8, 64] {
+                let (filtered, sorted) = pass(workers, false);
+                assert!(filtered == every, "{name} {profile:?} at {workers} workers");
+                fewest = fewest.min(sorted);
+            }
+            if matches!(
+                name,
+                "sheet" | "snap_sheet" | "noisy_sheet" | "jagged_sheet"
+            ) {
+                assert!(fewest < all, "{name} {profile:?}: {fewest} of {all} sorted");
+            }
+            // Chunks never outnumber leaves: 64 workers exceed this fixture's chunks.
+            fewer_chunks_than_workers |= captured.tree.stats.leaves < 64;
+        }
+    }
+    assert!(fewer_chunks_than_workers);
+}
+
+/// A failure in a later wave is reported for the first failing leaf in DFS order, whatever
+/// order the workers met the failures in. Every leaf from the start of the second wave on
+/// fails: that first leaf after a delay, every later one at once, so a later leaf of the
+/// same wave fails first in time.
+#[test]
+fn incidence_reports_the_first_failing_leaf_in_order() {
+    use crate::mesh_large::{
+        config::{Jobs, TreeConfig},
+        full,
+        hlod::interfaces::{self, FAIL_LEAVES},
+        phases::StepProgress,
+        records::NodeKind,
+    };
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(&work.path().join("sheet"), &sheet());
+    let mut config = TreeConfig::new(Profile::Balanced).with_leaf_triangles(16);
+    config.jobs = Jobs::Fixed(NonZeroUsize::new(1).unwrap());
+    let captured = full::capture(&input, &config, &mut || Ok(())).unwrap();
+    let sizes: Vec<u64> = captured
+        .tree
+        .nodes
+        .reader()
+        .unwrap()
+        .map(Result::unwrap)
+        .filter(|n| n.kind == NodeKind::Leaf)
+        .map(|n| n.end - n.first)
+        .collect();
+    let leaves = u32::try_from(sizes.len()).unwrap();
+    for workers in [1, 2, 4] {
+        let waves = interfaces::wave_starts(&sizes, workers);
+        assert!(waves.len() > 2, "{workers} workers: {waves:?}");
+        let first = u32::try_from(waves[1]).unwrap();
+        FAIL_LEAVES.with(|f| {
+            *f.borrow_mut() = (first..leaves)
+                .map(|leaf| {
+                    let delay = if leaf == first { 200 } else { 0 };
+                    (leaf, std::time::Duration::from_millis(delay))
+                })
+                .collect();
+        });
+        let error = interfaces::build(
+            &captured.scratch,
+            interfaces::Sorters::uniform(config.sorter(1)),
+            &captured.tree.nodes,
+            &captured.triangles,
+            &captured.corner_depths,
+            &captured.lattice,
+            &captured.leaf_index,
+            workers,
+            &|_| Ok(()),
+            StepProgress::silent(),
+        )
+        .err()
+        .expect("injected failures");
+        FAIL_LEAVES.with(|f| f.borrow_mut().clear());
+        assert!(
+            error
+                .to_string()
+                .contains(&format!("injected failure at leaf {first}")),
+            "{workers} workers: {error}"
+        );
+    }
+}
+
+/// Tile-592 class: a real simplification leaves the nearest delivered surface
+/// too far from an interior point of an original edge. Price that point against
+/// every triangle of the packaged root, separately from the producer.
+#[test]
+fn published_root_covers_an_original_edge_in_the_delivered_glb() {
+    let work = tempfile::tempdir().unwrap();
+    let mut mesh = grid((12, 12), (0., 12.), (0., 12.), &|_, _| 0., [1.; 4]);
+    for (i, p) in mesh.positions.iter_mut().enumerate() {
+        let (x, z) = (i / 13, i % 13);
+        let height = ((79 * x + 53 * z + 19 * x * z + 333) % 61) as f32;
+        let horizontal = |k: usize| {
+            if k < 7 {
+                k as f32 / 128.
+            } else {
+                1. + (k - 7) as f32 * 2.
+            }
+        };
+        *p = [
+            horizontal(x),
+            height / if x < 8 && z < 8 { 64. } else { 1024. },
+            horizontal(z),
+        ];
+    }
+    // The diagonal joins (1,7) and (2,6). All input coordinates are dyadic.
+    let (a, b) = (20, 32);
+    assert!(mesh
+        .indices
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .any(|face| face.contains(&a) && face.contains(&b)));
+    let edge = [mesh.positions[a as usize], mesh.positions[b as usize]];
+    let input = write_gltf(&work.path().join("input"), &[mesh]);
+    let dir = stage(
+        &input,
+        &work.path().join("stage"),
+        &Run {
+            cap: 44,
+            leaf_triangles: 32,
+            jobs: 2,
+            profile: LeafProfile::Quality,
+            ..production_nearest_run()
+        },
+    )
+    .unwrap();
+    let output = work.path().join("out.3tz");
+    mesh_leaves_to_3tz(
+        MeshTilesetRequest::new(&dir, &output),
+        &RunControl::default(),
+    )
+    .unwrap();
+    let row = rows(&dir.join("proxies.jsonl"))
+        .into_iter()
+        .find(|r| r["depth"] == 0)
+        .unwrap();
+    assert_eq!(
+        (row["first"].as_u64(), row["end"].as_u64()),
+        (Some(0), Some(288))
+    );
+    let faces = decode(&fs::read(dir.join(row["uri"].as_str().unwrap())).unwrap()).faces;
+    let record = work.path().join("witness.json");
+    fs::write(
+        &record,
+        serde_json::to_vec(&json!({
+            "sha256":row["sha256"], "edge":edge, "fraction":[7,16], "decoded":faces,
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    let result = std::process::Command::new("python3")
+        .arg(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("bench/architecture_audit/mesh_hlod/s5/published_edge_witness.py"),
+        )
+        .arg(output)
+        .arg(record)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
+    );
+}
+
+/// Every internal cell's row may queue for postorder writing (a built cell waits for its
+/// siblings, D): the stage charges each row's bound. Its strings fit their allowance at the
+/// largest keys, and the bound stays a few kilobytes.
+#[test]
+fn a_queued_row_is_charged_within_its_bound() {
+    let key = super::store::TileKey {
+        first: u64::MAX,
+        end: u64::MAX,
+        depth: u32::MAX,
+        leaf_begin: 0,
+        leaf_end: 0,
+    };
+    assert!(key.uri().len() <= 64, "{}", key.uri());
+    let bound = super::queued_row_bytes();
+    assert!(bound < 8 << 10, "{bound}");
+    assert_eq!(
+        super::queued_rows_bytes(1000),
+        1000 * bound
+            + (256 * std::mem::size_of::<super::store::TileKey>()
+                + 2 * super::recovery::FRONTIER * std::mem::size_of::<super::recovery::Input>())
+                as u64
+    );
+}
+
+/// D keeps no vertex on a chord that has an owner under another parent cell earlier in the
+/// walk (it may already be final, and waiting to rebuild it would stall the walk); it keeps
+/// those on chords shared only with its siblings and later cells. The walk's result is the
+/// same for any number of workers.
+#[test]
+fn a_stalled_cell_keeps_no_vertex_on_a_chord_with_an_earlier_owner_elsewhere() {
+    let work = tempfile::tempdir().unwrap();
+    let source = grid(
+        (64, 64),
+        (0., 100.),
+        (0., 100.),
+        &|_, _| 0.,
+        [0.4, 0.5, 0.3, 1.],
+    );
+    let input = write_gltf(&work.path().join("src"), &[source]);
+    // The last depth-1 cell's first child (source rank 6,144 of 8,192): it borders the
+    // depth-1 cells before it, and its siblings.
+    let run = |jobs| Run {
+        leaf_triangles: 64,
+        cap: 100,
+        jobs,
+        mutation: Mutation::KeepAt(2, true, 6144),
+        budget: Some(4 << 30),
+        ..s2_run()
+    };
+    let diagnostics = |dir: &Path| -> Value {
+        let resources: Value =
+            serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
+        resources["hlod"]["diagnostics"].clone()
+    };
+    let many = stage(&input, &work.path().join("many"), &run(4)).unwrap();
+    let d = diagnostics(&many);
+    assert!(d["kept_vertices"].as_u64().unwrap() > 0, "{d}");
+    assert!(d["keep_refused_earlier"].as_u64().unwrap() > 0, "{d}");
+    assert_eq!(d["keep_outcomes"], json!({"built": 1}), "{d}");
+    assert_eq!(
+        d["keep_records"][0]["refusedEarlier"], d["keep_refused_earlier"],
+        "{d}"
+    );
+    assert_eq!(d["omitted_proxies"], 0, "{d}");
+    published_and_valid("refused earlier chords", &many, work.path());
+    let one = stage(&input, &work.path().join("one"), &run(1)).unwrap();
+    assert!(published(&one) == published(&many));
+    assert!(audit_semantics(&one) == audit_semantics(&many));
+}
+
+/// D: a cell whose whole ladder fails keeps the border vertices P1 could not remove,
+/// splitting the chords it shares; the co-owners of those chords build again with the same
+/// pieces, so the archive validates with exact seams. Without keeping them the same cell is
+/// omitted.
+#[test]
+fn a_stalled_cell_keeps_its_border_vertices() {
+    let work = tempfile::tempdir().unwrap();
+    // A flat sheet: cell seams run along grid lines, so the shared chords remove the
+    // collinear border points between their ends.
+    let source = grid(
+        (32, 32),
+        (0., 100.),
+        (0., 100.),
+        &|_, _| 0.,
+        [0.4, 0.5, 0.3, 1.],
+    );
+    let input = write_gltf(&work.path().join("src"), &[source]);
+    let run = |keep| Run {
+        leaf_triangles: 64,
+        cap: 100,
+        mutation: Mutation::KeepAt(1, keep, 0),
+        budget: Some(4 << 30),
+        ..s2_run()
+    };
+    let diagnostics = |dir: &Path| -> Value {
+        let resources: Value =
+            serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
+        resources["hlod"]["diagnostics"].clone()
+    };
+    let dir = stage(&input, &work.path().join("keep"), &run(true)).unwrap();
+    let d = diagnostics(&dir);
+    assert!(d["kept_vertices"].as_u64().unwrap() > 0, "{d}");
+    assert!(d["rebuilt_cells"].as_u64().unwrap() > 0, "{d}");
+    assert!(d["keep_peak_waiting"].as_u64().unwrap() > 0, "{d}");
+    assert!(d["keep_peak_held_triangles"].as_u64().unwrap() > 0, "{d}");
+    // The stalled cell is its depth's first in the walk: no chord it splits has an
+    // earlier owner.
+    assert_eq!(d["keep_refused_earlier"], 0, "{d}");
+    assert_eq!(d["keep_outcomes"], json!({"built": 1}), "{d}");
+    assert_eq!(d["keep_records"][0]["kept"], d["kept_vertices"], "{d}");
+    assert_eq!(d["omitted_proxies"], 0, "{d}");
+    published_and_valid("kept border vertices", &dir, work.path());
+    let control = stage(&input, &work.path().join("omit"), &run(false)).unwrap();
+    let c = diagnostics(&control);
+    assert_eq!(c["kept_vertices"], 0, "{c}");
+    assert!(c["omitted_proxies"].as_u64().unwrap() > 0, "{c}");
+}
+
+#[test]
+#[ignore]
+fn explore_leaf_sided_chords() {
+    let work = tempfile::tempdir().unwrap();
+    let source = vec![
+        grid(
+            (64, 64),
+            (0., 50.),
+            (0., 100.),
+            &|_, _| 0.,
+            [0.4, 0.5, 0.3, 1.],
+        ),
+        grid(
+            (1, 64),
+            (50., 100.),
+            (0., 100.),
+            &|_, _| 0.,
+            [0.4, 0.5, 0.3, 1.],
+        ),
+    ];
+    let input = write_gltf(&work.path().join("src"), &source);
+    for depth in [1u32, 2, 3] {
+        for rank in (0..8320u64).step_by(520) {
+            let run = Run {
+                leaf_triangles: 64,
+                cap: 100,
+                mutation: Mutation::KeepAt(depth, true, rank),
+                budget: Some(4 << 30),
+                ..s2_run()
+            };
+            let dir = work.path().join(format!("d{depth}-r{rank}"));
+            let Ok(out) = stage(&input, &dir, &run) else {
+                println!("d{depth} r{rank}: stage error");
+                continue;
+            };
+            let r: Value =
+                serde_json::from_slice(&fs::read(out.join("resources.json")).unwrap()).unwrap();
+            let d = &r["hlod"]["diagnostics"];
+            println!(
+                "d{depth} r{rank}: records {} omitted {}",
+                d["keep_records"], d["omitted_proxies"]
+            );
+        }
+    }
+}
+
+/// Root recovery v2: a stalled depth-2 cell (D off) is omitted, and its omission no
+/// longer costs the root. Every omitted cell passes up a contract-free stand-in within the
+/// cap, the root builds over them and declares version 2 over the whole published frontier,
+/// the archive validates, and the output is the same with 1 and 4 workers.
+#[test]
+fn root_recovery_v2_recovers_the_root_over_stand_ins() {
+    let work = tempfile::tempdir().unwrap();
+    let source = grid(
+        (64, 64),
+        (0., 100.),
+        (0., 100.),
+        &|_, _| 0.,
+        [0.4, 0.5, 0.3, 1.],
+    );
+    let input = write_gltf(&work.path().join("src"), &[source]);
+    let run = |jobs| Run {
+        leaf_triangles: 64,
+        cap: 100,
+        jobs,
+        mutation: Mutation::KeepAt(2, false, 0),
+        budget: Some(4 << 30),
+        ..s2_run()
+    };
+    let on = stage(&input, &work.path().join("j4"), &run(4)).unwrap();
+    let one = stage(&input, &work.path().join("j1"), &run(1)).unwrap();
+    assert!(published(&on) == published(&one));
+    let root = rows(&on.join("proxies.jsonl"))
+        .into_iter()
+        .find(|r| r["depth"] == 0)
+        .expect("v2 builds the root");
+    let recovery = &root["recovery"];
+    assert_eq!(recovery["version"], 2, "{root}");
+    let frontier = recovery["frontier"].as_array().unwrap();
+    assert!(
+        frontier.len() > 8,
+        "a frontier v1 could not take: {recovery}"
+    );
+    let resources: Value =
+        serde_json::from_slice(&fs::read(on.join("resources.json")).unwrap()).unwrap();
+    let stand_ins = resources["hlod"]["diagnostics"]["recovery_v2_stand_ins"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert!(!stand_ins.is_empty());
+    for s in &stand_ins {
+        let triangles = s[3].as_u64().unwrap();
+        assert!(triangles > 0 && triangles <= 100, "{s}");
+    }
+    published_and_valid("root recovery v2", &on, work.path());
+}
+
+/// Root recovery v2's frontier children keep their ownership identity however the
+/// planner fits the root's document: with a stall at each coarse depth, the archive
+/// validates under the production limits and under limits small enough that the root's
+/// children leave its document (an implicit root's header would carry no identity).
+#[test]
+fn a_recovered_roots_frontier_keeps_its_identity_in_any_layout() {
+    use crate::{mesh_large::delivery, validate::ExpectedProfile};
+    let work = tempfile::tempdir().unwrap();
+    let source = grid(
+        (64, 64),
+        (0., 100.),
+        (0., 100.),
+        &|_, _| 0.,
+        [0.4, 0.5, 0.3, 1.],
+    );
+    let input = write_gltf(&work.path().join("src"), &[source]);
+    for depth in 1..=3 {
+        let run = Run {
+            leaf_triangles: 64,
+            cap: 100,
+            mutation: Mutation::KeepAt(depth, false, 0),
+            budget: Some(4 << 30),
+            ..s2_run()
+        };
+        let on = stage(&input, &work.path().join(format!("d{depth}")), &run).unwrap();
+        let root = rows(&on.join("proxies.jsonl"))
+            .into_iter()
+            .find(|r| r["depth"] == 0)
+            .unwrap();
+        assert_eq!(root["recovery"]["version"], 2, "depth {depth}: {root}");
+        for (name, limits) in [
+            ("production", delivery::plan::LIMITS),
+            (
+                "small",
+                delivery::plan::Limits {
+                    objects: 6,
+                    records: 24,
+                    levels: 3,
+                },
+            ),
+        ] {
+            let output = work.path().join(format!("d{depth}-{name}.3tz"));
+            let mut file = fs::File::create(&output).unwrap();
+            delivery::publish_with_limits(
+                &MeshTilesetRequest::new(&on, &output),
+                limits,
+                &mut file,
+                work.path(),
+            )
+            .unwrap();
+            drop(file);
+            inspect(ValidationRequest::new(&output).expect_profile(ExpectedProfile::Hlod))
+                .unwrap_or_else(|e| panic!("depth {depth} {name}: {e}"));
+        }
+    }
+}
+
+/// Root recovery v2's declaration bound: a root whose scaffold would exceed its bound (here
+/// 0) stays omitted, as without recovery, and the stage completes and validates.
+#[test]
+fn a_root_past_its_declaration_bound_stays_omitted() {
+    let work = tempfile::tempdir().unwrap();
+    let source = grid(
+        (64, 64),
+        (0., 100.),
+        (0., 100.),
+        &|_, _| 0.,
+        [0.4, 0.5, 0.3, 1.],
+    );
+    let input = write_gltf(&work.path().join("src"), &[source]);
+    let dir = stage(
+        &input,
+        &work.path().join("bound"),
+        &Run {
+            leaf_triangles: 64,
+            cap: 100,
+            mutation: Mutation::StallPastScaffoldBound(2),
+            budget: Some(4 << 30),
+            ..s2_run()
+        },
+    )
+    .unwrap();
+    let rows = rows(&dir.join("proxies.jsonl"));
+    assert!(
+        rows.iter().all(|r| r["depth"] != 0),
+        "the root stays omitted"
+    );
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    assert_eq!(manifest["hlod"]["omittedByDepth"][0], 1, "{manifest}");
+    published_and_valid("declaration bound", &dir, work.path());
+}
+
+/// Root recovery v2 over folded sheets: N3's stand-ins admit folds (the layers collapse
+/// onto each other). No published tile below declares them, so a tile keeping them
+/// declares a fold stage of its own (at least 2) and the validator recounts them. A stall
+/// at each depth and cap: the root is recovered and the archive validates.
+#[test]
+fn stand_ins_over_folded_sheets_declare_the_folds_they_pass_up() {
+    let work = tempfile::tempdir().unwrap();
+    let input = write_gltf(
+        &work.path().join("src"),
+        &[folded_sheet(48, 5, 0.02, 0.001, 7)],
+    );
+    let mut folded = 0;
+    for (depth, cap) in [(1, 300), (2, 300), (3, 300), (1, 1200), (2, 1200)] {
+        let dir = stage(
+            &input,
+            &work.path().join(format!("d{depth}-{cap}")),
+            &Run {
+                cap,
+                mutation: Mutation::KeepAt(depth, false, 0),
+                ..Run::default()
+            },
+        )
+        .unwrap();
+        let resources: Value =
+            serde_json::from_slice(&fs::read(dir.join("resources.json")).unwrap()).unwrap();
+        let stand_ins = resources["hlod"]["diagnostics"]["recovery_v2_stand_ins"].clone();
+        folded += stand_ins
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|s| s[4].as_u64().unwrap() > 0)
+            .count();
+        let root = rows(&dir.join("proxies.jsonl"))
+            .into_iter()
+            .find(|r| r["depth"] == 0)
+            .unwrap_or_else(|| panic!("depth {depth} cap {cap}: no root, {stand_ins}"));
+        assert_eq!(root["recovery"]["version"], 2, "{root}");
+        published_and_valid(
+            &format!("folded stand-ins d{depth}-{cap}"),
+            &dir,
+            work.path(),
+        );
+    }
+    assert!(
+        folded > 0,
+        "the fixture must pass folds up through a stand-in"
+    );
+}
+
+/// A tile over a fold-carrying stand-in declares its folds at stage 2 or above (no
+/// published tile below declares them); without stand-in folds, or holding none, its
+/// built stage stands.
+#[test]
+fn folds_from_a_stand_in_are_declared_as_admitted_here() {
+    use super::declared_stage;
+    assert_eq!(declared_stage(0, true, 5), 2);
+    assert_eq!(declared_stage(1, true, 5), 2);
+    assert_eq!(declared_stage(3, true, 5), 3);
+    assert_eq!(declared_stage(0, true, 0), 0);
+    assert_eq!(declared_stage(0, false, 5), 0);
+    assert_eq!(declared_stage(1, false, 5), 1);
 }

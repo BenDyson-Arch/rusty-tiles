@@ -12,8 +12,12 @@ mod support;
 /// A pipe whose read end is already dropped: every stderr write gets EPIPE.
 fn broken_pipe() -> Stdio {
     let mut fds = [0; 2];
-    assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0);
+    // SAFETY: `fds` is writable for the two descriptors pipe returns.
+    let made = unsafe { libc::pipe(fds.as_mut_ptr()) };
+    assert_eq!(made, 0);
+    // SAFETY: pipe returned this new descriptor and nothing else owns it.
     drop(unsafe { OwnedFd::from_raw_fd(fds[0]) });
+    // SAFETY: as for the read end above.
     Stdio::from(unsafe { OwnedFd::from_raw_fd(fds[1]) })
 }
 

@@ -11,6 +11,7 @@ use crate::{
             interfaces::{InterfaceRow, Key},
             store::TileKey,
         },
+        phases::{Step, StepProgress},
         records::{NodeKind, NodeRecord},
     },
     spill::{ExternalSorter, Scratch, Sequence, SequenceWriter, SortConfig},
@@ -20,6 +21,17 @@ use crate::{
 /// The face-retention membership filter (1 MiB, charged in `memory_need`). False
 /// positives only cost an exact lookup.
 pub(super) const FILTER_WORDS: usize = 1 << 17;
+
+/// Upper bounds on the levels' emission over all depths ([`Source::level_bounds`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct LevelBounds {
+    /// Segments, summed over depths.
+    pub(super) segments: u64,
+    /// Owner references, summed over depths.
+    pub(super) refs: u64,
+    /// The most edges external at any one depth (one level's ordered arc).
+    pub(super) active: u64,
+}
 
 pub(super) struct Source {
     /// key x/y/z, owner first/end, incident head/count, minimum terminal leaf depth
@@ -133,15 +145,19 @@ impl Source {
             Item = Result<super::super::interfaces::KeyRecord, crate::spill::SpillError>,
         >,
         admitted: &dyn Fn() -> Result<(), JobError>,
-        check: &(dyn Fn() -> Result<(), JobError> + Sync),
+        progress: &StepProgress<'_>,
     ) -> Result<Self, JobError> {
+        let check = || progress.check();
         let (nodes, leaves, depth) = build_tree(scratch, tree)?;
         let mut leaf_rows = SequenceWriter::new(scratch, "border-leaf-rows", sorter.buffer_bytes)?;
-        let mut sorted = ExternalSorter::<Words<7>>::new(scratch, sorter)?;
+        let mut sorted = ExternalSorter::<Words<7>>::new(scratch, sorter)?.observed(progress);
+        // The caller begins `BordersRows` with the row count.
+        let mut rows_total = 0u64;
         for (i, row) in rows.enumerate() {
             if i.is_multiple_of(4096) {
-                check()?;
+                progress.advance(i as u64)?;
             }
+            rows_total += 1;
             let r = row?;
             leaf_rows.push(&r)?;
             sorted.push(Words([
@@ -162,6 +178,8 @@ impl Source {
         let mut item: Option<[u64; 6]> = None;
         let mut begin = 0;
         let mut terminal = 31;
+        progress.end()?;
+        progress.begin(Step::BordersGraph, rows_total)?;
         let flush = |k: [u64; 6],
                      begin,
                      end,
@@ -176,7 +194,10 @@ impl Source {
             }
             Ok(())
         };
-        for row in sorted.finish()? {
+        for (i, row) in sorted.finish()?.enumerate() {
+            if i.is_multiple_of(4096) {
+                progress.advance(i as u64)?;
+            }
             let r = row?.0;
             let k: [u64; 6] = r[..6].try_into().unwrap();
             if item.is_some_and(|old| old != k) {
@@ -256,6 +277,7 @@ impl Source {
             }
         }
         admitted()?;
+        progress.end()?;
         Ok(source)
     }
 
@@ -271,8 +293,11 @@ impl Source {
     pub(super) fn retain_faces(
         &mut self,
         faces: impl Iterator<Item = Result<[Key; 3], JobError>>,
-        check: &(dyn Fn() -> Result<(), JobError> + Sync),
+        triangles: u64,
+        progress: &StepProgress<'_>,
     ) -> Result<(), JobError> {
+        let check = || progress.check();
+        progress.begin(Step::BordersFaces, triangles)?;
         let mut filter = vec![0u64; FILTER_WORDS];
         let probes = |k: &Key| {
             let mut h = (u64::from(k[0]) | u64::from(k[1]) << 32) ^ u64::from(k[2]) << 17;
@@ -292,7 +317,7 @@ impl Source {
         }
         for (i, face) in faces.enumerate() {
             if i.is_multiple_of(4096) {
-                check()?;
+                progress.advance(i as u64)?;
             }
             let face = face?;
             if !face.iter().all(|k| {
@@ -364,6 +389,7 @@ impl Source {
                 }
             }
         }
+        progress.end()?;
         Ok(())
     }
     /// Whether edge `a`-`b` is shared and external (a border between owners) at `depth`.
@@ -434,6 +460,59 @@ impl Source {
     }
     pub(super) fn external(&self, begin: u64, end: u64, depth: u32) -> Result<bool, JobError> {
         Ok(self.owner(begin, depth)? != self.owner(end - 1, depth)?)
+    }
+
+    /// Upper bounds on what the levels emit, from the graph alone (`Borders::build`). At
+    /// each depth a level walks the edges and vertices that are external there (owners in
+    /// more than one cell): it emits at most one segment per such edge (each chord spans at
+    /// least one edge of its chain) and one point segment per such vertex, and each segment
+    /// references at most its chain's owner run, which no edge of the chain exceeds. External
+    /// at a depth implies external at every finer one, so each item is walked from the finest
+    /// depth until it is internal. An item's run ends are read once: [`Self::external`] at
+    /// depth `d` compares their leaves' ancestors at `d`.
+    pub(super) fn level_bounds(
+        &self,
+        check: &dyn Fn() -> Result<(), JobError>,
+    ) -> Result<LevelBounds, JobError> {
+        let mut active = vec![0u64; self.depth as usize + 1];
+        let mut bounds = LevelBounds::default();
+        let ancestors = |begin: u64, end: u64| -> Result<[[u64; 33]; 2], JobError> {
+            Ok([
+                self.leaves.get(self.owners.get(begin)?[0])?,
+                self.leaves.get(self.owners.get(end - 1)?[0])?,
+            ])
+        };
+        for i in 0..self.edges.len {
+            if i.is_multiple_of(4096) {
+                check()?;
+            }
+            let e = self.edges.get(i)?;
+            let [a, b] = ancestors(e[2], e[3])?;
+            for d in (0..=self.depth).rev() {
+                if a[1 + d as usize] == b[1 + d as usize] {
+                    break;
+                }
+                active[d as usize] += 1;
+                bounds.segments += 1;
+                bounds.refs += e[3] - e[2];
+            }
+        }
+        for i in 0..self.vertices.len {
+            if i.is_multiple_of(4096) {
+                check()?;
+            }
+            let v = self.vertices.get(i)?;
+            let [a, b] = ancestors(v[3], v[4])?;
+            for d in (0..=self.depth).rev() {
+                if a[1 + d as usize] == b[1 + d as usize] {
+                    break;
+                }
+                bounds.segments += 1;
+                bounds.refs += v[4] - v[3];
+            }
+        }
+        bounds.active = active.into_iter().max().unwrap_or(0);
+        Ok(bounds)
     }
     pub(super) fn owner_list(
         &self,

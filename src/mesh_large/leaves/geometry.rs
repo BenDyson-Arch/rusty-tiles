@@ -37,7 +37,7 @@ pub(crate) enum PositionStorage {
 #[derive(Clone, Debug)]
 pub(crate) struct EncodedPositions {
     pub storage: PositionStorage,
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg_attr(not(test), expect(dead_code, reason = "used only by unit tests"))]
     // Retained for bounded unit-test fixtures; production uses the streamed facade.
     pub common_origin: [f32; 3],
     pub decoded: Vec<[f32; 3]>,
@@ -69,6 +69,23 @@ fn up(x: f64) -> f64 {
         f64::from_bits(x.to_bits() - 1)
     }
 }
+
+/// Outward Euclidean distance between two captured or decoded binary32 corners.
+pub(super) fn corner_distance(source: [f32; 3], decoded: [f32; 3]) -> f64 {
+    let mut squared = 0.;
+    for (a, b) in source.into_iter().zip(decoded) {
+        let difference = (f64::from(a) - f64::from(b)).abs();
+        if difference != 0. {
+            let delta = up(difference);
+            squared = up(squared + up(delta * delta));
+        }
+    }
+    if squared == 0. {
+        0.
+    } else {
+        up(squared.sqrt())
+    }
+}
 fn canonical_zero(x: f32) -> f32 {
     if x == 0.0 {
         0.0
@@ -97,10 +114,26 @@ fn power_step(required: f64) -> Result<f32, JobError> {
 }
 
 impl LatticePlan {
+    /// A float-profile plan (canonical positions are the source's own) for unit fixtures
+    /// that build coarse tiles without a captured lattice.
+    #[cfg(test)]
+    pub(crate) fn float_for_tests() -> Self {
+        Self {
+            version: 1,
+            profile: Profile::Lossless,
+            common_origin: [0.; 3],
+            steps: Vec::new(),
+            depth_extents: Vec::new(),
+            source_bounds: Bounds {
+                min: [-1.; 3],
+                max: [1.; 3],
+            },
+        }
+    }
     pub(crate) fn profile(&self) -> Profile {
         self.profile
     }
-    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+    /// The lattice step of each depth (the incidence pass grows leaf boxes by them).
     pub(crate) fn steps(&self) -> &[f32] {
         &self.steps
     }
@@ -275,17 +308,7 @@ impl LatticePlan {
         let mut error = 0.0_f64;
         for (source, final_point) in points.iter().zip(&decoded) {
             bounds.include(*final_point);
-            let mut squared = 0.0;
-            for a in 0..3 {
-                let difference = (f64::from(source[a]) - f64::from(final_point[a])).abs();
-                if difference != 0.0 {
-                    let delta = up(difference);
-                    squared = up(squared + up(delta * delta));
-                }
-            }
-            if squared != 0.0 {
-                error = error.max(up(squared.sqrt()));
-            }
+            error = error.max(corner_distance(*source, *final_point));
         }
         Ok(EncodedPositions {
             storage,
@@ -311,6 +334,12 @@ pub(crate) struct CoarsePositions {
 impl LatticePlan {
     fn float_profile(&self) -> bool {
         matches!(self.profile, Profile::Quality | Profile::Lossless)
+    }
+
+    /// Whether canonical values are rounded to the lattice ([`Self::steps`]); in float
+    /// profiles they are the source values.
+    pub(crate) fn snapped(&self) -> bool {
+        !self.float_profile()
     }
 
     /// The leaf-compatible canonical decode of a source position whose welded vertex has

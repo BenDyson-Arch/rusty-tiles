@@ -124,7 +124,10 @@ pub(super) fn contract(
         })
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn triangulate(
     m: &mut Merged,
     interface: &[InterfaceRow],
@@ -876,6 +879,7 @@ mod tests {
             &m.triangles,
             interface,
             &previous,
+            [0, 0],
             &mapping,
         );
         let cap = m.triangles.len();
@@ -1103,6 +1107,7 @@ mod tests {
                 &m.triangles,
                 &interface,
                 &previous,
+                [0, 0],
                 &labels,
             );
             let mut map: Vec<_> = (0..m.positions.len() as u32).collect();

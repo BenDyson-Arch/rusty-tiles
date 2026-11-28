@@ -308,7 +308,10 @@ impl Store {
     /// vertex's image for the pairwise depth rules (loaded by `border_pairs`) and returns
     /// the contracted arcs by chord (for the equal-direction multiplicity check) and the
     /// tile's shared points (for the seam-owner check).
-    #[allow(clippy::type_complexity)]
+    #[expect(
+        clippy::type_complexity,
+        reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+    )]
     pub(super) fn border(
         &self,
         tile: i64,
@@ -425,9 +428,9 @@ impl Store {
         Ok((contracted, shared))
     }
 
-    /// D1/D11 amendment A2 (N1): a coarse face on three shared points that no leaf below
-    /// holds, or a coarse edge between two shared points that is neither a leaf edge nor
-    /// a delivered chord, is new on the seam. Each has one seam owner per depth: for a
+    /// D1/D11 amendment A2 (P1's second pass, N1): a coarse face on three shared points that
+    /// no leaf below holds, or a coarse edge between two shared points that is neither a leaf
+    /// edge nor a delivered chord, is new on the seam. Each has one seam owner per depth: for a
     /// segment `a < b`, the tile holding `a`'s least holding leaf, or its greatest when
     /// the top bit of FNV-1a 64 over the little-endian words of `a` then `b` is set; a
     /// face belongs to the owner of its least-to-greatest corner segment. Two same-depth
@@ -516,7 +519,10 @@ impl Store {
     }
 
     /// One arc between retained vertices: its chord, directions and displacement.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+    )]
     fn arc(
         &self,
         tile: i64,
@@ -690,9 +696,14 @@ impl Store {
     /// Whether every coarse face using `edge` in `direction` (0: lower to higher
     /// key) matches its own descendant source face, one to one, on every source edge
     /// of `arc`: same direction along the arc, third corner on the same side of the
-    /// coarse edge (exact acute wedge). An unrelated face of that edge (another
-    /// book page on another side) supplies no correspondence.
-    #[allow(clippy::too_many_arguments)]
+    /// coarse edge (exact acute wedge), or, on an uncontracted edge (an arc of one
+    /// source edge), the same third corner: that source face itself, which a page
+    /// collinear with the edge matches by no wedge (#442). An unrelated face of that
+    /// edge (another book page on another side) supplies no correspondence.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+    )]
     fn corresponds(
         &self,
         (tile, last): (i64, Option<i64>),
@@ -767,7 +778,14 @@ impl Store {
                     right
                         .iter()
                         .map(|(s, _)| {
-                            wedge(a, b, point(**c), point(**s)) == std::cmp::Ordering::Greater
+                            // On an uncontracted edge the same third corner is the same
+                            // source face, whatever its wedge: a page collinear with the
+                            // edge (a surface under the published contract) has no acute
+                            // wedge even with itself. On a contracted arc a shared apex is
+                            // not the same face, so the wedge still decides.
+                            (arc.len() == 1 && c == s)
+                                || wedge(a, b, point(**c), point(**s))
+                                    == std::cmp::Ordering::Greater
                         })
                         .collect()
                 })
@@ -1282,6 +1300,60 @@ mod tests {
         siblings(a_coarse(&ALL), 0., b_coarse(&ALL), 0.).unwrap();
         // Keeping P2 moves P1 and P3 by 0.05 off the chords through it.
         siblings(a_coarse(&[0, 2, 4]), 1., b_coarse(&[0, 2, 4]), 1.).unwrap();
+    }
+    /// #442: a source book spine (two pages each way on one edge) holding a page whose third
+    /// corner is collinear with the edge, which the published contract counts as a surface.
+    /// A coarse tile copying the leaf unchanged must validate; one that moves the collinear
+    /// page's third corner (still collinear) has no such source page.
+    fn spine(collinear: Point) -> Vec<[Point; 3]> {
+        let (a, b) = ([0., 0., 0.], [1., 0., 0.]);
+        vec![
+            [a, b, [0.5, 1., 0.]],
+            [a, b, collinear],
+            [b, a, [0.5, 0., 1.]],
+            [b, a, [0.5, 0., -1.]],
+        ]
+    }
+    #[test]
+    fn an_unchanged_collinear_book_page_corresponds_to_itself() {
+        let leaf = spine([2., 0., 0.]);
+        let copied = tree(&[
+            (None, 16., None),
+            (Some(0), 1., Some(leaf.clone())),
+            (Some(1), 0., Some(leaf.clone())),
+        ]);
+        assert!(copied.is_ok(), "{copied:?}");
+        refused(
+            tree(&[
+                (None, 16., None),
+                (Some(0), 1., Some(spine([3., 0., 0.]))),
+                (Some(1), 0., Some(leaf.clone())),
+            ]),
+            "interfaceWinding",
+        );
+        // Two coarse copies of the collinear page against one source page: routing stays
+        // one to one by multiplicity.
+        let mut twice = leaf.clone();
+        twice.push(leaf[1]);
+        refused(
+            tree(&[
+                (None, 16., None),
+                (Some(0), 1., Some(twice)),
+                (Some(1), 0., Some(leaf.clone())),
+            ]),
+            "interfaceWinding",
+        );
+        // The collinear page reversed has no source page in its direction.
+        let mut reversed = leaf.clone();
+        reversed[1] = [leaf[1][1], leaf[1][0], leaf[1][2]];
+        refused(
+            tree(&[
+                (None, 16., None),
+                (Some(0), 1., Some(reversed)),
+                (Some(1), 0., Some(leaf)),
+            ]),
+            "interfaceWinding",
+        );
     }
     #[test]
     fn contraction_beyond_g_over_8_is_refused() {

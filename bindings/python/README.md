@@ -3,7 +3,7 @@
 Convert meshes, GeoJSON/GeoPackage vectors and LAS/LAZ point clouds to 3D Tiles from Python, including Blender's bundled Python.
 Self-contained wheels: no GDAL, CLI, Rust compiler or other Python packages are needed at runtime.
 
-**Status:** pre-1.0 and under active development. Function signatures, report fields, error types and archive bytes can change in any release, including patch releases; each change is listed in the [release notes](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/CHANGELOG.md). Pin the version (for example `rusty-tiles==0.4.1`) in add-ons and scripts you ship. Output archives are standard 3D Tiles 1.1, so viewers are not affected.
+**Status:** pre-1.0 and under active development. Function signatures, report fields, error types and archive bytes can change in any release, including patch releases; each change is listed in the [release notes](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/CHANGELOG.md). Pin the version (for example `rusty-tiles==0.4.2`) in add-ons and scripts you ship. Output archives are standard 3D Tiles 1.1, so viewers are not affected.
 
 ```sh
 python -m pip install rusty-tiles
@@ -34,13 +34,14 @@ Converter inputs and outputs are filesystem paths (`str` or `os.PathLike`). All 
 
 | Function | Keyword arguments and result |
 | --- | --- |
-| `mesh_to_tileset(input, output, ...)` | `profile="balanced"`, `jobs=None`, `scratch_dir=None`, `memory_budget_bytes=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `source_crs=None`, `source_axes=None`, `source_offset=None`, `source_offset_file=None`, `height_offset=None`, `force=False`, `callback=None`; returns `TilerResult` |
+| `mesh_to_tileset(input, output, ...)` | `profile="balanced"`, `jobs=None`, `scratch_dir=None`, `memory_budget_bytes=None`, `report_path=None`, `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `source_crs=None`, `source_axes=None`, `source_offset=None`, `source_offset_file=None`, `height_offset=None`, `bbox=None`, `polygon=None`, `force=False`, `callback=None`; returns `TilerResult` |
+| `inspect_mesh(input, ...)` | `mesh_to_tileset`'s keywords without `output`, `report_path`, `bbox` and `polygon`, plus `geojson=None`, `geojson_local=False`, `min_feature_length=5.0`, `forecast=False`; writes no archive and returns `InspectResult`; see [Mesh inspection](#mesh-inspection) |
 | `glb_to_3tz(input, output, ...)` | `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; returns `ModelWrapResult` |
 | `model_to_manifest(input, ...)` | `anchor=None`, `orientation_xyzw=None`, `scene_offset=None`, `force=False`, `callback=None`; writes a sibling `tileset.json` and returns `ModelManifestResult` |
 | `point_cloud_to_3tz(input, output, ...)` | required `source_crs`, `force=False`, `height_offset=None`, `max_points=8192` (also the maximum), `chunk_points=100000`, `metadata=False`, `metadata_attributes=False`, `callback=None`; returns `PointCloudResult` |
 | `vector_to_3tz(input, output, ...)` | GeoJSON or GeoPackage; see [Vectors](#vectors); returns `VectorResult` |
 | `convert_to_3tz(input, output, ...)` | `force=False`, `callback=None`; packs an existing tileset directory and returns `PackageResult` |
-| `validate(input, ...)` | `lazy_payloads=False`, `max_volume=None`, `scratch_dir=None`, `expect_profile=None`, `memory_budget_bytes=None`, `jobs=None`, `callback=None`; returns the validation report as a `dict` |
+| `validate(input, ...)` | `lazy_payloads=False`, `max_volume=None`, `scratch_dir=None`, `expect_profile=None`, `memory_budget_bytes=None`, `jobs=None`, `coarse_crossings=False`, `callback=None`; returns the validation report as a `dict` |
 | `resolve_source_crs(definition)` | Resolves one CRS definition as the converters do, without converting; returns a `dict`, see [Source CRS checks](#source-crs-checks) |
 | `supported_epsg_codes()` | Every EPSG code this package resolves, as `"EPSG:nnnn"` strings in numeric order |
 | `crs_table_info()` | The EPSG table's `epsg`, `proj` and `gdal` versions and its `codes`, `builtin` and `allowList` counts, as a `dict` |
@@ -48,7 +49,7 @@ Converter inputs and outputs are filesystem paths (`str` or `os.PathLike`). All 
 | `decode_tile(archive, member, ...)` | `format="glb"` (plain GLB `bytes`) or `"arrays"` (a `dict` of NumPy arrays); see [Decoded tile views](#decoded-tile-views) |
 | `raster_tile_to_directory(input, output, *, zoom, x, y, force=False, callback=None)` | Always raises `UnsupportedError` in this package; see [Not included](#not-included) |
 
-Every result has `output` (the resolved absolute path) and `cleanup_diagnostics`. `PackageResult` has a `receipt`; the others have a required `report` dictionary, and `TilerResult` also has `diagnostics`. `TilerResult`, `PointCloudResult`, `VectorResult` and `PackageResult` have `archive=True`. Results are frozen, but their dictionaries are not deeply immutable.
+Every converter result has `output` (the resolved absolute path) and `cleanup_diagnostics`; `InspectResult` writes no archive and has `geojson` instead. `PackageResult` has a `receipt`; the others have a required `report` dictionary, and `TilerResult` also has `diagnostics`. `TilerResult`, `PointCloudResult`, `VectorResult` and `PackageResult` have `archive=True`. Results are frozen, but their dictionaries are not deeply immutable.
 
 ### Not included
 
@@ -59,12 +60,15 @@ This package contains the standard (portable) build only. It has no imagery or t
 ### Streamed local mesh tiler
 
 `mesh_to_tileset(input, output, *, profile="balanced", jobs=None,
-scratch_dir=None, memory_budget_bytes=None, anchor=None, orientation_xyzw=None,
+scratch_dir=None, memory_budget_bytes=None, report_path=None, anchor=None,
+orientation_xyzw=None,
 scene_offset=None, source_crs=None, source_axes=None, source_offset=None, source_offset_file=None,
-height_offset=None, force=False, callback=None)` converts a source mesh to a
+height_offset=None, bbox=None, polygon=None, weld_epsilon=None, join_primitives=None,
+force=False, callback=None)` converts a source mesh to a
 `.3tz` archive in one run. The output has exact full-detail leaves under
 coarse parent tiles (hierarchical level of detail, HLOD). A coarse tile's
-geometric error is a sampled distance to the source, not a guaranteed bound.
+geometric error bounds the continuous two-sided distance from its captured
+source to its decoded surface.
 Its triangles carry one representative `source_primitive` ID, while leaves keep
 exact provenance, and its textures are new charts sampled from the source. See
 the [mesh guide](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/MESH.md#coarse-levels-hlod).
@@ -80,6 +84,29 @@ double precision or a `source_offset_file` holding `E:`/`N:`/`A:` lines, and `he
 metres (default 0), with the CLI's rules. `source_crs=None` or `"local"` keeps
 local input. There is no CRS inference, geoid adjustment, texture-format
 selector or coarse-tile tuning.
+
+`bbox=(minx, miny, maxx, maxy)` or `polygon=path` (a GeoJSON Polygon or
+MultiPolygon file, holes allowed, even-odd rule) bakes only the triangles whose
+centroid lies inside, as the CLI's `--bbox` and `--polygon` do. The region is
+in post-node glTF x and −z (source metres) for a local source, and in WGS84
+longitude and latitude (degrees) with a source CRS. West and south edges are
+inside, east and north edges outside. Placement, the CRS frame and the tile grid
+stay the whole source's, so a subset lines up with a later full bake.
+`result.report["subset"]` holds the kept count and extent; the callback receives
+the `capture_select` step. A region that keeps nothing raises
+`InvalidRequestError`. See
+[part of the source](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/MESH.md#bake-part-of-the-source).
+
+`weld_epsilon` (metres, at least 0) welds the source's vertex positions before
+capture, as the CLI's `--weld-epsilon` does: vertices of one primitive within
+the tolerance merge onto their class's lowest-index position, and each keeps
+its own normal, UVs and colour. `join_primitives="same-material"` also welds
+across primitives with the same material (alone, it welds exact repeats).
+`result.report["weld"]` gives the merged count and the largest displacement,
+and geometric error is certified against the original source. The callback receives the
+`capture_weld` step. `inspect_mesh` takes the same two keywords to preview the
+effect on open edges. See
+[weld the source](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/MESH.md#weld-the-source).
 
 Profiles are `fast`, `balanced` (default), `quality` and `lossless`; their
 settings are provisional and may change in later releases. Base-colour and
@@ -102,6 +129,10 @@ PNG pages most of all. They are described by these `result.report` keys:
 - `escalation_diagnostics` (the first 32 pages: leaf, first, depth, page, slot, sources, step, misses) and `escalation_diagnostics_omitted`
 
 The callback is polled for cancellation before every re-encode step.
+
+`report_path` writes the mesh guide's [run report](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/MESH.md#run-report)
+there, as the CLI's `--report-path` does: JSON rewritten atomically after each
+stage, so an interrupted run leaves a valid partial report.
 
 `memory_budget_bytes` is the run's declared memory ceiling: a positive `int`.
 A `bool`, float or string raises `TypeError`; zero, a negative value or a value
@@ -132,6 +163,46 @@ Coarse tiles that need last-resort reduction declare it in
 `asset.extras.rustyTiles.lastResort`; `result.diagnostics["hlod"]` reports
 `last_resort_tiles`, `last_resort_stages`, `fold_faces` and `declared_tiles`.
 See [last-resort declarations](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/MESH.md#last-resort-declarations).
+
+### Mesh inspection
+
+`inspect_mesh(input, *, geojson=None, geojson_local=False, min_feature_length=5.0,
+profile="balanced", jobs=None, scratch_dir=None, memory_budget_bytes=None,
+anchor=None, orientation_xyzw=None, scene_offset=None, source_crs=None,
+source_axes=None, source_offset=None, source_offset_file=None,
+height_offset=None, weld_epsilon=None, join_primitives=None, forecast=False,
+force=False, callback=None)` checks a mesh source before a bake, as
+`rusty-tiles mesh-inspect` does. By default it reads the source once, without
+capture, and reports its topology. `forecast=True` adds the coarse-omission
+estimate: it captures the source as `mesh_to_tileset` does, so pass the
+keywords you will bake with and its cells are the bake's; it costs most of a
+bake.
+
+```python
+check = rusty_tiles.inspect_mesh(
+    "site.glb", geojson="site-check.geojson",
+    source_crs="EPSG:3857", source_offset_file="site_offset.txt",
+)
+print(*check.summary, sep="\n")
+print(check.report["source"]["open"]["loops"], check.geojson)
+```
+
+The frozen `InspectResult` has:
+
+- `report`: the same `dict` as the CLI's `inspectReport`. It does not depend on
+  `jobs`, the memory budget, the scratch location or the GeoJSON path.
+- `diagnostics`: workers, the memory plan and stage seconds.
+- `geojson`: the installed GeoJSON's `pathlib.Path`, or `None`.
+- `summary`: the CLI's human summary lines.
+- `cleanup_diagnostics`.
+
+`report["forecast"]` is an estimate of coarse omission, not a bake, and its
+measured quality is modest; read
+[the omission forecast](https://github.com/BenDyson-Arch/rusty-tiles/blob/main/docs/MESH.md#the-omission-forecast-is-an-estimate)
+before acting on it. A GeoJSON is WGS84 and needs `anchor` or `source_crs`;
+`geojson_local=True` writes local east/north metres instead, which is not
+RFC 7946 and says so in a `rustyTilesFrame` member. Callbacks and errors work as
+for `mesh_to_tileset`.
 
 ### Rigid placement
 
@@ -306,6 +377,10 @@ list, or a lazy sequence when `lazy_payloads=True`.
   labels say: every payload must carry source identity and every HLOD check
   runs. An archive that declares HLOD is held to it anyway. Any other value
   raises `ValueError` before the archive is opened.
+- `coarse_crossings=True` also counts coarse self-intersections on HLOD
+  archives (`interfaceCensus.coarseCrossings`): pairs of faces of one coarse
+  tile that meet outside their common corners. It is a report only; no verdict
+  depends on it.
 - `memory_budget_bytes` (an `int`) sizes the scratch stores, with the same
   rule and default as `mesh_to_tileset`; below 512 MiB raises
   `ResourceLimitError`. `jobs` (a positive `int`, or `None` for auto) caps the

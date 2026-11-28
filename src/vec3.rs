@@ -2,7 +2,6 @@
 //!
 //! Evaluation order is part of the contract: published bounds and errors are
 //! computed with exactly these roundings, so do not "simplify" the formulas.
-#![cfg_attr(not(feature = "native-geospatial"), allow(dead_code))]
 
 pub(crate) type Vec3 = [f64; 3];
 

@@ -1,13 +1,14 @@
 """H11 corner fast-path controls: fixtures written with the witness builder, verdicts from the oracle.
 
-    python3 -I h11/generate.py [--check]
+    python3 -I h11/generate.py [--check | --fixtures-only]
 
 Run from `bench/architecture_audit/c2_decoded_containment`. Writes `h11/fixtures/*.3tz` and
 `h11/report.json`: per fixture its sha256, the full oracle report (`oracle/c2_oracle.py --json`,
 unmodified) and the expected outcome taken from that report. Nothing here reads `src/` or runs
 rusty-tiles; production is compared by `acceptance/oracle_parity.rs`
 (`production_matches_every_h11_fast_path_control`). `--check` regenerates in memory and exits 1
-if any fixture hash or oracle outcome differs from the committed report.
+if any fixture hash or oracle outcome differs from the committed report. `--fixtures-only` writes the
+fixtures without running the oracle and leaves `h11/report.json` unchanged.
 
 Each pair is a Contained base and a mutated fixture with one change. The pairs are built so that a
 broken fast path flips them: the mutants they target are listed per pair (`targets`), and
@@ -223,6 +224,12 @@ def expected(report):
 def main(argv):
     check = "--check" in argv
     fixtures = os.path.join(HERE, "fixtures")
+    if "--fixtures-only" in argv:
+        os.makedirs(fixtures, exist_ok=True)
+        for pid, _targets, _note, base, mutated in pairs():
+            for side, members in (("base", base), ("mutated", mutated)):
+                B.write_3tz(os.path.join(fixtures, "%s.%s.3tz" % (pid, side)), members)
+        return 0
     rows, listing = [], []
     with tempfile.TemporaryDirectory() as tmp:
         for pid, targets, note, base, mutated in pairs():

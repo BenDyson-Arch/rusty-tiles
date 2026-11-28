@@ -46,10 +46,10 @@ use rusty_tiles::error::Error;
 use rusty_tiles::georef::SourceAxes;
 use rusty_tiles::package::{package, PackageRequest, PackageResult};
 use rusty_tiles::{
-    doctor, terrain, vector, JobError, JobErrorKind, MeshPlacement, MeshSourceCrs,
-    ModelManifestRequest, ModelManifestResult, ModelWrapRequest, ModelWrapResult, Observer,
-    OutputPolicy, RasterDirectoryRequest, RasterDirectoryResult, RasterLimits, RasterRequest,
-    RasterResult, RunEvent, TilerJobs, TilerProfile, TilerRequest, TilerResult,
+    doctor, terrain, vector, JobError, JobErrorKind, MeshPlacement, MeshSourceCrs, MeshSubset,
+    MeshWeld, ModelManifestRequest, ModelManifestResult, ModelWrapRequest, ModelWrapResult,
+    Observer, OutputPolicy, RasterDirectoryRequest, RasterDirectoryResult, RasterLimits,
+    RasterRequest, RasterResult, RunEvent, TilerJobs, TilerProfile, TilerRequest, TilerResult,
 };
 
 // Option spelling: multi-word options keep their camelCase name as the primary
@@ -80,6 +80,10 @@ struct Cli {
 enum Command {
     /// Stream a static glTF/GLB mesh (local metres Y-up, or a declared --source-crs) into a Tiles 1.1 implicit .3tz
     Mesh(TilerArgs),
+    /// Check a mesh source before a bake: open edges and loops, primitive seams, repeated
+    /// positions, components and an estimated coarse omission per cell (no archive written)
+    #[command(name = "mesh-inspect")]
+    MeshInspect(MeshInspectArgs),
     /// Inspect a self-contained 3TZ archive against the bounded C1 payload profile
     Validate {
         /// .3tz archive to check (raster/terrain directories are not validated yet)
@@ -120,6 +124,12 @@ enum Command {
         /// Verdicts and reports do not depend on it
         #[arg(long, default_value = "auto")]
         jobs: TilerJobs,
+        /// Also count coarse self-intersections on HLOD archives
+        /// (interfaceCensus.coarseCrossings): face pairs of one coarse tile meeting outside
+        /// their common corners, present in the tile's children together or new. Reported only: no
+        /// verdict or exit code depends on it. Costs about 3-11 µs per coarse face
+        #[arg(long = "coarseCrossings", visible_alias = "coarse-crossings")]
+        coarse_crossings: bool,
     },
     /// Check converter capabilities and local CRS resources
     Doctor(DoctorArgs),
@@ -154,6 +164,7 @@ impl Command {
     fn name(&self) -> &'static str {
         match self {
             Self::Mesh(_) => "mesh",
+            Self::MeshInspect(_) => "mesh-inspect",
             Self::Validate { .. } => "validate",
             Self::Doctor(_) => "doctor",
             Self::Preview(_) => "preview",
@@ -201,6 +212,148 @@ struct TilerArgs {
     /// Declared memory budget: bytes, or with a KiB/MiB/GiB/TiB suffix (2GiB). A ceiling for
     /// every stage, never raised; a run that cannot fit is refused. Default: the lesser of
     /// 4 GiB and half the detected headroom
+    #[arg(long = "memory-budget", visible_alias = "memoryBudget", value_name = "BYTES",
+          value_parser = parse_memory_budget)]
+    memory_budget: Option<u64>,
+    /// Write a JSON run report here, rewritten atomically as each stage finishes (timing,
+    /// CPU, scratch peaks, HLOD omissions, last resorts and worker use), so a stopped run
+    /// leaves a valid partial report. Never part of the archive; see docs/MESH.md
+    #[arg(
+        long = "report-path",
+        visible_alias = "reportPath",
+        value_name = "FILE"
+    )]
+    report_path: Option<PathBuf>,
+    #[command(flatten)]
+    placement: RigidPlacementArgs,
+    #[command(flatten)]
+    source: SourceCrsArgs,
+    #[command(flatten)]
+    subset: SubsetArgs,
+    #[command(flatten)]
+    weld: WeldArgs,
+}
+
+/// `--weld-epsilon` / `--join-primitives`: an opt-in weld of source vertex positions.
+#[derive(Args)]
+struct WeldArgs {
+    /// Weld source vertices within METRES of each other (0: exact repeats only) before
+    /// capture, each primitive's own; a merged vertex takes its class's lowest-index
+    /// position, its normal, UVs and colour stay its own. The merged count and largest
+    /// displacement are reported. Geometric error is certified against the original source
+    #[arg(
+        long = "weld-epsilon",
+        visible_alias = "weldEpsilon",
+        value_name = "METRES"
+    )]
+    weld_epsilon: Option<f64>,
+    /// `same-material`: also weld across primitives with the same material, so their
+    /// coincident boundaries become interior edges; source_primitive stays per triangle.
+    /// Without --weld-epsilon it welds exact repeats only
+    #[arg(
+        long = "join-primitives",
+        visible_alias = "joinPrimitives",
+        value_name = "MODE",
+        value_parser = ["same-material"]
+    )]
+    join_primitives: Option<String>,
+}
+impl WeldArgs {
+    fn resolve(self) -> Result<Option<MeshWeld>, Error> {
+        Ok(
+            MeshWeld::from_parameters(self.weld_epsilon, self.join_primitives.as_deref()).map_err(
+                |error| rusty_tiles::JobFailure {
+                    error,
+                    secondary: Vec::new(),
+                    retained_paths: Vec::new(),
+                    recovery: None,
+                },
+            )?,
+        )
+    }
+}
+
+/// `--bbox` / `--polygon`: bake part of the source.
+#[derive(Args)]
+struct SubsetArgs {
+    /// Bake only triangles whose centroid lies in MINX MINY MAXX MAXY (min edges inside, max
+    /// edges outside): post-node glTF X and -Z in source metres, or WGS84 longitude and
+    /// latitude in degrees with --source-crs. Placement and tiling stay the whole source's
+    #[arg(
+        long,
+        num_args = 4,
+        value_names = ["MINX", "MINY", "MAXX", "MAXY"],
+        allow_hyphen_values = true,
+        conflicts_with = "polygon"
+    )]
+    bbox: Vec<f64>,
+    /// Like --bbox, with a GeoJSON Polygon or MultiPolygon (holes allowed; even-odd rule) in
+    /// the same coordinates
+    #[arg(long, value_name = "GEOJSON")]
+    polygon: Option<PathBuf>,
+}
+impl SubsetArgs {
+    fn resolve(self) -> Result<Option<MeshSubset>, Error> {
+        Ok(MeshSubset::from_parameters(
+            (!self.bbox.is_empty()).then_some(&self.bbox[..]),
+            self.polygon.as_deref(),
+        )
+        .map_err(|error| rusty_tiles::JobFailure {
+            error,
+            secondary: Vec::new(),
+            retained_paths: Vec::new(),
+            recovery: None,
+        })?)
+    }
+}
+
+#[derive(Args)]
+struct MeshInspectArgs {
+    /// Source glTF/GLB, read as `mesh` reads it
+    #[arg(short = 'i', long)]
+    input: PathBuf,
+    /// Also write a GeoJSON (.geojson) of open loops and seams at least --minFeatureLength
+    /// long and of the cells at risk, in WGS84; needs --anchor or --source-crs unless
+    /// --geojsonLocal is given
+    #[arg(long, value_name = "PATH")]
+    geojson: Option<PathBuf>,
+    /// Write the GeoJSON in local east/north metres (east = glTF +X, north = glTF -Z), not
+    /// RFC 7946 WGS84; the file says so in a top-level `rustyTilesFrame` member
+    #[arg(
+        long = "geojsonLocal",
+        visible_alias = "geojson-local",
+        requires = "geojson"
+    )]
+    geojson_local: bool,
+    /// Shortest open loop or seam written to the GeoJSON, in metres
+    #[arg(
+        long = "minFeatureLength",
+        visible_alias = "min-feature-length",
+        value_name = "METRES",
+        default_value_t = rusty_tiles::DEFAULT_MIN_FEATURE_LENGTH
+    )]
+    min_feature_length: f64,
+    /// Replace an existing GeoJSON
+    #[arg(short = 'f', long)]
+    force: bool,
+    /// The bake's profile: with --forecast, give the same as `mesh` so cells line up
+    #[arg(long, default_value = "balanced")]
+    profile: TilerProfile,
+    /// Maximum workers or auto; the report does not depend on it
+    #[arg(long, default_value = "auto")]
+    jobs: TilerJobs,
+    /// Also estimate coarse omissions per cell (and write the cells at risk to the GeoJSON).
+    /// This captures the source and builds the bake's border contracts: it costs most of a
+    /// bake
+    #[arg(long)]
+    forecast: bool,
+    /// Owned working-data parent
+    #[arg(long = "scratchDir", visible_alias = "scratch-dir")]
+    scratch_dir: Option<PathBuf>,
+    /// Inspect the source welded as `mesh` would weld it (see `mesh --help`)
+    #[command(flatten)]
+    weld: WeldArgs,
+    /// Declared memory budget, as for `mesh`: a ceiling for every stage, never raised
     #[arg(long = "memory-budget", visible_alias = "memoryBudget", value_name = "BYTES",
           value_parser = parse_memory_budget)]
     memory_budget: Option<u64>,
@@ -632,6 +785,7 @@ enum Outcome {
     /// Installed package with a typed receipt separate from source reports.
     Pack(PackageResult),
     Tiler(Box<TilerResult>),
+    Inspect(Box<rusty_tiles::InspectResult>),
     ModelArchive(Box<ModelWrapResult>),
     ModelManifest(Box<ModelManifestResult>),
     RasterDirectory(RasterDirectoryResult),
@@ -723,6 +877,16 @@ fn run_cli() -> ExitCode {
                     }
                     None
                 }
+                Outcome::Inspect(result) => {
+                    if json {
+                        outln!("{}", inspect_summary(&result));
+                    } else if !events {
+                        for line in result.summary_lines() {
+                            errln!("{line}");
+                        }
+                    }
+                    None
+                }
                 Outcome::Pack(result) => Some((package_summary(&result), result.output)),
                 Outcome::Tiler(result) => Some((tiler_summary(&result), result.output)),
                 Outcome::ModelArchive(result) => Some((
@@ -776,6 +940,20 @@ fn run_cli() -> ExitCode {
                 outln!("{failure}");
             } else {
                 errln!("{error}");
+            }
+            // Problems found beside the failure (cleanup, a run report that could not
+            // record it) reach stderr too, not only the --json result.
+            if let Error::Job(failure) = &error {
+                for cause in &failure.secondary {
+                    if events {
+                        errln!(
+                            "{}",
+                            json!({"event":"warning","code":"secondary_diagnostic","message":cause.to_string()})
+                        );
+                    } else {
+                        errln!("warning: {cause}");
+                    }
+                }
             }
             if events {
                 errln!(
@@ -942,6 +1120,34 @@ fn point_cloud_summary(result: &rusty_tiles::point_cloud::PointCloudResult) -> V
     summary
 }
 
+fn inspect_summary(result: &rusty_tiles::InspectResult) -> Value {
+    json!({
+        "ok":true,
+        "inspectReport":result.report,
+        "geojson":result.geojson.as_ref().map(|p| p.to_string_lossy()),
+        "diagnostics":result.diagnostics,
+        "cleanupDiagnostics":cleanup_diagnostics_summary(&result.cleanup_diagnostics),
+    })
+}
+
+/// RUSTY_TILES_STAGE_TIMING=<file>: the run's summed per-thread stage timing
+/// (`rusty_tiles_stage_timing_v1`, with the leaf stage's share under
+/// `run.leafStageTiming`), written after a successful run. Diagnostics only: as when the
+/// library wrote it, a write failure is ignored (stderr may carry NDJSON events) and never
+/// fails the run.
+fn write_stage_timing(
+    path: Option<std::ffi::OsString>,
+    diagnostics: &rusty_tiles::TilerDiagnostics,
+) {
+    let (Some(path), Some(mut document)) = (path, diagnostics.stage_timing.clone()) else {
+        return;
+    };
+    document["run"]["leafStageTiming"] = json!(diagnostics.leaf_delivery.timing);
+    if let Ok(bytes) = serde_json::to_vec_pretty(&document) {
+        let _ = std::fs::write(path, bytes);
+    }
+}
+
 fn tiler_summary(result: &TilerResult) -> Value {
     let mut summary = json!({
         "ok":true,
@@ -957,6 +1163,38 @@ fn tiler_summary(result: &TilerResult) -> Value {
         summary["crsOperations"] = json!([operation]);
     }
     summary
+}
+
+/// "subset: kept 1,234 of 5,678 source triangles in the bbox; extent x 1 to 2, y 3 to 4
+/// (local x/-z)"
+fn subset_line(subset: &Value) -> Option<String> {
+    let kept = subset["kept_triangles"].as_u64()?;
+    let source = subset["source_triangles"].as_u64()?;
+    let extent: Vec<f64> = subset["extent"]
+        .as_array()?
+        .iter()
+        .filter_map(Value::as_f64)
+        .collect();
+    let [x0, y0, x1, y1] = extent[..] else {
+        return None;
+    };
+    let axes = if subset["coordinates"] == "wgs84" {
+        "WGS84 longitude/latitude, degrees"
+    } else {
+        "post-node glTF x/-z, source metres"
+    };
+    Some(format!(
+        "subset: kept {kept} of {source} source triangles in the {}; extent x {x0} to {x1}, y {y0} to {y1} ({axes})",
+        subset["region"].as_str().unwrap_or("region"),
+    ))
+}
+
+/// The weld statement's lines (`MeshWeldReport::summary_lines`), shared with
+/// `mesh-inspect`.
+fn weld_lines(weld: &Value) -> Vec<String> {
+    serde_json::from_value::<rusty_tiles::MeshWeldReport>(weld.clone())
+        .map(|weld| weld.summary_lines())
+        .unwrap_or_default()
 }
 
 /// Allow-listed EPSG datum operations a converter report names (point cloud at the top
@@ -1137,6 +1375,10 @@ fn human_summary(command: &str, output: &Path, summary: &Value) -> Vec<String> {
     for operation in summary["crsOperations"].as_array().into_iter().flatten() {
         lines.push(crs_operation_line(operation));
     }
+    if let Some(line) = subset_line(&summary["tilerReport"]["subset"]) {
+        lines.push(line);
+    }
+    lines.extend(weld_lines(&summary["tilerReport"]["weld"]));
     let count = |key: &str| counts[key].as_u64().filter(|n| *n > 0);
     let mut warnings = Vec::new();
     if let Some(n) = count("skippedFeatures") {
@@ -1225,6 +1467,51 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
             if let Some(source_crs) = a.source.resolve()? {
                 request = request.with_source_crs(source_crs);
             }
+            if let Some(subset) = a.subset.resolve()? {
+                request = request.with_subset(subset);
+            }
+            if let Some(weld) = a.weld.resolve()? {
+                request = request.with_weld(weld);
+            }
+            if let Some(path) = a.scratch_dir {
+                request = request.with_scratch_dir(path);
+            }
+            if let Some(bytes) = a.memory_budget {
+                request = request.with_memory_budget(bytes);
+            }
+            if let Some(path) = a.report_path {
+                request = request.with_report_path(path);
+            }
+            let stage_timing = std::env::var_os("RUSTY_TILES_STAGE_TIMING");
+            request = request.with_stage_timing(stage_timing.is_some());
+            let observer: Option<Arc<dyn Observer>> =
+                pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
+            let result = rusty_tiles::mesh_to_tileset(request, &interrupt::run_control(observer))?;
+            write_stage_timing(stage_timing, &result.diagnostics);
+            Outcome::Tiler(Box::new(result))
+        }
+        Command::MeshInspect(a) => {
+            let mut request = rusty_tiles::InspectRequest::new(a.input)
+                .with_profile(a.profile)
+                .with_jobs(a.jobs)
+                .with_forecast(a.forecast)
+                .with_min_feature_length(a.min_feature_length)
+                .with_geojson_local(a.geojson_local)
+                .with_output_policy(if a.force {
+                    OutputPolicy::Replace
+                } else {
+                    OutputPolicy::CreateNew
+                })
+                .with_placement(a.placement.resolve()?);
+            if let Some(path) = a.geojson {
+                request = request.with_geojson(path);
+            }
+            if let Some(weld) = a.weld.resolve()? {
+                request = request.with_weld(weld);
+            }
+            if let Some(source_crs) = a.source.resolve()? {
+                request = request.with_source_crs(source_crs);
+            }
             if let Some(path) = a.scratch_dir {
                 request = request.with_scratch_dir(path);
             }
@@ -1233,7 +1520,7 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
             }
             let observer: Option<Arc<dyn Observer>> =
                 pack_events.then(|| Arc::new(CliRunObserver) as Arc<dyn Observer>);
-            Outcome::Tiler(Box::new(rusty_tiles::mesh_to_tileset(
+            Outcome::Inspect(Box::new(rusty_tiles::inspect_mesh(
                 request,
                 &interrupt::run_control(observer),
             )?))
@@ -1245,8 +1532,12 @@ fn run(cli: Cli) -> Result<Outcome, Error> {
             expect_profile,
             memory_budget,
             jobs,
+            coarse_crossings,
         } => {
             let mut request = rusty_tiles::validate::ValidationRequest::new(&input);
+            if coarse_crossings {
+                request = request.coarse_crossings();
+            }
             if let Some(bytes) = memory_budget {
                 request = request.memory_budget(bytes);
             }

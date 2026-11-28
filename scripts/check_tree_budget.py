@@ -20,7 +20,17 @@ FILE_LIMIT = 1_000_000
 # 12 generated result files (about 618 KB) out to the evidence cache
 # (bench/MOVED_EVIDENCE.md). The remaining growth is real code and live oracles
 # for the large-mesh tiler and validator-scale work, which CI and tests read.
-BUDGETS = {"": 24_000_000, "bench/": 12_500_000}
+# Lowered 2026-11-13 to tree 21,000,000 and bench/ 8,500,000 once the validator
+# corpora were generated at test time (scripts/test_corpora.py): tree 19,653,540
+# bytes, bench/ 6,840,123.
+# Re-based 2026-11-20 to tree 23,100,000, about 1.1x the tree (21,033,237 bytes with
+# the sparse coarse chains): it grew about 1.4 MB of real code since 2026-11-13 (the
+# capture rework, mesh-inspect, the source weld, subset bakes, the run report, the
+# texture crop store and sparse chains). Re-based once rather than raised piecemeal; a
+# bench/ trim of generated results follows as a separate change. bench/ is unchanged.
+# The continuous HLOD certificate (its conformance tests and the Lean proofs) fits
+# inside this budget.
+BUDGETS = {"": 23_100_000, "bench/": 8_500_000}
 # Third-party source vendored for a shipped feature: one pinned upstream version,
 # replaced, never accumulated. Basis Universal v2.50 (vendor/README.md) is the
 # compiled include closure plus licences, 10,852,575 bytes, about 1.1x of headroom

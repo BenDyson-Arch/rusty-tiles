@@ -528,6 +528,7 @@ mod tests {
             &m.triangles,
             interface,
             previous,
+            [0, 0],
             mapping,
         )
         .with_policy(Policy::last_resort(3, 0, 1, &holders))

@@ -1,6 +1,5 @@
-//! D2 sampled source error, policy v2. This is deliberately not certification.
-//! G=max(child G, 1.05 M). The 5% sampling margin exceeds the prototype's
-//! ~1% independent maximum exceedance; it is not a covering-radius bound.
+//! S2 construction error, policy v2. The value max(child construction G, 1.05 M)
+//! guides simplification and supplies a floor to the decoded-surface certifier.
 //! Source controls cover bounded patch boundaries, one vertex per patch component
 //! and sliver vertices/midpoints. Indexed proxy vertices/edges are checked once.
 use super::{
@@ -24,7 +23,7 @@ const BINS: usize = 16384;
 /// Per-query work budget of every S2 nearest search (node visits plus triangle tests; see
 /// `source_index::Budget`). Exact search is Θ(R) per query against R source triangles whose
 /// boxes all contain it; budgeted, a query costs O(B + depth + block). On exhaustion the
-/// best distance found is used: an overestimate, so M and G stay conservative. Exhaustions
+/// best distance found is used. It upper-bounds the distance at that query point. Exhaustions
 /// are counted in the report. A scale-gate tuning constant, chosen by measurement
 /// (2026-10-25): tex3/crop3 searches take at most 501 steps (none exhausted at 1024); the
 /// adversarial chords input costs 28.0/17.6/9.6 S2 CPU-s at B = 4096/1024/512 with G
@@ -110,6 +109,9 @@ pub(crate) struct Nearest {
     frontier: Frontier,
     inner: Frontier,
     pub stats: SearchStats,
+    /// The root's measurement runs in fixed batches, at most this many at once
+    /// (`measure`'s `RootBatches`); `None` for every other tile.
+    pub root_width: Option<usize>,
 }
 impl Nearest {
     #[cfg(test)]
@@ -122,6 +124,7 @@ impl Nearest {
             frontier: Frontier::new(),
             inner: Frontier::new(),
             stats: SearchStats::default(),
+            root_width: None,
         }
     }
     fn record(&mut self, budget: Budget) {
@@ -132,6 +135,10 @@ impl Nearest {
             max_steps: budget.steps,
             steps: budget.steps,
         });
+    }
+    /// Its search budget (steps per search).
+    pub(crate) fn steps(&self) -> u64 {
+        self.steps
     }
     /// Nearest source triangle of the query's descendant range.
     pub(crate) fn source(&mut self, query: &mut SourceQuery<'_>, p: V3) -> Result<Hit, JobError> {
@@ -458,7 +465,7 @@ impl CpuReport {
         self.proxy_to_source += c.proxy_to_source;
     }
 }
-fn elapsed(start: Option<f64>) -> f64 {
+pub(super) fn elapsed(start: Option<f64>) -> f64 {
     thread_cpu().zip(start).map_or(0., |(b, a)| b - a)
 }
 
@@ -504,25 +511,191 @@ impl Controls<'_> {
         initial: &[],
     };
 }
-fn directed<I>(
+/// Where a directed pass's samples go, in sampling order: an area sample or a control.
+trait Sink {
+    fn sample(&mut self, area: bool, p: V3, rank: u64) -> Result<(), JobError>;
+    /// The area samples' and the controls' statistics, and the searches the sink ran on
+    /// its own (`Batched`; a serial sink's run on the caller's `Nearest`).
+    fn finish(self) -> Result<(Stats, Stats, SearchStats), JobError>;
+}
+
+/// Every sample measured as it is drawn, one search chained from the last (any tile but a
+/// recovered or ownership root).
+struct Serial<F> {
+    samples: Stats,
+    controls: Stats,
+    distance: F,
+}
+impl<F: FnMut(V3, u64) -> Result<f64, JobError>> Serial<F> {
+    fn new(initial: &[f64], distance: F) -> Result<Self, JobError> {
+        let mut controls = Stats::new();
+        for &d in initial {
+            controls.add(d)?;
+        }
+        Ok(Self {
+            samples: Stats::new(),
+            controls,
+            distance,
+        })
+    }
+}
+impl<F: FnMut(V3, u64) -> Result<f64, JobError>> Sink for Serial<F> {
+    fn sample(&mut self, area: bool, p: V3, rank: u64) -> Result<(), JobError> {
+        let d = (self.distance)(p, rank)?;
+        if area {
+            self.samples.add(d)
+        } else {
+            self.controls.add(d)
+        }
+    }
+    fn finish(self) -> Result<(Stats, Stats, SearchStats), JobError> {
+        Ok((self.samples, self.controls, SearchStats::default()))
+    }
+}
+
+/// Samples per batch of the root's measurement (`Batched`): each batch's searches start
+/// afresh, so its distances depend only on its own samples, never on the worker count.
+pub(crate) const ROOT_BATCH: usize = 4096;
+/// Batches buffered before they are evaluated (a window of samples, at batch boundaries).
+pub(crate) const ROOT_WINDOW: usize = 64 * ROOT_BATCH;
+/// The largest per-sample result a root batch returns (checked at compile time where the
+/// batches are evaluated).
+pub(crate) const ROOT_RESULT_BYTES: u64 = 128;
+
+/// The root measurement's memory at `width` batches at once: each batch's own source query
+/// and search frontier, a window of buffered samples, and one group of batches' results.
+pub(crate) fn root_bytes(width: usize, steps: u64) -> u64 {
+    let width = width as u64;
+    let per = super::source_index::QUERY_BYTES.saturating_add(search_bytes(steps));
+    let window = (ROOT_WINDOW * std::mem::size_of::<(bool, V3, u64)>()) as u64;
+    width
+        .saturating_mul(per.saturating_add(ROOT_BATCH as u64 * ROOT_RESULT_BYTES))
+        .saturating_add(window)
+}
+
+/// The root's samples, measured in fixed batches: each batch evaluated from a fresh search
+/// state (`eval`, in parallel, at most `width` at a time), then folded in sampling order
+/// with its side effects (`apply`).
+struct Batched<'s, E, V, A> {
+    samples: Stats,
+    controls: Stats,
+    buffer: Vec<(bool, V3, u64)>,
+    width: usize,
+    eval: V,
+    apply: A,
+    /// The job's search statistics: each batch's searches count as it is folded, whatever
+    /// happens after it.
+    searches: &'s mut SearchStats,
+    check: &'s (dyn Fn() -> Result<(), JobError> + Sync),
+    _e: std::marker::PhantomData<E>,
+}
+/// One batch's results up to its first error, that error, and the searches it ran.
+type Evaluated<E> = (Vec<E>, Option<JobError>, SearchStats);
+impl<'s, E, V, A> Batched<'s, E, V, A>
+where
+    E: Send,
+    V: Fn(&[(bool, V3, u64)]) -> Evaluated<E> + Sync,
+    A: FnMut(V3, u64, &E) -> f64,
+{
+    fn new(
+        initial: &[f64],
+        width: usize,
+        searches: &'s mut SearchStats,
+        check: &'s (dyn Fn() -> Result<(), JobError> + Sync),
+        eval: V,
+        apply: A,
+    ) -> Result<Self, JobError> {
+        const { assert!(std::mem::size_of::<E>() as u64 <= ROOT_RESULT_BYTES) };
+        let mut controls = Stats::new();
+        for &d in initial {
+            controls.add(d)?;
+        }
+        Ok(Self {
+            samples: Stats::new(),
+            controls,
+            buffer: Vec::with_capacity(ROOT_WINDOW),
+            width: width.max(1),
+            eval,
+            apply,
+            searches,
+            check,
+            _e: std::marker::PhantomData,
+        })
+    }
+    /// Evaluate the buffered window and fold it in sampling order. A sample's refusal
+    /// (a nonfinite distance) stops before any later sample's result or evaluation
+    /// error; an evaluation error stops before any later result, as a serial pass would.
+    fn flush(&mut self) -> Result<(), JobError> {
+        use rayon::prelude::*;
+        let buffer = std::mem::take(&mut self.buffer);
+        let batches: Vec<&[(bool, V3, u64)]> = buffer.chunks(ROOT_BATCH).collect();
+        let mut at = 0;
+        for group in batches.chunks(self.width) {
+            (self.check)()?;
+            let eval = &self.eval;
+            let results: Vec<Evaluated<E>> = group.par_iter().map(|b| eval(b)).collect();
+            // Each batch's searches count up to the batch the fold stops in, as one batch
+            // at a time would count them; later batches of the group are discarded
+            // unseen, so the counts do not depend on the width.
+            for (evals, error, searches) in results {
+                self.searches.add(searches);
+                for e in evals {
+                    let (area, p, rank) = buffer[at];
+                    at += 1;
+                    let d = (self.apply)(p, rank, &e);
+                    if area {
+                        self.samples.add(d)?;
+                    } else {
+                        self.controls.add(d)?;
+                    }
+                }
+                if let Some(error) = error {
+                    return Err(error);
+                }
+            }
+        }
+        if at != buffer.len() {
+            return Err(state("a root measurement batch lost samples"));
+        }
+        self.buffer = buffer;
+        self.buffer.clear();
+        Ok(())
+    }
+}
+impl<E, V, A> Sink for Batched<'_, E, V, A>
+where
+    E: Send,
+    V: Fn(&[(bool, V3, u64)]) -> Evaluated<E> + Sync,
+    A: FnMut(V3, u64, &E) -> f64,
+{
+    fn sample(&mut self, area: bool, p: V3, rank: u64) -> Result<(), JobError> {
+        self.buffer.push((area, p, rank));
+        if self.buffer.len() == ROOT_WINDOW {
+            self.flush()?;
+        }
+        Ok(())
+    }
+    fn finish(mut self) -> Result<(Stats, Stats, SearchStats), JobError> {
+        self.flush()?;
+        Ok((self.samples, self.controls, SearchStats::default()))
+    }
+}
+
+fn directed<I, S: Sink>(
     triangles: I,
     total: f64,
     count: u64,
     seed: u64,
     policy: Controls<'_>,
-    mut distance: impl FnMut(V3, u64) -> Result<f64, JobError>,
+    mut sink: S,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
-) -> Result<Direction, JobError>
+) -> Result<(Direction, S), JobError>
 where
     I: Iterator<Item = Result<Triangle, JobError>>,
 {
-    let (mut samples, mut controls) = (Stats::new(), Stats::new());
     let mut rng = Rng(seed);
     let mut vertices = HashSet::default();
     let mut seen_edges = HashSet::default();
-    for &d in policy.initial {
-        controls.add(d)?;
-    }
     let mut triangles = triangles.peekable();
     let (mut cumulative, mut next, mut i) = (0., rng.unit() / count as f64 * total, 0u64);
     let mut last = None;
@@ -570,7 +743,7 @@ where
             let r = rng.unit().sqrt();
             let s = rng.unit();
             let point = source_index::bary(sample_triangle.0, [1. - r, r * (1. - s), r * s]);
-            samples.add(distance(point, sample_triangle.1)?)?;
+            sink.sample(true, point, sample_triangle.1)?;
             i += 1;
             if i < count {
                 next = ((i as f64 + rng.unit()) / count as f64 * total).min(total.next_down());
@@ -578,10 +751,7 @@ where
         }
         for (corner, bits) in t.bits.into_iter().enumerate() {
             if (policy.proxy || t.controls & (1 << corner) != 0) && vertices.insert(bits) {
-                controls.add(distance(
-                    bits.map(|x| f64::from(f32::from_bits(x))),
-                    t.rank,
-                )?)?;
+                sink.sample(false, bits.map(|x| f64::from(f32::from_bits(x))), t.rank)?;
             }
         }
         let edges = [(0, 1), (1, 2), (2, 0)];
@@ -595,10 +765,11 @@ where
                 || (area <= max_edge * 1e-4 && source_index::distance2(p[a], p[b]) == max_edge))
                 && seen_edges.insert((ka.min(kb), ka.max(kb)))
             {
-                controls.add(distance(
+                sink.sample(
+                    false,
                     std::array::from_fn(|k| 0.5 * (p[a][k] + p[b][k])),
                     t.rank,
-                )?)?;
+                )?;
             }
         }
         ordinal += 1;
@@ -613,10 +784,11 @@ where
             }
             let r = rng.unit();
             let s = rng.unit();
-            samples.add(distance(
+            sink.sample(
+                true,
                 source_index::bary(last.0, [1. - r, r * (1. - s), r * s]),
                 last.1,
-            )?)?;
+            )?;
             i += 1;
         }
     }
@@ -625,22 +797,84 @@ where
             "incomplete required sampling: {i}/{count}"
         )));
     }
-    Ok(Direction {
-        area: samples.summary(),
-        controls: controls.summary(),
-        surface_area: total,
-    })
+    // The sink's results are read by `summarize`, after its side effects are done.
+    Ok((
+        Direction {
+            area: Distribution::default(),
+            controls: Distribution::default(),
+            surface_area: total,
+        },
+        sink,
+    ))
 }
 
-pub(crate) fn measure(
+/// `directed` with every sample measured as it is drawn (`Serial`).
+fn directed_serial<I>(
+    triangles: I,
+    total: f64,
+    count: u64,
+    seed: u64,
+    policy: Controls<'_>,
+    distance: impl FnMut(V3, u64) -> Result<f64, JobError>,
+    check: &(dyn Fn() -> Result<(), JobError> + Sync),
+) -> Result<Direction, JobError>
+where
+    I: Iterator<Item = Result<Triangle, JobError>>,
+{
+    let sink = Serial::new(policy.initial, distance)?;
+    let (direction, sink) = directed(triangles, total, count, seed, policy, sink, check)?;
+    Ok(summarize(direction, sink)?.0)
+}
+
+/// A directed pass's direction from its sink's statistics, and the sink's own searches.
+fn summarize<S: Sink>(direction: Direction, sink: S) -> Result<(Direction, SearchStats), JobError> {
+    let (samples, controls, searches) = sink.finish()?;
+    Ok((
+        Direction {
+            area: samples.summary(),
+            controls: controls.summary(),
+            ..direction
+        },
+        searches,
+    ))
+}
+
+pub(super) struct Centroid {
+    pub(super) rank: u64,
+    pub(super) distance: f64,
+}
+
+pub(super) struct Measured {
+    pub(super) error: TileError,
+    pub(super) summary: Summary,
+    pub(super) cpu: CpuReport,
+    pub(super) original: Option<super::certify::Comparison>,
+}
+
+/// The root's S2 in fixed batches (`Batched`): at most this many evaluated at once, each with
+/// a fresh source query from the factory.
+pub(super) type RootBatches<'f, 'q> = (
+    usize,
+    &'f (dyn Fn() -> Result<SourceQuery<'q>, JobError> + Sync),
+);
+
+/// `measure`'s plan: the sample counts, and the root's batches (`None` for any other
+/// tile).
+pub(super) struct Plan<'f, 'r> {
+    pub count: Count,
+    pub batches: Option<RootBatches<'f, 'r>>,
+}
+
+pub(super) fn measure(
     tile: &CoarseTile<'_>,
     query: &mut SourceQuery<'_>,
     nearest: &mut Nearest,
-    count: Count,
-    centroid_checks: &[f64],
+    plan: Plan<'_, '_>,
+    centroid_checks: &[Centroid],
     topology: &mut super::geometry::measurement::Controls,
     check: &(dyn Fn() -> Result<(), JobError> + Sync),
-) -> Result<(TileError, Summary, CpuReport), JobError> {
+) -> Result<Measured, JobError> {
+    let Plan { count, batches } = plan;
     let mut cpu = CpuReport::default();
     let started = thread_cpu();
     let seed = seed(tile.key);
@@ -659,45 +893,144 @@ pub(crate) fn measure(
     let started = thread_cpu();
     let mut hint = None;
     let topology_source = std::mem::take(&mut topology.source);
-    let source_to_proxy = directed(
-        query.surface()?,
-        source_area,
-        count.samples,
-        seed,
-        Controls {
-            proxy: false,
-            initial: &topology_source,
-        },
-        |p, _| {
-            let d = nearest.surface(&proxy, p, &mut hint).distance2.sqrt();
-            topology.source_sample(p, d);
-            Ok(d)
-        },
-        check,
-    )?;
+    let mut original = super::certify::SourceRows::new(tile.key, tile.source_is_original)?;
+    let mut seeds = original.as_ref().map(super::certify::SourceRows::seeds);
+    let rows = query.surface()?.map(|row| {
+        let triangle = row?;
+        if let Some(capture) = &mut original {
+            capture.record(&triangle)?;
+        }
+        Ok(triangle)
+    });
+    let source_policy = Controls {
+        proxy: false,
+        initial: &topology_source,
+    };
+    let steps = nearest.steps;
+    // A source sample's nearest proxy face (its distance and rank), and what it leaves:
+    // the certify seed and the topology controls, applied in sampling order.
+    let mut record = |p: V3, rank: u64, d: f64, hit_rank: u64| {
+        if let Some(seeds) = &mut seeds {
+            if let Some(seed) = rank
+                .checked_sub(tile.key.first)
+                .and_then(|r| usize::try_from(r).ok())
+                .and_then(|r| seeds.get_mut(r))
+            {
+                *seed = u32::try_from(hit_rank).unwrap_or(u32::MAX);
+            }
+        }
+        topology.source_sample(p, d);
+        d
+    };
+    let source_to_proxy = match batches {
+        None => directed_serial(
+            rows,
+            source_area,
+            count.samples,
+            seed,
+            source_policy,
+            |p, rank| {
+                let hit = nearest.surface(&proxy, p, &mut hint);
+                Ok(record(p, rank, hit.distance2.sqrt(), hit.rank))
+            },
+            check,
+        )?,
+        Some((width, _)) => {
+            let proxy = &proxy;
+            let sink = Batched::new(
+                source_policy.initial,
+                width,
+                &mut nearest.stats,
+                check,
+                |batch: &[(bool, V3, u64)]| {
+                    let mut n = Nearest::with_steps(steps);
+                    let mut hint = None;
+                    let out: Vec<(f64, u64)> = batch
+                        .iter()
+                        .map(|&(_, p, _)| {
+                            let hit = n.surface(proxy, p, &mut hint);
+                            (hit.distance2.sqrt(), hit.rank)
+                        })
+                        .collect();
+                    (out, None, n.stats)
+                },
+                |p, rank, &(d, hit_rank): &(f64, u64)| record(p, rank, d, hit_rank),
+            )?;
+            let (direction, sink) = directed(
+                rows,
+                source_area,
+                count.samples,
+                seed,
+                source_policy,
+                sink,
+                check,
+            )?;
+            summarize(direction, sink)?.0
+        }
+    };
     cpu.source_to_proxy = elapsed(started);
     let started = thread_cpu();
-    let mut proxy_controls = centroid_checks.to_vec();
+    let mut proxy_controls: Vec<_> = centroid_checks.iter().map(|c| c.distance).collect();
     proxy_controls.extend(&topology.proxy);
-    for (i, &d) in centroid_checks.iter().enumerate() {
-        topology.proxy_sample(i, d);
+    for (i, c) in centroid_checks.iter().enumerate() {
+        topology.proxy_sample(i, c.distance);
     }
-    let proxy_to_source = directed(
-        proxy.triangles.iter().copied().map(Ok),
-        proxy_area,
-        count.samples,
-        seed ^ 0xa5a5a5a5a5a5a5a5,
-        Controls {
-            proxy: true,
-            initial: &proxy_controls,
-        },
-        |p, rank| {
-            let d = nearest.source(query, p)?.distance2.sqrt();
-            topology.proxy_sample(rank as usize, d);
-            Ok(d)
-        },
-        check,
-    )?;
+    let proxy_policy = Controls {
+        proxy: true,
+        initial: &proxy_controls,
+    };
+    let proxy_to_source = match batches {
+        None => directed_serial(
+            proxy.triangles.iter().copied().map(Ok),
+            proxy_area,
+            count.samples,
+            seed ^ 0xa5a5a5a5a5a5a5a5,
+            proxy_policy,
+            |p, rank| {
+                let d = nearest.source(query, p)?.distance2.sqrt();
+                topology.proxy_sample(usize::try_from(rank).unwrap_or(usize::MAX), d);
+                Ok(d)
+            },
+            check,
+        )?,
+        Some((width, fresh)) => {
+            let sink = Batched::new(
+                proxy_policy.initial,
+                width,
+                &mut nearest.stats,
+                check,
+                |batch: &[(bool, V3, u64)]| {
+                    let mut n = Nearest::with_steps(steps);
+                    let mut q = match fresh() {
+                        Ok(q) => q,
+                        Err(e) => return (Vec::new(), Some(e), n.stats),
+                    };
+                    let mut out = Vec::with_capacity(batch.len());
+                    for &(_, p, _) in batch {
+                        match n.source(&mut q, p) {
+                            Ok(hit) => out.push(hit.distance2.sqrt()),
+                            Err(e) => return (out, Some(e), n.stats),
+                        }
+                    }
+                    (out, None, n.stats)
+                },
+                |_, rank, &d: &f64| {
+                    topology.proxy_sample(usize::try_from(rank).unwrap_or(usize::MAX), d);
+                    d
+                },
+            )?;
+            let (direction, sink) = directed(
+                proxy.triangles.iter().copied().map(Ok),
+                proxy_area,
+                count.samples,
+                seed ^ 0xa5a5a5a5a5a5a5a5,
+                proxy_policy,
+                sink,
+                check,
+            )?;
+            summarize(direction, sink)?.0
+        }
+    };
     cpu.proxy_to_source = elapsed(started);
     publish(
         tile.children_error,
@@ -706,7 +1039,18 @@ pub(crate) fn measure(
         source_to_proxy,
         proxy_to_source,
     )
-    .map(|(g, s)| (g, s, cpu))
+    .and_then(|(error, summary)| {
+        let original = original
+            .zip(seeds)
+            .map(|(capture, seeds)| capture.finish(seeds, centroid_checks))
+            .transpose()?;
+        Ok(Measured {
+            error,
+            summary,
+            cpu,
+            original,
+        })
+    })
 }
 fn publish(
     children_error: f64,
@@ -722,10 +1066,7 @@ fn publish(
         return Err(state("nonfinite or negative measured G"));
     }
     Ok((
-        TileError {
-            geometric_error,
-            policy: POLICY,
-        },
+        TileError { geometric_error },
         Summary {
             version: 2,
             seed,
@@ -817,6 +1158,133 @@ pub(crate) fn thread_cpu() -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The outcome of one batched root pass: the folded statistics or the error, the ranks
+    /// whose side effects ran, and the searches counted.
+    type Pass = (Result<(Distribution, Distribution), String>, Vec<u64>, u64);
+
+    /// One batched pass over `n` samples, sample `i` with rank `i`: `value(i, j)` is its
+    /// distance at position `j` of its batch, or `None` for an evaluation error. Each
+    /// evaluated sample counts one search.
+    fn batched(width: usize, n: u64, value: &(dyn Fn(u64, usize) -> Option<f64> + Sync)) -> Pass {
+        let mut applied = Vec::new();
+        let mut searches = SearchStats::default();
+        let result = (|| {
+            let mut sink = Batched::new(
+                &[0.5],
+                width,
+                &mut searches,
+                &|| Ok(()),
+                |batch: &[(bool, V3, u64)]| {
+                    let mut stats = SearchStats::default();
+                    let mut out = Vec::new();
+                    for (j, &(_, _, rank)) in batch.iter().enumerate() {
+                        stats.searches += 1;
+                        match value(rank, j) {
+                            Some(d) => out.push(d),
+                            None => {
+                                let error = state(format!("evaluation error at {rank}"));
+                                return (out, Some(error), stats);
+                            }
+                        }
+                    }
+                    (out, None, stats)
+                },
+                |_, rank, &d: &f64| {
+                    applied.push(rank);
+                    d
+                },
+            )?;
+            for i in 0..n {
+                sink.sample(i % 7 != 0, [(i % 13) as f64, 0., 0.], i)?;
+            }
+            let (samples, controls, _) = sink.finish()?;
+            Ok((samples.summary(), controls.summary()))
+        })();
+        let result = result.map_err(|e: JobError| e.to_string());
+        (result, applied, searches.searches)
+    }
+
+    /// The same pass at 1, 2 and 5 batches at once; asserts they agree and returns it.
+    fn any_width(n: u64, value: &(dyn Fn(u64, usize) -> Option<f64> + Sync)) -> Pass {
+        let one = batched(1, n, value);
+        for width in [2, 5] {
+            assert_eq!(batched(width, n, value), one, "width {width}");
+        }
+        one
+    }
+
+    /// The root's batches fold in sampling order whatever their width: statistics and
+    /// side effects are the same for 1, 2 and 5 batches at once, and a sample's value
+    /// depends only on its batch (here its position in it, as a fresh hint would).
+    #[test]
+    fn root_batches_fold_in_order_for_any_width() {
+        let n = 3 * ROOT_WINDOW as u64 + 17;
+        let (result, applied, searches) =
+            any_width(n, &|i, j| Some((i % 13 + i % 101) as f64 + j as f64 * 1e-6));
+        assert!(result.is_ok());
+        assert_eq!(applied, (0..n).collect::<Vec<_>>());
+        assert_eq!(searches, n);
+    }
+
+    /// A refusal (a nonfinite distance) in the middle of a window, a group and a batch
+    /// stops there for any width: side effects run up to and including that sample, and
+    /// searches count up to the end of its batch, as one batch at a time would run them.
+    #[test]
+    fn a_root_refusal_mid_window_stops_at_its_sample() {
+        let b = ROOT_BATCH as u64;
+        let k = ROOT_WINDOW as u64 + 5 * b + 100;
+        let (result, applied, searches) = any_width(2 * ROOT_WINDOW as u64, &|i, _| {
+            Some(if i == k { f64::NAN } else { 1. })
+        });
+        assert_eq!(
+            result.unwrap_err(),
+            state("nonfinite sampled distance").to_string()
+        );
+        assert_eq!(applied, (0..=k).collect::<Vec<_>>());
+        assert_eq!(searches, (k / b + 1) * b);
+    }
+
+    /// The first event in sampling order wins: a refusal before an evaluation error in a
+    /// later batch (of the same group at width 5, of the next one at width 2), or in the same
+    /// batch, is the outcome; an evaluation error before a later refusal is.
+    #[test]
+    fn the_first_root_refusal_or_error_in_sampling_order_wins() {
+        let b = ROOT_BATCH as u64;
+        let k = ROOT_WINDOW as u64 + 5 * b + 100;
+        let n = 2 * ROOT_WINDOW as u64;
+        let refusal = state("nonfinite sampled distance").to_string();
+        for error in [k + b, k + 1] {
+            let pass = any_width(n, &|i, _| match i {
+                i if i == k => Some(f64::NAN),
+                i if i == error => None,
+                _ => Some(1.),
+            });
+            assert_eq!(pass.0.unwrap_err(), refusal);
+            assert_eq!(pass.1, (0..=k).collect::<Vec<_>>());
+            // The refusing batch's searches, up to its own evaluation error if any.
+            assert_eq!(
+                pass.2,
+                if error == k + 1 {
+                    k + 2
+                } else {
+                    (k / b + 1) * b
+                }
+            );
+        }
+        let pass = any_width(n, &|i, _| match i {
+            i if i == k => None,
+            i if i == k + b => Some(f64::NAN),
+            _ => Some(1.),
+        });
+        assert_eq!(
+            pass.0.unwrap_err(),
+            state(format!("evaluation error at {k}")).to_string()
+        );
+        assert_eq!(pass.1, (0..k).collect::<Vec<_>>());
+        assert_eq!(pass.2, k + 1);
+    }
+
     fn triangles(p: &[[[f32; 3]; 3]]) -> Vec<Triangle> {
         let mut result: Vec<_> = p
             .iter()
@@ -851,7 +1319,7 @@ mod tests {
         );
         let direction = |t: Vec<Triangle>, bv: &Surface, seed, policy| {
             let area = t.iter().map(|t| t.area()).sum();
-            directed(
+            directed_serial(
                 t.into_iter().map(Ok),
                 area,
                 count,
@@ -1150,7 +1618,7 @@ mod tests {
     #[test]
     fn incomplete_area_schedule_is_a_typed_refusal() {
         let t = Triangle::new([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], 0);
-        let error = directed(
+        let error = directed_serial(
             std::iter::once(Ok(t)),
             t.area() * 2.,
             MIN_TILE,
@@ -1162,7 +1630,7 @@ mod tests {
         .err()
         .unwrap();
         assert_eq!(error.kind(), crate::JobErrorKind::ResourceLimit);
-        directed(
+        directed_serial(
             std::iter::once(Ok(t)),
             t.area() * (1. + 2. * f64::EPSILON),
             MIN_TILE,
@@ -1181,7 +1649,7 @@ mod tests {
             Triangle::new([[0., 0., 0.]; 3], 0),
         ] {
             let calls = AtomicUsize::new(0);
-            let result = directed(
+            let result = directed_serial(
                 std::iter::once(Ok(t)),
                 t.area(),
                 MIN_DEPTH,
@@ -1223,5 +1691,52 @@ mod tests {
         let d = s.summary();
         assert!(d.p95 >= 0.949 && d.p95 <= 0.949 * 2f64.powf(1. / 32.));
         assert!(d.p99 >= 0.989 && d.p99 <= 0.989 * 2f64.powf(1. / 32.));
+    }
+    // All source vertices and all edge midpoints belong to the delivered
+    // strips. The widest missing point lies strictly inside an original edge.
+    type TestFace = [[f32; 3]; 3];
+
+    fn edge_gap_surfaces() -> (Vec<TestFace>, Vec<TestFace>) {
+        fn strip(left: f32, right: f32) -> [[[f32; 3]; 3]; 2] {
+            let h = 1. / 16384.;
+            let (a, b, c, d) = (
+                [left, 0., 0.],
+                [right, 0., 0.],
+                [right, h, 0.],
+                [left, h, 0.],
+            );
+            [[a, b, c], [a, c, d]]
+        }
+        // The common face makes the strip a small share of the source area.
+        let shared = [[-100., 50., 0.], [100., 50., 0.], [-100., 150., 0.]];
+        let mut source = vec![shared];
+        source.extend(strip(0., 1.));
+        let mut proxy = vec![shared];
+        proxy.extend(strip(0., 0.25));
+        proxy.extend(strip(0.375, 1.));
+        (source, proxy)
+    }
+
+    #[test]
+    fn published_g_covers_an_original_edge_between_all_vertex_and_midpoint_controls() {
+        let (source, proxy) = edge_gap_surfaces();
+        let (sampled, _) = pair_count(&source, &proxy, 592, Schedule::PRODUCTION.per_depth);
+        // At (5/16,0,0), the nearest target points are (1/4,0,0) and
+        // (3/8,0,0). Every other target face lies outside that open x strip.
+        const DISTANCE: f64 = 1. / 16.;
+
+        assert!(sampled.geometric_error < DISTANCE);
+        for (a, b) in [(&source, &proxy), (&proxy, &source)] {
+            let certificate = super::super::certify::direct_control(a, b, sampled.geometric_error);
+            let published = certificate.bound().max(sampled.geometric_error);
+            assert!(
+                published >= DISTANCE,
+                "published G {published} < edge witness {DISTANCE}"
+            );
+            assert!(
+                published < DISTANCE + 0.001,
+                "loose edge certificate {published}"
+            );
+        }
     }
 }

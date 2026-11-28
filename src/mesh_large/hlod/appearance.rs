@@ -23,9 +23,9 @@
 //! S3 holds no walk scratch (`scratch::ScratchLedger`): charts, page rasters, bake chunks,
 //! donor frontiers, mip chains and codec workspace are memory, charged in the parent job's
 //! admission (`HlodMemoryPlan::texture_workspace_bytes`, `page_bytes`, `tile_page_bytes`,
-//! `bake::RESOLVE_BYTES`, `bake::LOCAL_BYTES`), and decoded source chains live in the
-//! bounded [`ImageCache`] (`image_cache_bytes`). Its source reads go through S2's admitted
-//! index. The walk's stage-wide scratch check refuses any byte S3 might write unadmitted.
+//! `bake::RESOLVE_BYTES`, `bake::LOCAL_BYTES`), and source chains are the leaf stage's
+//! sparse chains ([`super::sparse`], `sparse_index_bytes`) or decoded into the bounded
+//! [`ImageCache`] (`image_cache_bytes`). Its source reads go through S2's admitted index. The walk's stage-wide scratch check refuses any byte S3 might write unadmitted.
 use super::{
     bake::{self, Hit, ImageCache, Queries},
     charts,
@@ -86,10 +86,18 @@ pub(crate) fn spacing(g: f64) -> f64 {
     (SPACING_FACTOR * g / 16.).max(MIN_SPACING)
 }
 
+/// What coarse pages sample: the stage's decoded source chains, or the leaf stage's
+/// sparse chains ([`super::sparse`]), resolved once for the stage.
+#[derive(Clone, Copy)]
+pub(crate) enum Sources<'a> {
+    Chains(&'a ImageCache),
+    Sparse(&'a super::sparse::Chains),
+}
+
 /// Stage-wide appearance services.
 pub(crate) struct Services<'a> {
     pub captured: &'a FullCaptured,
-    pub cache: &'a ImageCache,
+    pub sources: Sources<'a>,
     pub profile: Profile,
     pub max_edge: u32,
     /// Per-page encoder workspace ceiling (the job's admitted page charge).
@@ -379,10 +387,7 @@ pub(crate) fn slot_class(slot: TextureSlot) -> Class {
 /// Source images are sampled as colour (sRGB) or raw linear data; source normal images are
 /// raw linear components, re-expressed after sampling.
 fn source_class(slot: TextureSlot) -> Class {
-    match slot_class(slot) {
-        Class::Colour => Class::Colour,
-        _ => Class::Data,
-    }
+    super::sparse::source_class(slot)
 }
 
 fn normalize(v: [f64; 3]) -> Option<[f64; 3]> {
@@ -547,7 +552,10 @@ pub(crate) fn build(
 
 /// One textured group: fresh charts, the chunked source bake, MASK coverage samples and
 /// the labelled delivery of every slot page.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn textured(
     services: &Services<'_>,
     searcher: &mut bake::Searcher<'_, '_>,
@@ -950,6 +958,11 @@ fn bake_pages(
     let normal_map = p.slots.contains(&TextureSlot::Normal);
     let mut pages: Vec<Vec<u8>> = p.slots.iter().map(|_| vec![0u8; texels * 4]).collect();
     let mut bindings: HashMap<(u32, u8), Binding> = HashMap::new();
+    // One sparse tile reader serves every image this tile samples.
+    let mut sparse = match services.sources {
+        Sources::Sparse(chains) => Some(super::sparse::Reader::new(chains)),
+        Sources::Chains(_) => None,
+    };
     // (image, chunk query) requests, grouped by image.
     let mut requests: Vec<(usize, u32)> = Vec::new();
     let mut lods: Vec<f64> = Vec::new();
@@ -1031,22 +1044,31 @@ fn bake_pages(
                     .fold(f64::INFINITY, f64::min)
                     .floor()
                     .max(0.) as u32;
-                let chain = services
-                    .cache
-                    .get(captured, image, source_class(slot), check)?;
-                let mut reader = bake::ChainReader::new(&chain);
+                let chain = match services.sources {
+                    Sources::Chains(cache) => {
+                        Some(cache.get(captured, image, source_class(slot), check)?)
+                    }
+                    Sources::Sparse(_) => None,
+                };
+                let mut reader = chain.as_deref().map(bake::ChainReader::new);
                 for (&(_, i), &lod) in requests[start..end].iter().zip(&lods) {
                     let i = i as usize;
                     let hit = &q.hits[i];
                     let (_, sampler, set) = bindings[&(hit.material, slot_order(slot))].unwrap();
                     let lod = bake::footprint_lod(lod, need);
-                    let value = bake::sample_with(
-                        &mut reader,
-                        source_class(slot),
-                        sampler,
-                        hit.uv[set],
-                        lod,
-                    )?;
+                    let value = match (&mut reader, &mut sparse) {
+                        (Some(reader), _) => bake::sample_with(
+                            reader,
+                            source_class(slot),
+                            sampler,
+                            hit.uv[set],
+                            lod,
+                        )?,
+                        (None, Some(sparse)) => {
+                            sparse.sample(image, source_class(slot), sampler, hit.uv[set], lod)?
+                        }
+                        (None, None) => return Err(state("coarse sample without a source")),
+                    };
                     let frame = (slot == TextureSlot::Normal).then(|| {
                         let (_, gf, w) = chunk[i];
                         let n = normals

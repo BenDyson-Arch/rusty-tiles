@@ -47,6 +47,11 @@ struct Stopped {
 /// Run the CLI with `args` and `env`, send SIGTERM once `site` announces itself, and
 /// return how and how fast the process ended.
 fn stop_in(args: &[OsString], env: &[(&str, &str)], site: &str) -> Stopped {
+    stop_after(args, env, &format!("rusty-tiles test: in {site}"))
+}
+
+/// A real progress event can identify the phase independently of the test pace hook.
+fn stop_after(args: &[OsString], env: &[(&str, &str)], marker: &str) -> Stopped {
     let mut command = Command::new(env!("CARGO_BIN_EXE_rusty-tiles"));
     command
         .args(args)
@@ -69,30 +74,31 @@ fn stop_in(args: &[OsString], env: &[(&str, &str)], site: &str) -> Stopped {
         let _ = reader.read_to_string(&mut rest);
         all + &rest
     });
-    let marker = format!("rusty-tiles test: in {site}");
     let started = Instant::now();
     loop {
         match receiver.recv_timeout(Duration::from_millis(20)) {
-            Ok(line) if line.contains(&marker) => break,
+            Ok(line) if line.contains(marker) => break,
             Ok(_) => {}
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => {
                 let status = guard.0.as_mut().unwrap().wait().unwrap();
                 guard.0 = None;
                 panic!(
-                    "the run ended ({status}) before reaching {site}:\n{}",
+                    "the run ended ({status}) before reaching {marker}:\n{}",
                     reader.join().unwrap()
                 );
             }
         }
         assert!(
             started.elapsed() < Duration::from_secs(300),
-            "the run never reached {site}"
+            "the run never reached {marker}"
         );
     }
     let pid = guard.0.as_ref().unwrap().id() as libc::pid_t;
     let sent = Instant::now();
-    assert_eq!(unsafe { libc::kill(pid, libc::SIGTERM) }, 0);
+    // SAFETY: kill takes plain integers and touches no memory of this process.
+    let signalled = unsafe { libc::kill(pid, libc::SIGTERM) };
+    assert_eq!(signalled, 0);
     // A run that ignores the stop is killed after a minute (KillOnDrop) and fails here.
     let status = loop {
         if let Some(status) = guard.0.as_mut().unwrap().try_wait().unwrap() {
@@ -101,7 +107,7 @@ fn stop_in(args: &[OsString], env: &[(&str, &str)], site: &str) -> Stopped {
         }
         assert!(
             sent.elapsed() < Duration::from_secs(60),
-            "{site}: still running 60 s after SIGTERM"
+            "{marker}: still running 60 s after SIGTERM"
         );
         std::thread::sleep(Duration::from_millis(10));
     };
@@ -339,6 +345,179 @@ fn mesh_payload_staging_stops() {
     assert_stopped(&run, &work.scratch(), &work.out());
 }
 
+/// A SIGTERM at the public certificate progress event uses the normal worker
+/// checkpoint and unwinds the staged archive and its held siblings.
+#[test]
+fn mesh_surface_certification_stops() {
+    let work = Work::new();
+    let input = work.path("grid.glb");
+    fs::write(&input, support::textured_grid_glb(100)).unwrap();
+    let output = work.out().join("grid.3tz");
+    let run = stop_after(
+        &os(&[
+            &"mesh",
+            &"-i",
+            &input,
+            &"-o",
+            &output,
+            &"--jobs",
+            &"2",
+            &"--progress",
+            &"json",
+            &"--scratch-dir",
+            &work.scratch(),
+        ]),
+        &[],
+        r#""phase":"hlod_certify""#,
+    );
+    assert_stopped(&run, &work.scratch(), &work.out());
+}
+
+/// Capture's scan and payload validation run as tasks on worker threads; the calling thread
+/// checks the run's stop while they run, and each task checks it before it starts.
+#[test]
+fn mesh_capture_tasks_stop() {
+    let work = Work::new();
+    let input = work.path("grid.glb");
+    fs::write(&input, support::textured_grid_glb(200)).unwrap();
+    let output = work.out().join("grid.3tz");
+    let run = stop_in(
+        &os(&[
+            &"mesh",
+            &"-i",
+            &input,
+            &"-o",
+            &output,
+            &"--jobs",
+            &"2",
+            &"--scratch-dir",
+            &work.scratch(),
+        ]),
+        &[
+            ("RUSTY_TILES_TEST_PACE", "mesh.capture-task"),
+            ("RUSTY_TILES_TEST_PACE_US", "1000000"),
+        ],
+        "mesh.capture-task",
+    );
+    assert_stopped(&run, &work.scratch(), &work.out());
+}
+
+/// Capture's direct assembly runs on worker threads; the calling thread checks the run's
+/// stop while they decode, key and stage triangles, and each bucket sort checks it first.
+#[test]
+fn mesh_assembly_stops() {
+    let work = Work::new();
+    let input = work.path("grid.glb");
+    fs::write(&input, support::textured_grid_glb(200)).unwrap();
+    let output = work.out().join("grid.3tz");
+    let run = stop_in(
+        &os(&[
+            &"mesh",
+            &"-i",
+            &input,
+            &"-o",
+            &output,
+            &"--jobs",
+            &"2",
+            &"--scratch-dir",
+            &work.scratch(),
+        ]),
+        &[
+            ("RUSTY_TILES_TEST_PACE", "mesh.assembly"),
+            ("RUSTY_TILES_TEST_PACE_US", "1000000"),
+        ],
+        "mesh.assembly",
+    );
+    assert_stopped(&run, &work.scratch(), &work.out());
+}
+
+/// Capture's cell tree builds its subtrees on worker threads; each checks the run's stop
+/// between units of 4,096 triangles, and the calling thread keeps checking while they run.
+#[test]
+fn mesh_tree_subtrees_stop() {
+    let work = Work::new();
+    let input = work.path("grid.glb");
+    fs::write(&input, support::textured_grid_glb(200)).unwrap();
+    let output = work.out().join("grid.3tz");
+    let run = stop_in(
+        &os(&[
+            &"mesh",
+            &"-i",
+            &input,
+            &"-o",
+            &output,
+            &"--jobs",
+            &"2",
+            &"--scratch-dir",
+            &work.scratch(),
+        ]),
+        &[
+            ("RUSTY_TILES_TEST_PACE", "mesh.tree-subtree"),
+            ("RUSTY_TILES_TEST_PACE_US", "1000000"),
+        ],
+        "mesh.tree-subtree",
+    );
+    assert_stopped(&run, &work.scratch(), &work.out());
+}
+
+/// Capture's corner-depth pass reads its leaves on worker threads; each checks the run's
+/// stop before every leaf, and the calling thread checks between waves of chunks.
+#[test]
+fn mesh_corner_candidates_stop() {
+    let work = Work::new();
+    let input = work.path("grid.glb");
+    fs::write(&input, support::textured_grid_glb(200)).unwrap();
+    let output = work.out().join("grid.3tz");
+    let run = stop_in(
+        &os(&[
+            &"mesh",
+            &"-i",
+            &input,
+            &"-o",
+            &output,
+            &"--jobs",
+            &"2",
+            &"--scratch-dir",
+            &work.scratch(),
+        ]),
+        &[
+            ("RUSTY_TILES_TEST_PACE", "mesh.corner-candidates"),
+            ("RUSTY_TILES_TEST_PACE_US", "1000000"),
+        ],
+        "mesh.corner-candidates",
+    );
+    assert_stopped(&run, &work.scratch(), &work.out());
+}
+
+/// A stop during the incidence pass's item generation lands within the bound: its workers
+/// check the run's stop before each leaf, and the calling thread checks while they work.
+#[test]
+fn mesh_incidence_items_stop() {
+    let work = Work::new();
+    let input = work.path("grid.glb");
+    fs::write(&input, support::textured_grid_glb(200)).unwrap();
+    let output = work.out().join("grid.3tz");
+    let run = stop_in(
+        &os(&[
+            &"mesh",
+            &"-i",
+            &input,
+            &"-o",
+            &output,
+            &"--jobs",
+            &"2",
+            &"--scratch-dir",
+            &work.scratch(),
+        ]),
+        &[
+            ("RUSTY_TILES_TEST_PACE", "mesh.incidence-items"),
+            ("RUSTY_TILES_TEST_PACE_US", "1000000"),
+        ],
+        "mesh.incidence-items",
+    );
+    assert_stopped(&run, &work.scratch(), &work.out());
+}
+
 /// A KTX2 page encode cannot be interrupted (minutes at the ladder's highest efforts). The
 /// CLI's backstop removes the run's temporary paths and exits with the signal's status once
 /// the stop has not finished in time; here the encode never returns.
@@ -375,4 +554,69 @@ fn backstop_ends_a_run_blocked_in_a_texture_encode() {
         names(&work.scratch())
     );
     assert!(names(&work.out()).is_empty(), "{:?}", names(&work.out()));
+}
+
+/// A subset bake's selection tests triangle centroids on worker threads; each task checks
+/// the run's stop every 1,024 triangles, and the calling thread keeps checking.
+#[test]
+fn mesh_subset_selection_stops() {
+    let work = Work::new();
+    let input = work.path("grid.glb");
+    fs::write(&input, support::textured_grid_glb(200)).unwrap();
+    let output = work.out().join("grid.3tz");
+    let run = stop_in(
+        &os(&[
+            &"mesh",
+            &"-i",
+            &input,
+            &"-o",
+            &output,
+            &"--jobs",
+            &"2",
+            &"--bbox",
+            &"0",
+            &"-1",
+            &"10",
+            &"1",
+            &"--scratch-dir",
+            &work.scratch(),
+        ]),
+        &[
+            ("RUSTY_TILES_TEST_PACE", "mesh.select"),
+            ("RUSTY_TILES_TEST_PACE_US", "1000000"),
+        ],
+        "mesh.select",
+    );
+    assert_stopped(&run, &work.scratch(), &work.out());
+}
+
+/// A weld decodes and lists source vertices on worker threads; each task checks the run's
+/// stop every 4,096 vertices, and the calling thread keeps checking.
+#[test]
+fn mesh_weld_stops() {
+    let work = Work::new();
+    let input = work.path("grid.glb");
+    fs::write(&input, support::textured_grid_glb(200)).unwrap();
+    let output = work.out().join("grid.3tz");
+    let run = stop_in(
+        &os(&[
+            &"mesh",
+            &"-i",
+            &input,
+            &"-o",
+            &output,
+            &"--jobs",
+            &"2",
+            &"--weld-epsilon",
+            &"0.001",
+            &"--scratch-dir",
+            &work.scratch(),
+        ]),
+        &[
+            ("RUSTY_TILES_TEST_PACE", "mesh.weld"),
+            ("RUSTY_TILES_TEST_PACE_US", "1000000"),
+        ],
+        "mesh.weld",
+    );
+    assert_stopped(&run, &work.scratch(), &work.out());
 }

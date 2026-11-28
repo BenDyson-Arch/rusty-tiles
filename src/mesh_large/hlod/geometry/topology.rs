@@ -197,27 +197,65 @@ fn retain(m: &mut Merged, keep: &[bool]) {
 /// Consume the shared chord without folding incident faces. A sign-preserving collapse
 /// is cheap; otherwise rebuild the affected manifold patch against the exact boundary.
 /// Failure leaves the source mesh intact for the caller's reported frontier policy.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 pub(super) fn contract(
     m: &mut Merged,
     interface: &[InterfaceRow],
     previous_interface: &[InterfaceRow],
+    leaves: [u32; 2],
     mapping: &super::BorderMap<'_>,
     receipt: &mut Receipt,
     fallbacks: bool,
     folds: Option<&super::folds::Policy>,
     relief: Option<&mut Option<super::Contracted>>,
 ) -> Result<bool, JobError> {
+    contract_noting(
+        m,
+        interface,
+        previous_interface,
+        leaves,
+        mapping,
+        receipt,
+        fallbacks,
+        folds,
+        relief,
+        &mut false,
+    )
+}
+
+/// `contract`, also setting `rebuilt` when the constrained rebuild ran: the only step
+/// whose result depends on `fallbacks` (`constrained::contract`).
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
+pub(super) fn contract_noting(
+    m: &mut Merged,
+    interface: &[InterfaceRow],
+    previous_interface: &[InterfaceRow],
+    leaves: [u32; 2],
+    mapping: &super::BorderMap<'_>,
+    receipt: &mut Receipt,
+    fallbacks: bool,
+    folds: Option<&super::folds::Policy>,
+    relief: Option<&mut Option<super::Contracted>>,
+    rebuilt: &mut bool,
+) -> Result<bool, JobError> {
     contract_from(
         m,
         interface,
         previous_interface,
+        leaves,
         mapping,
         receipt,
         None,
         fallbacks,
         folds,
         relief,
+        rebuilt,
     )
 }
 
@@ -280,22 +318,29 @@ fn choose_targets(
 }
 
 /// Keep the licenses of the original merged children across recovery proposals.
-/// `fallbacks`: see `constrained::contract`. `folds` (A2's N3): the guard runs under that
+/// `leaves`: the parent's leaf interval for the guard's path witnesses
+/// (`folds::Source::for_contraction`). `fallbacks`: see `constrained::contract`.
+/// `folds` (A2's N3): the guard runs under that
 /// last-resort policy, so the snap may fold faces; the shared-point rules (seam owner),
 /// exact interface items and an unchanged topology still decide. `relief`: the contract has
 /// relieved chords (A1), and the slot receives this contraction's residue when it does not
 /// complete.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 pub(super) fn contract_from(
     m: &mut Merged,
     interface: &[InterfaceRow],
     previous_interface: &[InterfaceRow],
+    leaves: [u32; 2],
     mapping: &super::BorderMap<'_>,
     receipt: &mut Receipt,
     original_faces: Option<&[[u32; 3]]>,
     fallbacks: bool,
     folds: Option<&super::folds::Policy>,
     relief: Option<&mut Option<super::Contracted>>,
+    rebuilt: &mut bool,
 ) -> Result<bool, JobError> {
     let _cpu = super::super::cpu_profile::start(
         super::super::cpu_profile::Stage::Contract,
@@ -366,6 +411,7 @@ pub(super) fn contract_from(
                     &original,
                     interface,
                     previous_interface,
+                    leaves,
                     &mapping_by_vertex,
                 )
                 .with_policy(policy.clone());
@@ -434,6 +480,7 @@ pub(super) fn contract_from(
         original_faces.unwrap_or(&m.triangles),
         interface,
         previous_interface,
+        leaves,
         &mapping_by_vertex,
     );
     drop(mapping_by_vertex);
@@ -448,6 +495,7 @@ pub(super) fn contract_from(
     }
     drop(output);
     drop(representatives);
+    *rebuilt = true;
     if let Some(r) = super::constrained::contract(
         m,
         interface,
@@ -1390,7 +1438,10 @@ fn boundary_adjacency(n: usize, edges: &HashMap<(u32, u32), u32>) -> (Vec<usize>
 /// Common boundary paths are compared after suppressing unshared degree-two vertices.
 /// Cycle rank of their intersection distinguishes closure from simultaneous opening;
 /// subtracting only whole-component ranks would silently cancel those two operations.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn changed_cycles(
     old: &HashMap<(u32, u32), u32>,
     new: &HashMap<(u32, u32), u32>,
@@ -1882,6 +1933,7 @@ pub(super) mod tests {
             &mut m,
             &interface,
             &previous,
+            [0, 0],
             &map,
             &mut receipt,
             true,
@@ -1908,6 +1960,7 @@ pub(super) mod tests {
             &mut m,
             &[],
             &[],
+            [0, 0],
             &|k| Ok((k == middle).then_some((a, b, 0.75, 0))),
             &mut Receipt::default(),
             false,
@@ -2007,6 +2060,7 @@ pub(super) mod tests {
             &m.triangles,
             &rows(&[(a, q)]),
             &previous,
+            [0, 0],
             &mapping,
         );
         let mapped: Vec<_> = m
@@ -2023,6 +2077,7 @@ pub(super) mod tests {
             &mut m,
             &interface,
             &previous,
+            [0, 0],
             &|p| Ok((p == middle).then_some((a, q, 0.5, 0))),
             &mut receipt,
             false,
@@ -2089,6 +2144,7 @@ pub(super) mod tests {
             &mut m,
             &interface,
             &previous,
+            [0, 0],
             &|p| Ok((p == middle).then_some((a, b, 0.5, 0))),
             &mut receipt,
             false,
@@ -2393,6 +2449,7 @@ pub(super) mod tests {
                 InterfaceRow::new(0, a, middle, 0, 1),
                 InterfaceRow::new(0, middle, b, 0, 1),
             ],
+            [0, 0],
             &|p| Ok((p == middle).then_some((a, b, 0.5, 0))),
             &mut receipt,
             false,

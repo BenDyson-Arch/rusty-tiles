@@ -335,7 +335,10 @@ impl Spool<'_> {
 }
 // This transaction owns SQL and delta reports while validating one feature;
 // codec policy and the original Attempt arrive from the conversion boundary.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn accept_feature(
     db: &Connection,
     mut feature: Feature,

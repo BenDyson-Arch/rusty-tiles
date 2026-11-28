@@ -20,7 +20,10 @@ use std::io::Read;
 /// One logged event. Entries are encoded and decoded one at a time, never stored together,
 /// so the variant size difference costs nothing.
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[allow(clippy::large_enum_variant)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "entries are encoded and decoded one at a time, never stored together"
+)]
 pub(super) enum Entry {
     Tile(TileFact),
     Reference {

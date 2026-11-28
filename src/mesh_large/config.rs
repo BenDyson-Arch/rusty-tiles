@@ -96,6 +96,10 @@ pub(crate) struct TreeConfig {
     pub output_parents: Option<(PathBuf, PathBuf)>,
     /// Declared source CRS applied at capture; `None` is local metres/Y-up.
     pub source_crs: Option<super::MeshSourceCrs>,
+    /// Bake only the triangles whose centroid lies in this region; `None` bakes them all.
+    pub subset: Option<super::MeshSubset>,
+    /// Weld source vertex positions before the assembly; `None` captures them as authored.
+    pub weld: Option<super::MeshWeld>,
     /// The run's stop probe: spill scratch created for this run stops with it.
     pub(crate) stop: Option<crate::runtime::AttemptProbe>,
     /// D8's resolved run budget: every stage plans against it as a ceiling. Only the
@@ -111,6 +115,9 @@ pub(crate) struct TreeConfig {
     /// fixtures otherwise keep their small sort configuration to exercise spilling).
     #[cfg(test)]
     pub test_sort_plan: bool,
+    /// Test seam: the assembly's plan, replacing the one capture derives from the budget.
+    #[cfg(test)]
+    pub test_assembly: Option<super::assembly::AssemblyPlan>,
 }
 
 impl TreeConfig {
@@ -148,6 +155,8 @@ impl TreeConfig {
             member_ceiling: MEMBER_CEILING_3TZ,
             output_parents: None,
             source_crs: None,
+            subset: None,
+            weld: None,
             stop: None,
             memory_budget: None,
             #[cfg(test)]
@@ -156,6 +165,8 @@ impl TreeConfig {
             test_record_limits: None,
             #[cfg(test)]
             test_sort_plan: false,
+            #[cfg(test)]
+            test_assembly: None,
         }
     }
 

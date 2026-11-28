@@ -16,7 +16,10 @@ fn call(args: &[&std::ffi::OsStr], env: &[(&str, &Path)]) -> (std::process::Outp
     (output, report)
 }
 
-#[cfg_attr(not(feature = "native-geospatial"), allow(dead_code))]
+#[cfg_attr(
+    not(feature = "native-geospatial"),
+    expect(dead_code, reason = "used only with the native-geospatial feature")
+)]
 fn source(root: &Path) -> PathBuf {
     let path = root.join("source.geojson");
     std::fs::write(

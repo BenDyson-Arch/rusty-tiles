@@ -58,7 +58,13 @@ pub(crate) fn sync_parent(path: &Path) -> io::Result<()> {
 
 /// Sync `root` and every directory below it, without following symlinks.
 /// Only directory publication, which needs native support, stages trees.
-#[cfg_attr(not(feature = "native-geospatial"), allow(dead_code))]
+#[cfg_attr(
+    not(any(feature = "cli", feature = "native-geospatial")),
+    expect(
+        dead_code,
+        reason = "used only by the CLI and native-geospatial builds"
+    )
+)]
 pub(crate) fn sync_tree(root: &Path) -> io::Result<()> {
     sync_tree_with(root, sync_directory)
 }

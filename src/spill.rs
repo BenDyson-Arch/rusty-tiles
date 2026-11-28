@@ -7,32 +7,42 @@
 //! independent of `R`, `F` and `jobs`. Every I/O failure is a typed [`SpillError`]; scratch files
 //! are removed on drop and on error.
 
+pub(crate) mod codec;
+/// The block codec of compressed spill files, for callers that stage their own blocks.
+pub(crate) use codec::{decode as decode_block, encode as encode_block, Encoded};
 mod scratch;
 mod sequence;
 mod sort;
 mod volume;
 
-#[allow(unused_imports)]
-pub(crate) use scratch::{FileIo, Placement, Scratch, SpillIo};
-#[allow(unused_imports)]
+#[cfg(test)]
+pub(crate) use scratch::FileIo;
+pub(crate) use scratch::{Placement, Scratch, SpillIo};
 pub(crate) use sequence::{
-    ByteFile, ByteWriter, ClosedByteFile, RandomRecords, Sequence, SequenceReader, SequenceWriter,
-    SlotFile,
+    block_index_memory_bound, block_records, random_cache_bound, ByteFile, ByteWriter,
+    ClosedByteFile, RandomRecords, Sequence, SequenceReader, SequenceWriter, SlotFile,
 };
-#[allow(unused_imports)]
+#[expect(unused_imports, reason = "not every build reads each re-export")]
 pub(crate) use sort::{
     chunk_records, ExternalSorter, SortConfig, SortObserver, SortProgress, SortStats, SortedStream,
     CHUNK_BYTES,
 };
 #[cfg(test)]
 pub(crate) use volume::Classification;
-#[allow(unused_imports)]
 pub(crate) use volume::{
     inspect_volume, preflight, same_filesystem, PreflightStage, SpaceRole, Volume, STORAGE_DISK_ENV,
 };
 
 use crate::{JobError, JobErrorKind};
 use std::{fmt, io, path::PathBuf};
+
+/// The `N` bytes of an encoded record from `at`, for a fixed-width field's `from_le_bytes`.
+/// Panics, as slicing does, when the record is shorter: a codec bug, never input.
+pub(crate) fn field<const N: usize>(bytes: &[u8], at: usize) -> [u8; N] {
+    let mut out = [0; N];
+    out.copy_from_slice(&bytes[at..at + N]);
+    out
+}
 
 /// A fixed-size spill record with a platform-independent encoding.
 ///

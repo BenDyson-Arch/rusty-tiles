@@ -10,9 +10,9 @@ grid-free tier needs the [native-geospatial build](INSTALL.md#native-geospatial-
 The pipeline captures the source, writes exact full-detail leaf tiles, builds
 every coarse parent tile from its children as a classic octree level of detail
 ([coarse levels](#coarse-levels-hlod)), and publishes the hierarchy. A coarse
-tile's geometric error is a **sampled, measured** distance to the source
-surface, not a certificate. It is raised where the tile's texture is much
-coarser than its children's ([texture-aware G](#texture-aware-published-g)).
+tile's [geometric error](#certified-geometric-error) bounds the continuous
+distance in both directions between its captured source and its decoded surface.
+Coarse textures can raise the published value ([texture-aware G](#texture-aware-published-g)).
 
 ## Convert a local scene
 
@@ -32,6 +32,201 @@ dependencies. Installation does not promise power-loss durability.
 The archive declares itself an HLOD delivery (`asset.extras.rustyTiles.lod` is
 `"hlod"` in `tileset.json`). `validate` therefore applies every HLOD check
 without being asked, and refuses a copy whose payload labels were stripped.
+
+## Check a source before baking
+
+`rusty-tiles mesh-inspect` (Python: `rusty_tiles.inspect_mesh`) reports what in
+a source makes [coarse levels](#coarse-levels-hlod) fragment, without baking:
+
+```sh
+rusty-tiles mesh-inspect -i site.glb --source-crs EPSG:3857 \
+  --source-offset-file site_offset.txt --geojson site-check.geojson
+rusty-tiles --json mesh-inspect -i local.glb > check.json
+```
+
+It takes `mesh`'s source options (`--profile`, `--jobs`, `--scratch-dir`,
+`--memory-budget`, the placement, the [source CRS](#source-crs) and the
+[weld](#weld-the-source) options) and writes no archive.
+
+By default it reads the source once and reports its topology, without capture.
+Each corner gets the position `mesh` would capture: after its node transform,
+any source CRS mapping and any weld. Used vertices and triangle edges are
+written to scratch in ranges of position, and the ranges are sorted and counted
+in memory on the `--jobs` workers. Loops and seams are then joined from the
+open and closed edges alone. Partition files, position tables and kept edges
+are admitted on the scratch, and every resident array against the memory
+budget, before they are written. A source the budget cannot hold is refused as
+`resource_limit`. On Walem (10 M triangles) and an 80 M-triangle copy of it,
+with `--jobs 4`, it took about 1 % of a bake's wall time.
+
+Without `--forecast` it checks the source's topology and payload: its indices,
+positions (with the source CRS and any weld) and accessor data, with `mesh`'s
+checks and errors in `mesh`'s order. It does not run the checks that only a
+bake needs, so `mesh` can still refuse a source it passed: the image preflight
+and decode admission, the attribute layout, the tile member gate, the
+triangle record limit, and with a source CRS the per-vertex Jacobian that
+normals and tangents need (a position whose Jacobian cannot be evaluated). Without a table of every instance's positions in
+memory, a single primitive instance larger than the budget's position-table
+allowance (13 bytes per vertex) is read per task instead, each task decoding
+its own vertices once in vertex order, at about the same speed.
+
+`--forecast` (Python `forecast=True`) adds the [omission
+forecast](#the-omission-forecast-is-an-estimate). It costs most of a bake:
+it captures the source exactly as `mesh` does (the same capture, cell tree,
+lattice, incidence pass and shared-border contracts), so give it the options
+you will bake with and its cells are the bake's cells. Its topology section is
+the same as without it.
+
+The report (`--json`'s `inspectReport`, Python's `report`;
+`schema_version` 2) is the same for every `--jobs`, budget, scratch location
+and GeoJSON path; the path is reported beside it (`geojson` in `--json`,
+`InspectResult.geojson` in Python). Without `--json`, five lines on stderr
+summarise it, the last saying the forecast was not run and that `--profile`
+applies only with it; six with `--forecast`. A weld adds one line before them, and a
+last line names the GeoJSON. It holds:
+
+- **Source topology** (`source`), on exact positions: two corners are one
+  position only when their captured coordinates are bit-equal, with no
+  tolerance. A source vertex is a primitive instance's POSITION index.
+  - `open`: edges with one face after welding positions, the loops they form,
+    and the loops by length class (under 1 m, 1–5 m, 5–20 m, over 20 m).
+  - `primitive_boundaries`: edges open within their own primitive, split into
+    those exactly coincident with another primitive's edge, those coincident
+    only with another face of the same primitive (unwelded vertices), and those
+    open after welding.
+  - `repeated_positions`: positions held by more than one source vertex, the
+    extra vertices, and the edges welding them closes. The bake already joins
+    exact repeats; `--weld-epsilon` [welds near repeats](#weld-the-source).
+  - `seams`: those closed edges joined into chains, with their length classes.
+  - `components` (connected after welding positions), `nonmanifold_edges`,
+    `degenerate_triangles`, `surface_area_m2` and the counts of triangles,
+    positions, source vertices and primitive instances. `surface_area_m2` is
+    the correctly rounded sum of the triangles' areas, independent of order;
+    releases up to 0.4.1 summed it in capture's order, so it may differ from
+    theirs in the last bits.
+- With `--weld-epsilon` or `--join-primitives`, the **weld statement**
+  (`weld`), as `mesh` reports it.
+- With `--forecast` only:
+  - **the bake's view** (`hlod_view`): open edges as the bake's incidence pass
+    counts them, after welding on the leaf-canonical lattice. The bake keeps
+    every one exactly.
+  - **The cell tree** (`tree`): leaves, coarse cells, height, leaf size and the
+    triangle cap.
+  - **An omission risk estimate** (`forecast`), labelled `"estimate": true`.
+
+The topology counts are exact. The forecast is not.
+
+### The omission forecast is an estimate
+
+With `--forecast`, the forecast replays the bake's structural rules over its
+real contracts and estimates whether each cell's own build fails:
+
+- **Certain omissions.** A cell whose border contract alone cannot fit the
+  triangle cap is omitted without a build (`risk: "certain"`), and the bake
+  reports it as `contract_lower_bound`. The rule is the bake's own. It has been
+  checked against a bake only on a synthetic sheet with a tiny cap, where the
+  certain cells matched cell for cell. None of the real sources measured had a
+  certain cell.
+- **The estimate.** Every other cell is scored by
+  `load = (merged contract points + open-boundary estimate) / cap`.
+  - The merged contract points are the distinct border points of the tiles the
+    build merges: its children's or, for a root rebuilt from a frontier, the
+    frontier tiles'. They come from the same contracts the bake builds with.
+  - The open-boundary estimate counts the source's open edges on loops that
+    cross the cell's border (the boundaries the last resort must keep), at the
+    resolution of the merged capped tiles.
+  - On measured bakes the omission sources were contraction stalls (the parent
+    could not remove the border points its children keep inside it) or stalled
+    proposals.
+  - Risk is `high` from a load of 1 (counted as a predicted omission),
+    `elevated` from 0.5, otherwise `low`. The thresholds were fixed before
+    measuring, not fitted.
+- **Propagation.** Omission propagates as in the bake: every ancestor of an
+  omitted cell is omitted, except that the root is rebuilt when its children's
+  frontier is complete and holds at most eight capped tiles
+  (`root: "recovered"`). Pass-through cells share their child's outcome.
+
+**Measured quality.** Four bakes with known omissions were compared cell by
+cell: two crops of private photogrammetry models and two synthetic surfaces.
+
+- Precision for omitted cells was 0.13–1.00 and recall 0.33–1.00. The lower
+  precision went with high recall, and the reverse.
+- The estimate rarely finds the cell that actually fails: 3 of the 18 bakes'
+  omission sources. Its recall comes mostly from propagation: any predicted
+  failure marks the same shallow ancestors the bake omits.
+- It predicts failures that the coarse drops and last-resort stages avoid,
+  such as cities whose open boundaries belong to border-free buildings. It
+  misses fold and stall failures on surfaces with few open boundaries.
+
+Treat `high` risk as a reason to look at a region, not as a verdict.
+`forecast.by_depth` gives the cells, risks and predicted omissions at each
+depth, and `top_cells` lists the highest loads and every certain cell.
+
+### GeoJSON
+
+`--geojson PATH` (a `.geojson` path; `--force` replaces an existing one)
+writes one FeatureCollection:
+
+- `open_loop` and `seam` features: each open loop and seam chain at least
+  `--minFeatureLength` metres long (default 5), as a MultiLineString of
+  ordered polylines. A loop is a closed ring; a branching chain is split at its
+  branch points. Features are written longest first, up to 250,000 segments
+  in all, and `omitted_line_features` counts the rest.
+- With `--forecast`, `cell` features: the footprint of every cell at
+  `elevated` risk or above, or predicted omitted, with its forecast as
+  properties (`geojson.cells` counts them; 0 without the forecast).
+
+Coordinates are WGS84 longitude and latitude in degrees (RFC 7946), so the
+source must be placed with `--anchor` or a source CRS. Otherwise the request is
+refused before the source is read, unless `--geojson-local` asks for local
+metres. A local file holds east and north metres of the tileset's local frame:
+east is glTF +X and north is glTF −Z, the tiler's own Y-up convention. A
+top-level `rustyTilesFrame` member says the coordinates are not WGS84. There is
+no source-CRS output: capture maps the source one way (to WGS84 through the
+CRS operation), and an inverse is not part of it. Reproject the WGS84 file in a
+GIS instead. The file is installed only after the run succeeds.
+
+```python
+check = rusty_tiles.inspect_mesh(
+    Path("site.glb"), geojson=Path("site-check.geojson"), min_feature_length=5.0,
+    source_crs="EPSG:3857", source_offset_file=Path("site_offset.txt"),
+    callback=None,
+)
+print(*check.summary, sep="\n")
+```
+
+`inspect_mesh(input, *, geojson=None, geojson_local=False,
+min_feature_length=5.0, forecast=False, ...)` takes `mesh_to_tileset`'s
+keywords, without `output`. It returns a frozen `InspectResult` with `report`,
+`diagnostics`, `geojson` (the installed path, or `None`), `summary` and
+`cleanup_diagnostics`. Progress reaches `callback` as for `mesh_to_tileset`;
+every step has a total and repeats its count at least every 250 ms. Without
+`--forecast` the phases are:
+
+- `inspect_scan` (every index and used position checked, as `mesh`'s scan
+  checks them; with a source CRS their bounds choose its origin),
+  `inspect_validate` (the payload check), and with a weld `capture_weld`;
+- `inspect_sample` (corner positions sampled to split the position ranges),
+  `inspect_stream` (triangles read), `inspect_vertices` (used vertices
+  counted), `inspect_edges` (edges counted), `inspect_components` (edges
+  between position ranges joined), and with a weld `capture_weld_check`;
+- `inspect_loops` (and `inspect_merge` when the GeoJSON's sort merges);
+- `ready_to_publish`.
+
+With `--forecast`:
+
+- `capture` and its steps;
+- `inspect_vertices`, `inspect_edges` and `inspect_loops` (and `inspect_merge`
+  when a sort merges);
+- the incidence steps `hlod_incidence_items`, `hlod_incidence_reduce` and
+  `hlod_incidence_ends`;
+- the shared-border steps `hlod_borders_rows`, `hlod_borders_graph`,
+  `hlod_borders_faces`, `hlod_borders_levels` and `hlod_borders_publish` (and
+  `hlod_borders_merge` when the row sort merges), as for `mesh`;
+- `inspect_contracts` (every border contract the forecast reads, gathered in
+  one pass, one unit per linked item) and `inspect_forecast` (the omission
+  forecast, one unit per tree node), with `inspect_merge` for a merge pass;
+- `ready_to_publish`.
 
 ## Source and placement
 
@@ -167,6 +362,261 @@ centre check estimates the quadratic interpolation term, not higher-order
 terms. Measured errors in the tests are below 1e-7 rad, including a 150 km site
 at 60°. The report states the lattice and its per-vertex cells.
 
+## Bake part of the source
+
+To try settings on a small area of a large source, bake only part of it:
+
+```sh
+rusty-tiles mesh -i local.glb -o part.3tz --bbox 100 -50 400 250
+rusty-tiles mesh -i site.glb -o part.3tz \
+  --source-crs EPSG:3857 --source-offset-file site_offset.txt --polygon area.geojson
+```
+
+`--bbox MINX MINY MAXX MAXY` keeps the triangles whose centroid lies in the box,
+and `--polygon FILE` those whose centroid lies in a GeoJSON polygon. Pass at
+most one of them. Python takes `bbox=(minx, miny, maxx, maxy)` or
+`polygon=path`.
+
+**Coordinates.** Heights are ignored; the region is a 2D area.
+
+- A local source: `x` is glTF X and `y` is glTF −Z (north in a Y-up scene, and
+  the Y axis Blender shows), in source metres, after node transforms and before
+  `--scene-offset` or any other placement.
+- With a [source CRS](#source-crs): `x` is WGS84 longitude and `y` is latitude,
+  in degrees. Longitudes must lie in [−180, 180] and latitudes in [−90, 90]
+  (`invalid_request`), so a region cannot cross the antimeridian.
+
+**Which triangles are kept.** A triangle is kept when its centroid lies inside.
+Triangles are never split, so kept triangles can reach past the region's edge
+by up to one triangle. The centroid is `(a + b + c) / 3` of the three post-node
+source positions, in double precision. With a source CRS, that point plus the
+source offset is mapped through the run's CRS operation and converted to WGS84
+longitude and latitude. The test therefore sees the source-space centroid, not
+the mean of the mapped corners.
+
+**Boundary.** Inclusion is half-open, so abutting regions partition the source:
+
+- A bbox keeps `minx ≤ x < maxx` and `miny ≤ y < maxy`. A centroid exactly on
+  the west or south edge is kept; one on the east or north edge is not.
+- A polygon uses the **even-odd rule** over each polygon's rings, holes
+  included: a point is inside when a ray towards +x crosses the rings an odd
+  number of times. An edge counts when one endpoint has `y ≤ p.y` and the
+  other `y > p.y`, and its crossing, computed from its lower endpoint, lies at
+  `x > p.x`. Ring winding is ignored.
+- So a bbox is the same region as its rectangle polygon, a hole drops a
+  centroid on its own west or south edge and keeps one on its east or north
+  edge, and two polygons sharing an edge (same vertex coordinates) keep a
+  centroid on that edge exactly once.
+- A MultiPolygon, or a FeatureCollection, is the union of its polygons:
+  overlapping members do not cancel each other.
+
+**GeoJSON.** The file (at most 64 MiB) holds a Polygon or MultiPolygon
+geometry, a Feature with one, or a FeatureCollection of such Features. Rings
+must be closed (first position equal to the last) with at least four positions.
+A position is two or three finite numbers; a third is ignored. Malformed JSON,
+other types (Point, LineString, GeometryCollection, nested Features...), a
+Feature without geometry and a `crs` member are `invalid_request`.
+
+**Placement and tiling stay the whole source's.** A subset is placed exactly as
+a full bake of the same source would be. With a source CRS, the local frame's
+origin, its Jacobian lattice and the root transform come from the whole
+source's bounds. The octree's root cube, which keys triangles into cells, and
+the position lattice's zero origin and radius are also the whole source's. A
+subset bake therefore lines up with a later full bake with the same profile and
+options. Triangles are matched by their leaf provenance rows, and positions are
+compared in the shared tile frame under the identical root transform:
+
+- Capture maps every kept vertex to the same f32 position as the full bake.
+  `quality` and `lossless` store leaf positions as f32, so there a kept
+  triangle's decoded leaf positions are bit-identical to the full bake's.
+- `fast` and `balanced` quantize leaf positions to a power-of-two step per tree
+  depth. The step follows the largest tile at that depth, which a subset can
+  make smaller. Each decoded position is within half its own step of the shared
+  f32 position, so the two bakes agree to within the coarser of their steps
+  (at most 0.49 mm on a 10-million-triangle site).
+
+Near the cut, cells hold fewer triangles than in the full bake, so leaves there
+may split less deeply, and coarse tiles are built from the kept triangles only.
+Tile names (which count triangle ranks), tight bounding volumes and the tree
+above the subset therefore differ from the full bake's.
+
+**Report.** `tilerReport.subset`, also in `conversion.json`, states:
+
+- `region` (`bbox` or `polygon`), `coordinates` (`local` or `wgs84`) and
+  `axes` (`["x", "-z"]` or `["longitude", "latitude"]`);
+- `bounds`, the bbox or the polygons' bounding box, with `polygons` and `rings`
+  for a polygon;
+- `rule` (`centroid`), `source_triangles` and `kept_triangles`;
+- `extent`: the kept triangles' corners as `[minx, miny, maxx, maxy]` in the
+  region's coordinates, and `local_bounds`: their box in the tile frame (local
+  metres, Y up).
+
+`triangles` counts the kept triangles, and the CLI's summary line repeats the
+kept count and the extent. Without a subset the report has no `subset` field
+and the archive is unchanged.
+
+**Resources.** The selection is capture's step `capture_select`. It runs right
+after the scan, before any scratch exists. Each triangle's centroid is tested on
+the capture workers, then the vertices of kept triangles are marked; with a
+source CRS every used vertex is also mapped once, for the whole source's box.
+Every vertex therefore still meets the CRS-domain checks a full bake applies.
+The selection holds one bit per source triangle and per vertex, with ranks, and
+the polygon's edge index. It is charged in capture's resident bound
+(`diagnostics.memory.capture_subset_bytes`). Capture then decodes and stores only
+the vertices kept triangles use, and every later stage plans, admits memory and
+scratch, and reserves output for the kept triangles only. Excluded triangles
+cost no scratch.
+
+**Empty selection.** A region that keeps no triangle is `invalid_request`
+before any scratch or output exists. The message names the span of the source's
+centroids in the region's coordinates.
+
+## Weld the source
+
+Photogrammetry sources often arrive split into tiles or clusters whose shared
+boundaries are not welded: the same surface point is stored once per tile, a
+little apart. The bake keeps every open edge exactly, so such seams stay open
+and coarse levels fragment. Two opt-in options weld the source before capture:
+
+```sh
+rusty-tiles mesh-inspect -i site.glb --weld-epsilon 0.002     # preview the effect
+rusty-tiles mesh -i site.glb -o site.3tz --weld-epsilon 0.002
+rusty-tiles mesh -i site.glb -o site.3tz --weld-epsilon 0.002 --join-primitives same-material
+```
+
+Python takes `weld_epsilon=0.002` and `join_primitives="same-material"` in
+both `mesh_to_tileset` and `inspect_mesh`.
+
+This is a declared change to the source before tiling. The [exact-seam
+rule](#hierarchy-and-cracks) for the seams between output tiles is unchanged:
+the bake still locks only exactly shared edges and never matches T-junctions
+with a tolerance. Without either option the archive is byte-identical to a bake
+without them.
+
+**What is welded.** A source vertex is one primitive instance's POSITION
+element that a captured triangle uses (in a [subset bake](#bake-part-of-the-source),
+a kept triangle). Its position is the one capture decodes: after node
+transforms and any [source CRS](#source-crs) mapping, in local metres, as f32.
+Vertices no captured triangle uses take no part.
+
+- `--weld-epsilon METRES` (finite, at least 0) pairs two vertices when each
+  coordinate differs by at most ε and their distance is at most ε. At 0 it
+  pairs exact repeats only (bit-equal positions).
+- The default scope is one primitive instance: only its own vertices pair.
+  `--join-primitives same-material` widens it to every primitive instance with
+  the same glTF material index (primitives without a material form one scope),
+  so coincident boundaries between such primitives become interior edges. Given
+  alone, it welds at ε = 0.
+- **Classes.** The weld classes are the connected components of the pairs
+  (union-find), so they do not depend on the order pairs are found in, on
+  `--jobs` or on the budget. Every vertex of a class takes the position of the
+  class's representative: its lowest global vertex index (primitive instances in
+  scene order, then POSITION index). A chain of pairs can move a vertex by more
+  than ε from its representative; the report gives the true largest
+  displacement.
+- **Positions only.** Normals, tangents, UVs and colours stay each vertex's
+  own. A UV or normal seam stays a seam in attribute space while its geometry
+  closes, so no texture coordinate is averaged or taken from another vertex and
+  no texture is corrupted. Each triangle keeps its provenance:
+  `source_primitive`, `source_triangle` and the authored vertex indices. A
+  triangle whose corners land on fewer than three positions becomes degenerate,
+  as capture already defines it.
+- **Short edges collapse.** The weld pairs any two vertices of a scope within ε,
+  including the ends of a real edge shorter than ε. On a dense photogrammetry
+  mesh even 1 mm collapses some of its own short edges; each one leaves
+  degenerate triangles. Pick ε below the mesh's shortest real edges and above
+  the gaps you want closed. Check `mesh-inspect` with the same options first:
+  its `weld.collapsed_triangles`, `source.degenerate_triangles` and open edges.
+- **Placement and tiling stay the source's.** A welded vertex sits on another
+  used vertex's position, so the welded source lies inside the unwelded source's
+  box. The frame, the root cube that keys triangles into cells and the position
+  lattice are the unwelded source's.
+
+**What changes in the bake.** The bake already treats bit-equal positions as
+one point: coarse tiles weld their children's vertices by decoded position, and
+the incidence pass by leaf-canonical position. A weld at ε = 0 therefore moves
+no vertex and changes no tile; it reports the exact repeats. With ε > 0, near
+repeats land on one position, and the edges between them close. `mesh-inspect`
+with the same options shows how many: its `source.open` and `hlod_view` counts
+are of the welded source.
+
+**Honest geometric error.** The reference is the selected, original source in
+local metres, before the weld. The weld retains the original XYZ bits of
+each moved vertex, including vertices on slivers that collapse to a segment
+or point. A leaf pairs the original corners with its delivered corners. A
+coarse tile covers every original face assigned to its welded tree interval,
+either directly or through the certified child frontier. The weld displacement
+and the position lattice are included in these measurements. See
+[certified geometric error](#certified-geometric-error).
+
+**Collapse diagnostics.** Let `d` be the largest vertex displacement. A
+collapsed segment on a surviving edge, or a collapsed point on a surviving
+corner, places the whole original triangle within `d` of that face by
+barycentric interpolation. Otherwise the weld audit tests each collapsed
+corner `s` shared with a surviving face. The source triangle is within
+`d + max_j |v′_j − s|` of that face. The report records the best such bound
+per collapse and the greatest over the job. A collapsed triangle sharing no
+corner with a surviving face is counted in `isolated_collapses`, and
+`mesh` continues to refuse that topology change before publication.
+
+**Report.** `tilerReport.weld` (also in `conversion.json`, and so in the
+[run report](#run-report)) and `inspectReport.weld` state:
+
+- `epsilon_m` and `join_primitives` (`none` or `same-material`);
+- `vertices`: the source vertices the weld considered;
+- `merged_vertices`: vertices merged into another (every class member but its
+  representative), and `moved_vertices`: those whose position changed;
+- `classes` (of two or more vertices) and `largest_class`;
+- `max_displacement_m`: the true largest move;
+- `degenerate_triangles`: captured triangles with fewer than three distinct
+  corners after the weld, and of those `collapsed_triangles`, the ones the
+  weld made (a moved corner);
+- `isolated_collapses` and `collapse_bound_m`, as above;
+- `coincident_triangles`: faces sharing all three corner positions with
+  another face (either orientation), counted in groups that hold a face with a
+  moved corner;
+- `geometric_error_term_m` is zero with original-source certification.
+
+The CLI's summary for `mesh` and `mesh-inspect` repeats these on one line. A
+warning line follows when the weld collapsed, isolated or duplicated faces.
+Without the options the report has no `weld` field.
+
+**Resources.** The weld is capture's step `capture_weld`, after
+`capture_validate` and before the assembly splits the work. On the capture
+workers, every used vertex is decoded and listed in its column: its scope and
+its cell of side `max(4ε, 2⁻²⁰ m)` in y and z (at ε = 0, its exact y and z),
+and also the lower neighbour cell on each of those axes that its ε-range
+reaches (at most four records). One external sort by column and x, and one
+sweep with a window of the records within ε in x, meet every pair. The classes
+are then sorted under their representatives, and the moves by vertex. All of
+it is deterministic for every `--jobs`.
+
+- Memory: one 4-byte union-find entry per expanded source vertex, two bitmaps,
+  one external sort at a time, the sweep's window (at most 2¹⁶ records) or the
+  audit's collapsed triangles, and
+  each decoding task's move reader, charged in capture's resident bound
+  (`diagnostics.memory.capture_weld_bytes`). A source of 2³¹ or more expanded
+  vertices is `resource_limit`.
+- Scratch: the column sort (up to four 28-byte records per vertex, two run
+  generations), the vertices' positions, the class sort and the move lists, at
+  most 256 bytes per considered vertex for this weld term before file rounding.
+  Capture also reserves up to 12 bytes per considered vertex for original XYZs.
+  The sorted move list uses 16 bytes per moved vertex through the capture audit.
+  A separate 12-byte XYZ record per moved vertex stays
+  through certification. Its shared lookup uses 16 bytes per 64 expanded
+  vertices and 8 bytes per primitive offset, plus fixed overhead.
+- The sweep is linear in its records. A record at exactly the position and
+  scope of one already in the window joins it without entering it, so exact
+  repeats cost one comparison each, and ε = 0 never fills the window. A source
+  is refused as `resource_limit` if more than 2¹⁶ distinct positions lie
+  within ε of each other along one column, or if the sweep averages more than
+  1,024 comparisons per record. Use a smaller ε. The stop check runs at least
+  every 2¹⁶ comparisons.
+- The audit (`capture_weld_check`) reads the captured triangles once, or twice
+  when some collapsed, and sorts one 37-byte record per surviving face for the
+  coincident count. It holds at most 2²⁰ collapsed triangles; a weld that
+  collapses more is `resource_limit`.
+
 ## Coarse levels (HLOD)
 
 Leaves are the exact tiles. Each occupied cell above them publishes one coarse
@@ -194,8 +644,30 @@ no selector.
   T-junctions are counted, never matched with a tolerance. Adjacent faces may be
   retriangulated, but delivered border edges and border-connected components
   survive. This does not make the source watertight.
-- **Last resorts.** When ordinary simplification cannot meet the cap, the
-  [last-resort stages](#last-resort-declarations) run.
+- **P1 contraction.** When a cell's ordinary build publishes nothing, one
+  more build contracts and simplifies its children in a single pass that never
+  makes what the fold guard, the topology check or the interface check refuses
+  (link condition, orientation, source edge and face multiplicities, shared
+  points). A border vertex whose removal would need a new face on three shared
+  points is replaced by an interior vertex on the leaf lattice (a Steiner
+  vertex), which is never on the contract. A Steiner rescue is admitted only
+  when the vertex's faces form one simple fan between its two arc neighbours on
+  its own contract chord, the new point is a canonical lattice point no other
+  vertex or source border point holds, every changed face keeps a strictly
+  positive orientation (an unresolved sign refuses it), and no changed face
+  meets another face outside their common vertices (exact predicates). The Steiner vertex keeps its canonical decode,
+  and its faces are checked again on the delivered positions. Its proposal is
+  assessed like any other; a second pass adds the stage-1 seam-owner licence and
+  is declared as stage 1. P1 runs only where the ordinary build publishes
+  nothing; the ordinary build's tiles change only where the corrected chord
+  licence (exterior child segments only, which every build's contraction guard
+  uses) changes what the guard accepts.
+- **Last resorts.** When ordinary simplification and P1 cannot meet the cap,
+  the [last-resort stages](#last-resort-declarations) run. N1, the stage-1
+  seam-owner licence on the ordinary strategies, runs only where P1 did not
+  finish its own second pass: P1 skipped the cell (its workspace estimate
+  exceeds the job's charge), spent its work budget, or stopped at a first-pass
+  proposal that assessment refused.
 - **Residual omission.** A coarse tile is omitted only if the shared border
   geometry it must keep exceeds the 8,192-triangle cap on its own, or if the
   last resort cannot keep the open boundaries that touch its border. The run
@@ -270,29 +742,54 @@ rule. A declaration does not certify source-distance maxima.
 Conversion `diagnostics.hlod` reports `last_resort_tiles`,
 `last_resort_stages` (counts for stages 1, 2 and 3), `fold_faces` and
 `declared_tiles` (including stage-0 tiles, with stage and fold count).
+`last_resort_records` lists every tile a retry published, with its stage, the
+publishing build and why the primary build did not publish it (also in the
+stage manifest as `hlod.lastResortRecords`; [VALIDATION.md](VALIDATION.md)
+lists the fields). When the root competition's candidate replaces a root a
+retry built, the record names `rootCandidate` and keeps the primary build's
+reason. It is a run record; validators do not read it.
+`diagnostics.hlod.repeat_reuse` counts the exact repeats the coarse ladder
+skipped: `contractions` (a build returned an earlier build's failed border
+contraction), `replayed_calls` (`Fix2` proposal calls replayed from the
+primary build's) and `round_zero_calls` (remesh round 0 repeating the full-cap
+calls). The published output is the same as recomputing them. The counts are 0
+while the `RT_HLOD_AUDIT_DIR` sidecar records every attempt.
 
-### Geometric error: sampled, not certified
+### Certified geometric error
 
-A coarse tile's `geometricError` is `G = max(max child G, 1.05 × M)`. `M` is the
-larger of two directed distances, measured on the **decoded positions a viewer
-sees** against the captured source surface in the tile's source range: coarse
-to source and source to coarse. Sampling is deterministic and area-stratified,
-with extra controls at patch boundaries, one vertex per connected component and
-sliver triangles. Each tile takes at least 2,048 samples per direction, and each
-occupied depth at least 200,000. Scheduling is seeded by tile, so `--jobs` never
-changes the result. `G` is monotone down the tree and is the value in
-`tileset.json` and the implicit-subtree metadata.
+A coarse tile's `geometricError` bounds the **two-sided, continuous Hausdorff
+distance in local metres** between the original, pre-weld source triangles assigned to
+that tile and its decoded GLB triangles. Both directions include edges, face
+interiors, disconnected components, segments and points. The version in
+`asset.extras.rustyTiles.surfaceErrorPolicy` is
+`hlod-certified-decoded-surface-v1`.
 
-This is **not** certification. A sampled maximum is neither a Hausdorff bound
-nor a guarantee against unsampled outliers, and no universal bound is claimed.
-The 5% margin exceeds the roughly 1% maximum exceedance seen in test audits; it
-is not a covering radius.
+For up to 131,072 original faces in a tile, the bake checks the final decoded
+surface directly against the original range. Above that count it checks the
+complete decoded child frontier against the final tile and adds the largest
+child surface certificate. The cutoff bounds the size of the original-source
+search index per worker. Child accumulation can make a coarse level refine
+earlier. Each direction stops a search once actual target-face witnesses
+cover the entire panel within the current target. Connected projected faces
+can certify a retessellated planar wall without subdividing it. Folds and holes
+still require complete coverage. Certification includes border chord movement,
+relief, simplification and position encoding. Same-depth seam identity and the mixed-depth seam-gap
+rule are checked separately.
 
-Incomplete required sampling is a `resource_limit` refusal, never a zero error,
-and a non-finite measurement fails the run. `diagnostics.hlod.error_measurement`
-reports the policy version, sample counts and per-direction mean/p95/p99/max.
-`validate` checks that errors are finite, non-negative, ordered and consistent
-between explicit and implicit metadata; it does not recompute source distances.
+S2 still guides simplification, root selection and texture spacing. Its sampled
+term, the texture term and the largest published child error remain floors on
+the certified value. Certification runs after final encoding. It can raise G
+without changing the geometry, UVs, textures or selected simplification.
+Failure or cancellation during certification stops publication. The
+`hlod_certify` progress count measures completed domain triangles across both
+directions and all workers. The diagnostic `certification_cpu_by_depth`
+gives their summed CPU seconds by encoded depth where a thread clock is available.
+
+The archive validator checks certified-policy declarations and a necessary
+geometric consequence against decoded descendant leaves. With the original
+source geometry, the independent S5 oracle can also verify the continuous
+distance in both directions. See the [validation guide](VALIDATION.md) and
+the [surface error contract](architecture/hlod-s2-error.md).
 
 ### Texture-aware published G
 
@@ -492,6 +989,14 @@ profile:
 - MASK pages keep their own codec and coverage policy;
 - ID pages are exact PNG in every profile.
 
+Every leaf UASTC page, of any class or ladder step, is encoded with Basis
+Universal's fastest ETC1 hints (`cPackUASTCETC1FastestHints |
+cPackUASTCETC1DisableFlipAndIndividual`). The hints are used only when a
+viewer transcodes UASTC to ETC1, which CesiumJS does on GPUs with none of
+ASTC, BC7 or S3TC; decodes to RGBA, ASTC, BC7 and BC1/3 are the same with
+either setting. Coarse UASTC pages, and MASK pages on leaves and coarse tiles
+alike (they use the coarse codec policy), keep the full hint search.
+
 ETC1S quality uses the wrapper's 1–100 scale; effort 0 maps to native ETC1S
 compression level 0. ETC1S at effort 0 costs about three times the encode CPU of
 UASTC level 0 for smaller pages; the
@@ -625,8 +1130,8 @@ on the output filesystem beside the destination. Prefer disk-backed scratch for
 large sources, especially when the output directory is memory-backed;
 memory-backed scratch counts against the [memory budget](#memory-budget).
 
-Capture's external sorts (corner references, positioned corners, triangles,
-the cell tree's nodes and weld depths, and the corner-depth join) are planned
+Capture's external sorts (the assembly's oversize buckets and routed corners,
+the cell tree's nodes, and the corner-depth join's candidates and patches) are planned
 once against the [memory budget](#memory-budget). The fixed sort configuration,
 an 80 MiB run buffer per live sort with fan-in 64, is the floor: capture's
 worker plan and `capture_minimum_bytes` are computed with it, so a budget that
@@ -648,17 +1153,93 @@ and reported as `diagnostics.capture.sort`: `run_bytes`, `fan_in`,
 each sort's output is the stable sort of its input order for every run size,
 fan-in and writer count, so the archive does not depend on the plan.
 
+Capture assembles its rank-ordered triangles directly, without sorting
+corners or merging triangles:
+
+- **Decode.** Each expanded primitive's used vertices are decoded once (world
+  position, source frame, the run's attributes) on the capture workers, each
+  task with a copy of the resolved frame. Only a native (GDAL/PROJ) source CRS
+  transform decodes on the calling thread, which holds it. They stay in memory while the
+  vertex allowance lasts: what the memory budget leaves beside capture's
+  declared bound, reported as `diagnostics.capture.assembly.plan`
+  (`vertex_allowance_bytes`). Otherwise
+  they are written to scratch, block-compressed, and read back through small
+  per-worker block caches.
+- **Locality route.** A spilled primitive whose triangle chunks mostly touch
+  more vertex blocks than a cache holds (fewer than 31 in 32 fit) has its
+  corners sorted by vertex instead. They are joined with the decoded vertices
+  in order and sorted back to triangle order, two external sorts as before but
+  for that primitive only. `routed_primitives` counts them.
+- **Buckets.** Triangle keys are counted per depth-7 Morton prefix. Contiguous
+  prefix ranges form buckets sized for the sort window, and triangles are
+  built in parallel and staged per bucket as compressed runs. A prefix cell
+  holding more than one bucket's worth is sorted externally.
+- **Sort.** Buckets are sorted in key order, a window of them on the workers,
+  and written in order as the retained sequence.
+
+The records and their order are those of the corner sorts and triangle merge
+the assembly replaces. Its working sets (vertex allowance, caches, tables,
+gathering buffers, sort window and one external sort) are charged in
+capture's resident bound and reported as
+`diagnostics.memory.capture_assembly_bytes`. Its
+scratch is declared at raw size: every primitive spilled and routed, every
+record staged.
+
+Capture's preflight scan and payload validation run on the capture workers. The
+scan reads each primitive's index buffer into a bitmap of the vertices its
+triangles use, then reads the used positions once each in file order, instead
+of once per corner in index order. Validation checks every accessor and
+primitive in ranges. When any check fails, the sequential pass runs instead,
+so an invalid source reports the same first error as before.
+
+Capture's cell tree is built as parallel subtrees: the largest octree cells of
+the sorted triangles are split (found by binary search on their Morton keys)
+until there are about 16 per worker, each cell's subtree is built on a worker,
+and the levels above them are closed in rank order. The nodes are those of one
+pass over the triangles, so the archive does not depend on the worker count.
+Workers stop at the run's stop request between units of 4,096 triangles.
+
+Each corner's depth (the least leaf depth over every corner at its exact
+position, which coarse levels use to keep shared vertices welded) is joined
+over the leaves without sorting every corner. A leaf's box holds all its
+corners; each leaf also records which of the 16 x 16 x 16 cells of its box hold
+one of its corners. A corner whose position lies in no other leaf's box, or
+only in cells another leaf leaves empty, is welded only inside its own leaf
+and keeps its leaf's depth. Only the remaining corners are sorted by position
+to find each position's least depth. Both passes over the leaves run on the capture workers, which stop
+at the run's stop request before each leaf. The depths are those of the full
+join, so the archive does not change.
+
+The coarse stage's incidence pass reuses those masks, kept from capture with
+each leaf's least corner depth (513 bytes per leaf, charged in the stage's fixed
+memory). Its items (the canonical points and edges of each leaf's triangles)
+are generated by chunks of leaves on `diagnostics.memory.hlod.incidence_jobs`
+workers: as many as the capture workers that the stage's memory holds beside
+the floor's sorts, at least one. A canonical point lies within half the lattice
+step of its leaf's least depth of its source corner (the snapped value is exact
+in f32), so only an item that another leaf's box, grown by that reach, and occupied mask
+cells can hold is sorted, with every edge that has one face in its leaf. Every
+other item belongs to its own leaf alone and is counted where it is made. The
+rows, open-edge endpoints and counts are those of sorting every item, so the
+archive does not change. Workers stop at the run's stop request before each
+leaf; when a chunk fails, the first failing leaf in tree order is reported.
+
 The coarse stage's incidence pass (`hlod_incidence`) plans its item and
 open-edge endpoint sorts the same way inside the coarse stage's admission,
 before the walk admits any parent job: runs grow toward one pass at the
 floor's fan-in, at which no staged scratch declaration exceeds the floor's, and
 run writers are added as the stage's memory admits. The row sort, whose stream the walk
-reads later, keeps the floor. The planned pass must fit the stage's memory
+reads later, keeps the floor. The item workers are fixed first, the sorts then
+planned with them. The planned pass must fit the stage's memory
 after its fixed terms; its resident need is reported as
 `diagnostics.memory.hlod.incidence_bytes` and the plan as
 `diagnostics.memory.hlod.incidence_sort` (whose `max_runs` assumes the worst
 case of six items per triangle). The coarse stage's minimum is computed with the
-floor.
+floor and one item worker. Its item wave is charged at the worst case: per
+worker one leaf's work and two chunks of kept items (six per triangle of 16,384
+plus one leaf, with vector growth) and two stream buffers, about 31 MB at the
+default leaf size and buffer, and the holders' boxes and grid (about 380 bytes
+per leaf).
 
 Before starting, the run checks for enough free scratch for its largest
 declared stage working set: files kept from earlier stages, the HLOD incidence
@@ -668,6 +1249,36 @@ space. A 10% margin and per-file rounding are added. At scale this comes to
 about 0.5 KB per source triangle with every vertex attribute present, or about
 0.3 KB with positions and one texture coordinate set; capture stores only the
 attributes some selected primitive carries.
+
+The triangle and corner-depth streams capture keeps for the later stages are
+stored as LZ4 blocks of at most 64 KiB (a quarter of the stream buffer when that
+is smaller); a block that does not shrink is stored as is. The records read back
+are the same bytes, so the archive does not depend on it. Declared and preflight
+scratch bounds count these files at their uncompressed size; measured scratch
+(`scratch_stage_peak_bytes`, `run_scratch_peak_bytes`) is what is on disk. Their
+block indexes (9 bytes per block) are charged in capture's resident bound.
+
+The HLOD source index stores the captured f32 positions losslessly in blocks
+of 256 triangles. With `n` source triangles and `k = ceil(n/256)` nonempty
+blocks, it reserves `77n + 72(2k − 1)` bytes, about 77.6 bytes per triangle
+at scale. The bake reports the two files' combined peak length in
+`diagnostics.hlod.source_index_stored_bytes` and their raw upper bound in
+`diagnostics.hlod.scratch_components["s2-source-index"]`.
+
+The shared borders (`s1b-shared-borders`) are admitted twice under one name. Their
+graph is built under a bound from the incidence pass's counts. Once it is built,
+that admission is released, and the borders are admitted once more, with free
+space preflighted, for everything they hold through the walk:
+- the graph as built;
+- every depth's vertex maps (24 bytes per vertex per depth);
+- the segments and owner references each depth may emit (at most one segment per
+  edge or vertex that spans more than one cell at that depth, and its owner run
+  in references);
+- one level's temporaries, the largest over the levels.
+
+A bake without the space is refused there, before the first level, never during
+the walk. `scratch_components["s1b-shared-borders"]` reports the larger of the
+two admissions.
 
 The run also reserves output-side space for leaf staging, archive staging and a
 replaced destination: three copies of 119 bytes per triangle (a conservative
@@ -698,6 +1309,10 @@ them.
 Source textures are decoded once per stage for each image and sampling class
 (HLOD: colour or data chain; leaves: the source image and, when a density step
 needs one, a reduced chain per class), never again under cache pressure.
+The coarse stage decodes one source image at a time. Its decode working set (about
+16 bytes per texel of the largest image, its encoded bytes and the chain built from
+it) is reserved once for the stage as `diagnostics.memory.hlod.decode_bytes`, not in
+every parent job, so coarse jobs run side by side within smaller budgets.
 Decoded images stay resident while they fit the stage's image cache. The rest
 spill to scratch as 128×128 texel tiles, one file per chain, read through a
 bounded tile cache with a bounded set of open files. The spill is admitted
@@ -708,6 +1323,48 @@ leaf source decodes. On memory-backed scratch, spilled tiles are charged to
 memory only when the planned cache cannot hold every source image. Leaf density
 chains never spill there; they are rebuilt from the decoded source when they do
 not fit.
+
+Leaf pages read their texels from a crop store cut before any leaf is built.
+The leaf stage plans every leaf's crops at its planned density, then decodes
+each source image once and cuts all of its crops (from a reduced chain for
+density-stepped leaves) into one scratch file, each crop a vertical-predictor
+residual in an LZ4 block. Images are cut in parallel in fixed batches within the
+page gate's memory, so neither the output nor the memory peak depends on the
+worker count. The store's index (160 bytes per crop) is held through delivery
+and its raw crop bytes are admitted as scratch beside the image store's bound. A
+page the store covers takes no source decode in its memory lease. The store is
+optional: when its index does not fit beside one leaf job, its largest image cut
+does not fit the page gate, scratch is memory-backed, its raw crops do not fit
+the scratch volume, or the run has no memory figure (no budget and no detected
+headroom), the stage runs without it and pages decode their sources. While a
+batch of images is cut, `leaf_crop_store` keeps its 250 ms heartbeat, and an
+image that fails stops the rest of its batch.
+MASK base colour pages and pages that repeat whole source periods always read
+decoded sources. Archives are byte-identical with and without the store.
+`leaf_delivery.crop_store` reports `crops`, `images`, `raw_bytes`,
+`written_bytes`, `memory_bytes`, `memory_peak_bytes`, `index_bytes`,
+`plan_seconds`, `build_seconds` and `misses` (pages the store could not serve,
+which then decode their sources); it is `null` when the stage ran without it.
+
+The same pass cuts the coarse stage's sparse source chains. A coarse texel
+samples the nearest point of a source triangle, whose texture coordinates lie
+inside that triangle's UV hull. For every source triangle and every texture its
+material binds, the plan marks the 64×64 tiles of the coarse chain (the source
+and each halving down to 1×1) that a bilinear sample anywhere in the hull can
+read at any level, under the binding's wrap modes and with a rounding margin.
+The pass builds each image's chain once from its decode and writes the marked
+tiles to a second scratch log in the same block format, which lives until the
+coarse stage ends. The coarse stage then samples those tiles with its usual
+arithmetic, through one small tile cache per job, and decodes no source image:
+its plan reserves the chains' index (`diagnostics.memory.hlod.sparse_index_bytes`)
+instead of a decode slot and an image cache, so its minimum budget falls and
+more coarse jobs fit. A sample outside the marked tiles is an internal error,
+not a fallback. The sparse chains are optional with the store: they are not cut
+when the coarse stage's plan with them is refused (it then plans as before).
+`leaf_delivery.crop_store` adds `coarse_chains`, `coarse_tiles` (stored),
+`coarse_chain_tiles` (all tiles of those chains), `coarse_raw_bytes`,
+`coarse_written_bytes` and `coarse_index_bytes`; `diagnostics.hlod` reports
+`sparse_tile_decodes`.
 
 A free-space check is not a reservation against other writers. Working files
 are removed on success and failure. A cleanup failure reports the paths
@@ -880,6 +1537,7 @@ import rusty_tiles
 result = rusty_tiles.mesh_to_tileset(
     Path("local.glb"), Path("placed.3tz"),
     profile="balanced", jobs=None, scratch_dir=None, memory_budget_bytes=None,
+    report_path=None,
     anchor=(153.02, -27.47, 25.0),
     orientation_xyzw=(0.0, 0.0, 0.0, 1.0),
     scene_offset=(10.0, 2.0, -5.0),
@@ -893,19 +1551,29 @@ print(result.report["triangles"], result.diagnostics["leaf_delivery"]["jobs"])
 ```
 
 `mesh_to_tileset(input, output, *, profile="balanced", jobs=None,
-scratch_dir=None, memory_budget_bytes=None, anchor=None, orientation_xyzw=None,
+scratch_dir=None, memory_budget_bytes=None, report_path=None, anchor=None,
+orientation_xyzw=None,
 scene_offset=None, source_crs=None, source_axes=None, source_offset=None,
-source_offset_file=None, height_offset=None, force=False, callback=None)`
-accepts `str` or `os.PathLike` paths. The keywords follow the CLI's rules:
+source_offset_file=None, height_offset=None, bbox=None, polygon=None,
+weld_epsilon=None, join_primitives=None, force=False, callback=None)` accepts `str` or `os.PathLike` paths. The keywords
+follow the CLI's rules:
 
 - `source_crs=None` or `"local"` keeps local input. `source_axes` is `"y-up"`
   (the default with a CRS) or `"xyz"`, `source_offset` a two- or three-number
   sequence, `source_offset_file` a path, and `height_offset` defaults to 0.
+- `bbox=(minx, miny, maxx, maxy)` or `polygon=path` bakes
+  [part of the source](#bake-part-of-the-source); the callback receives the
+  `capture_select` step like any other.
+- `weld_epsilon` (metres) and `join_primitives="same-material"`
+  [weld the source](#weld-the-source) as `--weld-epsilon` and
+  `--join-primitives` do; `report["weld"]` states the result and the callback
+  receives the `capture_weld` step. `inspect_mesh` takes them too.
 - `jobs=None` means auto; a positive integer is a maximum. Booleans and
   non-integer worker counts are rejected.
 - `memory_budget_bytes` is the [memory budget](#memory-budget): a positive
   `int` (not a `bool`), checked before any file is read; `None` takes the
   default.
+- `report_path` writes the [run report](#run-report), as `--report-path` does.
 - Unknown keywords raise `TypeError`.
 
 Python calls the same core operation without launching the CLI or an encoder,
@@ -983,17 +1651,20 @@ The report includes:
   axes, source offset, height offset, `portable` or `native` operation, the
   chosen origin, `jacobian_lattice_cells` and `jacobian_exact_cells`) and
   reports its ENU frame as a `wgs84` placement at that origin;
+- `subset` for a [subset bake](#bake-part-of-the-source): the region, the kept
+  and source triangle counts and the kept extent;
 - `root_transform`: null for local output, whose root has no transform, or the
   exact column-major matrix for placed output.
 
 Runtime diagnostics stay **outside the archive**, so worker and scratch choices
 do not change its bytes. They include `requested_jobs`, `capture`,
 `leaf_delivery`, `archive_bytes`, `peak_held_records`, `phase_seconds`, the
-`memory` budget and stage plan ([memory budget](#memory-budget)), and the coarse
+`memory` budget and stage plan ([memory budget](#memory-budget)), the coarse
 stage's `hlod` facts (tiles, workers, CPU seconds, lease peak,
-`error_measurement` and the per-depth appearance summary: page texels, covered
-texels, cap hits and the requested and achieved spacing). `memory` and `hlod`
-are present in every result.
+`error_measurement`, the per-depth appearance summary: page texels, covered
+texels, cap hits and the requested and achieved spacing, and
+`walk_utilisation`, below) and, when asked for, `stage_timing`. `memory` and
+`hlod` are present in every result.
 
 - `phase_seconds` holds the wall seconds of `capture`, `leaf_build`,
   `hlod_incidence`, `hlod_geometry` and `archive`. `phase_cpu_seconds` holds
@@ -1004,25 +1675,54 @@ are present in every result.
   to them. It holds summed per-thread seconds, CPU seconds and calls per step
   (`source_reconstruct`, `source_decode`, `density_mips`, `basis_encode`,
   `codec_verify`, `glb_write`, `member_write`, ...) and texel counters.
+- `stage_timing` is the same document over the whole run (schema
+  `rusty_tiles_stage_timing_v1`), the coarse stage's `lod` step included. It is
+  present only when asked for: the CLI asks when
+  `RUSTY_TILES_STAGE_TIMING=<file>` is set, and after a successful run writes it
+  to that file, with the leaf stage's share under `run.leafStageTiming`
+  (Rust: `TilerRequest::with_stage_timing`).
+- `hlod.walk_utilisation` measures how the coarse walk used its workers, by
+  cell depth: `workers`, `wall_seconds` (the walk's worker pool), and summed
+  `busy_worker_seconds` (cells building) and `idle_worker_seconds`
+  (`workers × wall_seconds` minus busy). `by_depth` has one entry per depth
+  that built a cell, root first: `cells`, `busy_worker_seconds`,
+  `wall_seconds` (first of its cells starting to the last finishing),
+  `slowest_cell_seconds` and `slowest_cell_share` (the slowest cell's share of
+  that wall time), and `idle_worker_seconds`. A parent starts as soon as its
+  children are built, so depths overlap; idle time is charged to the coarsest
+  depth building at that moment (the work the idle workers wait behind), and
+  idle time with no cell building, the walk's own serial work, is
+  `serial_idle_worker_seconds`. The depths' idle times and the serial idle
+  time add up to `idle_worker_seconds`.
 - Stage objects describe worker admission and owned memory and scratch. Their
   accounting is declared, not a measured RSS guarantee. Absolute scratch paths
   and resource observations are diagnostics, not profile constants.
 
 `--progress json` writes NDJSON work events to stderr with named phases and
-nullable totals: `conversion`, `capture`, then inside the leaf stage
-`leaf_build` (leaves), `hlod_incidence` and `hlod_geometry` (coarse stage),
-then `leaf_payloads`, `archive` and `ready_to_publish`. Each finished phase also
+their totals: `conversion`, `capture` (the source's triangles), then inside the
+leaf stage `leaf_build` (leaves), `hlod_incidence` (retained triangles) and
+`hlod_geometry` (coarse cells) for the coarse stage, then `leaf_payloads`,
+`archive` (leaf and coarse tiles) and `ready_to_publish`. Every mesh phase
+reports a total; a stage that only knows its end reports `0`, then its total. Each finished phase also
 logs its wall seconds and the run's elapsed seconds as a `log` event. Inside
 `capture`, each step is a phase whose total is known when it starts:
-`capture_scan` (triangles), `capture_validate` (one unit), `capture_corners`
-(corner references read and sorted), `capture_positions` (corners joined with
-their attributes), `capture_triangles` (triangles reassembled),
-`capture_sequence` (triangles written in rank order), `capture_images` (two
-units per image), `capture_tree` (triangles), `capture_corner_depths` (seven
-units per triangle) and `capture_leaf_plans` (leaves). Each step reports `0`
+`capture_scan` (triangles), for a [subset](#bake-part-of-the-source)
+`capture_select` (triangles tested, then every POSITION element of each
+expanded primitive marked or mapped), `capture_validate` (one unit), for a
+[weld](#weld-the-source) `capture_weld` (every POSITION element of each expanded
+primitive decoded and listed, then every used vertex swept) and, after
+`capture_sequence`, `capture_weld_check` (two units per captured triangle),
+`capture_corners`
+(vertices decoded, counting every POSITION element of each expanded
+primitive), `capture_positions` (triangles keyed for the bucket histogram),
+`capture_triangles` (triangles built and staged in their buckets),
+`capture_sequence` (triangles sorted and written in rank order), `capture_images` (two
+units per image), `capture_tree` (triangles), `capture_corner_depths` (three
+units per triangle: leaf masks, candidates, depths written) and `capture_leaf_plans` (leaves). Each step reports `0`
 and its total; all but `capture_validate`, `capture_tree` and
 `capture_leaf_plans` also report counts between. An intermediate sort merge pass, which a budget
-too small for one pass needs, is reported as `capture_merge` (records
+too small for one pass needs (or a bucket over the in-memory sort size), is
+reported as `capture_merge` (records
 rewritten, counted on across passes so the count never goes back), after which
 the interrupted step resumes. While capture runs, the
 current step's latest count is repeated at least every 250 ms. These events are
@@ -1030,12 +1730,89 @@ capture's cancellation checkpoints, also for a Python callback, so a cancel or
 callback exception lands within about a second, as in the leaf stage. The coarse
 stage's `hlod_incidence` phase reports its steps the same way:
 `hlod_incidence_items` (triangles read into their leaves' interface items),
-`hlod_incidence_reduce` (items merged into shared rows) and `hlod_incidence_ends`
+`hlod_incidence_reduce` (the sorted items, merged into shared rows) and `hlod_incidence_ends`
 (two units per open-edge endpoint), with `hlod_incidence_merge` for an
-intermediate merge pass. Required
+intermediate merge pass. The shared-border contracts built next report
+`hlod_borders_rows` (incidence rows stored and sorted), `hlod_borders_graph`
+(the sorted rows reduced to the border graph), `hlod_borders_faces` (retained
+triangles read for face retention), `hlod_borders_levels` (one unit per tree
+depth) and `hlod_borders_publish` (tree nodes), with `hlod_borders_merge` for an
+intermediate merge pass of the row sort. Before `leaf_build`, a run with source images on
+disk-backed scratch reports `leaf_crop_plan` (leaves re-projected for their
+crops) and, when it builds the crop store, `leaf_crop_store` (source images
+cut), the same way. Required
 events finish before publication; a successful result means the archive is
 installed. A cleanup problem after installation is still success, with cleanup
 diagnostics.
+
+### Run report
+
+`--report-path FILE` (Python `report_path=`) writes a JSON summary of the run
+to `FILE` while it runs. Long runs can be followed without waiting for the
+`--json` result, and a stopped run still leaves a valid report of the stages
+that finished. The report is never part of the archive, and the archive is
+byte-identical with or without it. No report is written unless asked for.
+
+The file is first written once the request is accepted, before the source is
+read; a path that cannot be written (a missing directory, say) refuses the run
+as `io`, and one naming the source, the output or a directory as
+`invalid_request`. It is then rewritten after every stage. Each write replaces
+the whole file atomically: a synced temporary file beside it
+(`.rusty-tiles-report-*.tmp`) is renamed over it, and on Unix the directory is
+synced. A reader sees a complete document at any moment. A process killed
+outright, or a power loss, in the middle of a write can leave that temporary
+file behind; it is safe to delete. A replaced report keeps its permission bits;
+a new one gets the usual mode for new files (on Unix, 0666 less the umask).
+
+While another program holds the report open without allowing it to be
+replaced (common on Windows: editors, file previews, virus scanners), the
+rename is retried for about 0.4 s. If it is still refused, the report is
+**stale**: it still holds the previous document. Every such write, the first
+one included, is reported as a `warning` event (`code` `run_report`) saying the
+report is stale, and the run goes on; the next stage tries again. A report
+that cannot be written at all (an unwritable directory) still refuses the run
+before the source is read. If the final `failed` document cannot be written,
+the run's error carries that as a secondary diagnostic, which the CLI also
+prints on stderr, so a failed run is not left looking `running` unnoticed.
+
+Version 1 of the document holds:
+
+| Field | Meaning |
+| --- | --- |
+| `schema` | `rusty_tiles_mesh_run_report` |
+| `schema_version` | `1`. Fields may be added within a version; a field that changes meaning or is removed changes it. |
+| `status` | `running`, then `succeeded` or `failed` |
+| `input`, `output` | The source as given and the resolved output path |
+| `elapsed_seconds` | Run seconds when this document was written |
+| `stages` | One entry per finished stage, in order: `stage` (`capture`, `leaf_build`, `hlod_incidence`, `hlod_geometry`, `archive`; the coarse stages are absent when the tree has no coarse cells), `wall_seconds`, `cpu_seconds` (process CPU since the previous stage, all workers; null where unavailable), `run_elapsed_seconds` and `facts` |
+| `error` | With `failed`: `kind` (the error codes below, `cancelled` for an interrupt) and `message` |
+| `tilerReport`, `diagnostics` | With `succeeded`: the `--json` result's `tilerReport` and `diagnostics`, under the same keys |
+
+Each stage's `facts`:
+
+- `capture`: `triangles`, `jobs`, `scratch_need_bytes`,
+  `scratch_logical_need_bytes`, `scratch_logical_peak_bytes`,
+  `scratch_stage_peak_bytes` (by capture stage) and `scratch_memory_backed`;
+- `leaf_build`: `leaves`, `triangles`, `glb_bytes`, `jobs`,
+  `image_scratch_peak_bytes` and `image_scratch_bound_bytes`,
+  `page_gate_peak_bytes`, `cache_peak_resident_bytes` and `timing` (as
+  `leaf_delivery.timing`);
+- `hlod_incidence`: `triangles`, `items`, `rows`, `scratch_peak_bytes`,
+  `scratch_bound_bytes` and `scratch` (its declared phases);
+- `hlod_geometry`: `tiles`, `jobs`, `omitted_proxies`, `omitted_by_depth`,
+  `last_resort_tiles`, `last_resort_stages` (stage 1: P1's second pass or N1;
+  2: N2; 3: N3), `last_resort_records` (as in the diagnostics: every tile a
+  retry published), `fold_faces`,
+  `scratch_peak_bytes` and `scratch_bound_bytes` (the coarse stage's),
+  `lease_peak_bytes` and `walk_utilisation` (as in the diagnostics);
+- `archive`: `tiles`, `archive_bytes`, `peak_held_records`,
+  `run_scratch_peak_bytes` and `run_scratch_bound_bytes`.
+
+`succeeded` is written as the archive is handed to installation; if
+installation then fails, the report is rewritten as `failed`. A run stopped
+with SIGINT or SIGTERM is cancelled and ends as `failed` with `kind`
+`cancelled`; a process killed outright keeps its last stage's document, with
+`status` `running` (and possibly a leftover temporary file, above).
 
 | Core failure | CLI exit / JSON code | Python exception |
 | --- | --- | --- |

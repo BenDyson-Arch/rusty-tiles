@@ -3,35 +3,51 @@
 //! leaves, `hlod` builds the 0.4 octree HLOD coarse tiles inside the H8 producer while the
 //! capture is live, and H16 (`delivery`) publishes their hierarchy as a `.3tz`.
 
+mod assembly;
 mod attributes;
 mod batching;
 mod capture;
 mod capture_sort;
 mod config;
+mod corners;
 mod delivery;
 mod full;
-#[allow(dead_code)] // HLOD item cleanup deferred to its concurrent owner; see cleanup evidence.
+#[expect(
+    dead_code,
+    reason = "HLOD item cleanup deferred to its concurrent owner; see cleanup evidence"
+)]
 mod hlod;
 mod image_tiles;
 mod images;
 mod input;
+mod inspect;
 mod leaves;
 mod mask_pack;
 mod phases;
 mod pipeline;
 mod records;
 mod resources;
+mod run_report;
 mod source_crs;
+mod subset;
+mod tasks;
 mod tree;
+mod weld;
 /// The validator plans its stores with the same budget, job and headroom rules (#342).
 pub(crate) use config::{available_memory, plan_jobs, Jobs};
-pub use hlod::{DeclaredTile, HlodDiagnostics, HlodMemoryPlan};
+pub use hlod::{DeclaredTile, HlodDiagnostics, HlodMemoryPlan, RepeatReuse};
+pub use inspect::{
+    inspect_mesh, InspectDiagnostics, InspectReport, InspectRequest, InspectResult,
+    DEFAULT_MIN_FEATURE_LENGTH,
+};
 pub use pipeline::{
     mesh_to_tileset, MemoryDiagnostics, StorageDiagnostics, TilerDiagnostics, TilerJobs,
     TilerProfile, TilerReport, TilerRequest, TilerResult,
 };
 pub use resources::{parse_memory_budget, BudgetSource, MemoryBudget};
 pub use source_crs::{MeshSourceCrs, MeshSourceCrsReport};
+pub use subset::{MeshSubset, MeshSubsetReport};
+pub use weld::{MeshWeld, MeshWeldReport};
 
 use crate::{spill::Scratch, JobError, JobErrorKind, JobFailure};
 use config::{JobsPlan, MemoryBound, ScratchNeed, TreeConfig, MEMBERS_BESIDES_TILES};
@@ -41,7 +57,13 @@ use serde::Serialize;
 use std::path::Path;
 use tree::TreeOutput;
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct CaptureReport {
     pub source_bytes: u64,
@@ -59,7 +81,13 @@ pub(crate) struct CaptureReport {
     pub scratch_memory_backed: bool,
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 pub(crate) struct CapturedTree {
     // Spill handles drop before the directory, including on a diagnostic consumer failure.
     pub tree: TreeOutput,
@@ -68,7 +96,13 @@ pub(crate) struct CapturedTree {
 }
 
 impl CapturedTree {
-    #[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+        )
+    )]
     pub(crate) fn close(self) -> Result<(), JobError> {
         let Self { tree, scratch, .. } = self;
         drop(tree);
@@ -85,7 +119,13 @@ fn failure(error: JobError) -> JobFailure {
     }
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 fn exhausted(message: &'static str) -> JobError {
     JobError::new(JobErrorKind::ResourceLimit, message)
 }
@@ -101,17 +141,23 @@ fn member_gate(tiles: u64, ceiling: u64) -> Result<(), JobError> {
     Ok(())
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 pub(crate) fn build(
     input: &Path,
     config: &TreeConfig,
     check: &mut dyn FnMut() -> Result<(), JobError>,
 ) -> Result<CapturedTree, JobFailure> {
     config.validate().map_err(failure)?;
-    if config.source_crs.is_some() {
+    if config.source_crs.is_some() || config.subset.is_some() || config.weld.is_some() {
         return Err(failure(JobError::new(
             JobErrorKind::InvalidRequest,
-            "the H1 diagnostic build captures local sources only",
+            "the H1 diagnostic build captures whole, unwelded local sources only",
         )));
     }
     check().map_err(failure)?;

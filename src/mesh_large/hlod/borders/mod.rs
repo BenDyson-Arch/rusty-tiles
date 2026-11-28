@@ -5,6 +5,10 @@
 mod curve;
 mod disk;
 mod graph;
+mod split;
+#[cfg(test)]
+use split::Refused;
+pub(crate) use split::{Overlay, Site, Unordered};
 pub(super) fn memory_need(sorter: SortConfig) -> u64 {
     sorter.memory_bound::<InterfaceRow>()
         + sorter.memory_bound::<disk::Words<7>>()
@@ -16,6 +20,23 @@ pub(super) fn memory_need(sorter: SortConfig) -> u64 {
         + 2 * contract_workspace_bytes(6 * super::TRIANGLE_CAP as u64)
 }
 
+/// One list head of [`Borders::listed_items`]: next unread reference, node, items left.
+type ListHead = (u64, u64, u64);
+
+/// Resident bound of [`Borders::listed_items`] over a tree of `nodes` nodes: its sort and
+/// stream, and one list head per node (reserved exactly, held until the lists drain).
+pub(super) fn listed_items_memory(sorter: SortConfig, nodes: u64) -> u64 {
+    sorter
+        .memory_bound::<disk::Words<4>>()
+        .saturating_add(nodes.saturating_mul(std::mem::size_of::<ListHead>() as u64))
+}
+
+/// Scratch bound of [`Borders::listed_items`] for `items` linked items.
+pub(super) fn listed_items_scratch(items: u64, sorter: SortConfig) -> Option<u64> {
+    let sort = config::sort_spill::<disk::Words<4>>(items, sorter)?;
+    sort.finish_peak.checked_add(sort.stream_slack)
+}
+
 pub(super) const WALK_CACHE_BYTES: u64 = 8 * disk::CACHE_BYTES;
 
 use self::{
@@ -25,51 +46,131 @@ use self::{
 };
 use super::{
     interfaces::{InterfaceRow, Key},
-    scratch::ComponentLease,
+    scratch::{ComponentLease, ScratchLedger},
     store::TileKey,
 };
 use crate::{
-    mesh_large::{config, records::NodeRecord},
-    spill::{Scratch, Sequence, SortConfig},
+    mesh_large::{
+        config,
+        phases::{Step, StepProgress},
+        records::NodeRecord,
+    },
+    spill::{ExternalSorter, Scratch, Sequence, SortConfig, SortedStream},
     JobError,
 };
 use std::collections::BTreeMap;
 
-/// Persistent bound for graph, ownership, source arcs, level correspondence and contracts.
-/// Counts are source interface counts, not an assumed manifold/valence bound. The source
-/// item sort is a separate transient peak. Height is bounded by the admitted tree (<=32).
-pub(super) fn scratch_need(
-    rows: u64,
-    vertices: u64,
-    edges: u64,
-    nodes: u64,
-    leaves: u64,
-    height: u32,
-    sorter: SortConfig,
-) -> Option<u64> {
-    let h = u64::from(height) + 1;
-    let persistent = rows
-        .checked_mul(8 + 36)?
-        .checked_add(vertices.checked_mul(64)?)?
-        .checked_add(edges.checked_mul(56 + 40)?)?
-        .checked_add(nodes.checked_mul(64)?)?
-        .checked_add(leaves.checked_mul(264)?)?
-        .checked_add(
-            h.checked_mul(
-                vertices
-                    .checked_mul(104)?
-                    .checked_add(edges.checked_mul(96)?)?
-                    .checked_add(rows.checked_mul(16)?)?,
-            )?,
-        )?;
+fn resource(message: &str) -> JobError {
+    JobError::new(crate::JobErrorKind::ResourceLimit, message)
+}
+
+/// Bytes per record of each store: `Disk<N>` words (8 bytes each) and the leaf rows.
+const VERTEX: u64 = 64;
+/// An edge, its finer relief (2 words) and its level relief (3 words).
+const EDGE: u64 = 56 + 16 + 24;
+const OWNER: u64 = 8;
+const NODE: u64 = 64;
+const LEAF: u64 = 264;
+const LEAF_ROW: u64 = 36;
+const MAP: u64 = 24;
+const SEGMENT: u64 = 96;
+const REF: u64 = 16;
+
+/// Counts the borders' scratch is declared from: the incidence pass's rows, shared points and
+/// shared segments, and the frozen tree's nodes, leaves and deepest depth.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct ScratchCounts {
+    pub rows: u64,
+    pub points: u64,
+    pub segments: u64,
+    pub nodes: u64,
+    pub leaves: u64,
+    pub height: u32,
+}
+
+/// The graph's persistent stores and the relief state ([`Borders::bytes`] before any level).
+fn graph_bytes(rows: u64, vertices: u64, edges: u64, nodes: u64, leaves: u64) -> Option<u64> {
+    rows.checked_mul(LEAF_ROW + OWNER)?
+        .checked_add(vertices.checked_mul(VERTEX)?)?
+        .checked_add(edges.checked_mul(EDGE)?)?
+        .checked_add(nodes.checked_mul(NODE)?)?
+        .checked_add(leaves.checked_mul(LEAF)?)
+}
+
+/// Before the graph exists: its stores from the incidence counts, the row sort through its
+/// stream and the build's transients (edge keys and adjacency).
+fn build_need(counts: ScratchCounts, sorter: SortConfig) -> Option<u64> {
+    let ScratchCounts {
+        rows,
+        points: vertices,
+        segments: edges,
+        nodes,
+        leaves,
+        ..
+    } = counts;
     let sort = config::sort_spill::<disk::Words<7>>(rows, sorter)?;
-    persistent
+    graph_bytes(rows, vertices, edges, nodes, leaves)?
         .checked_add(sort.finish_peak)?
         .checked_add(sort.stream_slack)?
         .checked_add(edges.checked_mul(72 + 8 + 96)?)?
         .checked_add(nodes.checked_mul(8)?)?
-        .checked_add(vertices.checked_mul(24)?)
-        .and_then(|v| v.checked_add(1 << 20))
+        .checked_add(vertices.checked_mul(24)?)?
+        .checked_add(1 << 20)
+}
+
+/// The level stage beside the graph: every depth's vertex maps, the segments and references
+/// all levels may emit ([`graph::LevelBounds`]), and one level's temporaries, the largest
+/// over levels (live edges and vertices, point contacts and the ordered arc, at most two
+/// entries per external edge and two per chain); they are released after each level.
+fn levels_bytes(
+    vertices: u64,
+    edges: u64,
+    nodes: u64,
+    depths: u64,
+    bounds: graph::LevelBounds,
+) -> Option<u64> {
+    let temporaries = edges
+        .checked_mul(8)?
+        .checked_add(vertices.checked_mul(24)?)?
+        .checked_add(nodes.checked_mul(8)?)?
+        .checked_add(bounds.active.checked_mul(4 * 24)?)?;
+    vertices
+        .checked_mul(depths)?
+        .checked_mul(MAP)?
+        .checked_add(bounds.segments.checked_mul(SEGMENT)?)?
+        .checked_add(bounds.refs.checked_mul(REF)?)?
+        .checked_add(temporaries)
+}
+
+/// Worst case of the borders' two admissions ([`Borders::build`]), for plans made before the
+/// incidence pass and the graph exist (memory-backed scratch, `mesh-inspect`): the build, or
+/// the graph with every edge and vertex external at every depth and every row referenced
+/// at every depth.
+pub(super) fn scratch_need(counts: ScratchCounts, sorter: SortConfig) -> Option<u64> {
+    let depths = u64::from(counts.height) + 1;
+    let worst = graph::LevelBounds {
+        segments: counts
+            .points
+            .checked_add(counts.segments)?
+            .checked_mul(depths)?,
+        refs: counts.rows.checked_mul(depths)?,
+        active: counts.segments,
+    };
+    let levels = graph_bytes(
+        counts.rows,
+        counts.points,
+        counts.segments,
+        counts.nodes,
+        counts.leaves,
+    )?
+    .checked_add(levels_bytes(
+        counts.points,
+        counts.segments,
+        counts.nodes,
+        depths,
+        worst,
+    )?)?;
+    Some(build_need(counts, sorter)?.max(levels))
 }
 
 #[derive(Clone, Debug, Default, serde::Serialize)]
@@ -153,6 +254,9 @@ pub(super) struct Borders {
     edge_finer: Disk<2>,
     /// Per source edge, this level: certified displacement, step and depth + 1.
     edge_level: Disk<3>,
+    /// Test seam: the emission bounds the borders were admitted with.
+    #[cfg(test)]
+    bounds: graph::LevelBounds,
     relief: Vec<ReliefLevel>,
 }
 
@@ -240,6 +344,52 @@ pub(crate) fn holders_from_rows(interface: &[InterfaceRow]) -> Vec<Holders> {
     holders
 }
 
+/// A contract as `mesh-inspect`'s forecast counts it ([`Borders::contract_counts`]).
+pub(super) struct ContractCounts {
+    /// Its distinct points, as sorted source vertex ids.
+    pub points: Vec<u64>,
+    /// Its distinct segments (the interface's edge rows).
+    pub segments: u64,
+    /// [`Contract::terminal_locks`].
+    pub terminal_locks: u64,
+}
+impl ContractCounts {
+    /// [`Contract::minimum_triangles`].
+    pub(super) fn minimum_triangles(&self) -> u64 {
+        (self.points.len() as u64).max(self.segments).div_ceil(3)
+    }
+}
+
+/// [`Borders::listed_items`]: listed nodes' items, taken in ascending node order.
+pub(super) struct ListedItems<'s, 'p> {
+    stream: std::iter::Peekable<SortedStream<'s, disk::Words<4>>>,
+    /// Cancellation, checked as items are taken.
+    progress: &'s StepProgress<'p>,
+}
+impl ListedItems<'_, '_> {
+    /// The linked items of `node`'s own contract (empty for an empty list). Nodes must be
+    /// taken in ascending order; the items of nodes skipped over are dropped.
+    pub(super) fn take(&mut self, node: u64) -> Result<Vec<[u64; 3]>, JobError> {
+        let mut items: Vec<[u64; 3]> = Vec::new();
+        let mut read = 0u64;
+        // Errors are taken too, and returned.
+        while let Some(item) = self
+            .stream
+            .next_if(|r| r.as_ref().map_or(true, |w| w.0[0] <= node))
+        {
+            if read.is_multiple_of(4096) {
+                self.progress.check()?;
+            }
+            read += 1;
+            let [at, a, b, edge] = item?.0;
+            if at == node {
+                items.push([a, b, edge]);
+            }
+        }
+        Ok(items)
+    }
+}
+
 impl Contract {
     /// Whether any certificate is relieved (A1).
     pub(super) fn relieved(&self) -> bool {
@@ -259,29 +409,69 @@ impl Contract {
 
 impl Borders {
     pub(super) const COMPONENT: &'static str = "s1b-shared-borders";
-    #[allow(clippy::too_many_arguments)]
-    pub(super) fn build(
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+    )]
+    /// The borders of the frozen tree, and their scratch admission, which the walk holds
+    /// until it drops them.
+    ///
+    /// The borders admit their scratch twice, under one name. Before the graph exists, the
+    /// build is admitted from the incidence counts ([`build_need`]). Once it is built, that
+    /// admission is released and the borders are admitted once more, with free space
+    /// preflighted, for everything they will hold: the graph as built and every level's
+    /// emission, bounded from the graph ([`graph::Source::level_bounds`]). A shortfall is
+    /// refused there, before any level runs; nothing is admitted later.
+    pub(super) fn build<'l, 'a>(
         scratch: &Scratch,
         sorter: SortConfig,
         nodes: &Sequence<NodeRecord>,
         rows: impl Iterator<Item = Result<InterfaceRow, crate::spill::SpillError>>,
         open_ends: impl Iterator<Item = Result<super::interfaces::KeyRecord, crate::spill::SpillError>>,
         faces: impl Iterator<Item = Result<[Key; 3], JobError>>,
-        extent: f64,
-        cap: usize,
-        lease: &ComponentLease<'_, '_>,
-        check: &(dyn Fn() -> Result<(), JobError> + Sync),
-    ) -> Result<Self, JobError> {
+        triangles: u64,
+        (extent, cap, counts): (f64, usize, ScratchCounts),
+        ledger: &'l ScratchLedger<'a>,
+        progress: &StepProgress<'_>,
+    ) -> Result<(Self, ComponentLease<'l, 'a>), JobError> {
+        let check = || progress.check();
+        let check = &check;
+        let overflow = || resource("shared-border scratch bound overflows");
+        let building = ledger.admit(
+            Self::COMPONENT,
+            build_need(counts, sorter).ok_or_else(overflow)?,
+        )?;
+        progress.begin(Step::BordersRows, counts.rows)?;
         let mut source = Source::build(
             scratch,
             sorter,
             nodes,
             rows,
             open_ends,
-            &|| lease.charge(0),
-            check,
+            &|| building.charge(0),
+            progress,
         )?;
-        source.retain_faces(faces, check)?;
+        source.retain_faces(faces, triangles, progress)?;
+        let bounds = source.level_bounds(check)?;
+        let need = graph_bytes(
+            source.owners.len.max(source.leaf_rows.len()),
+            source.vertices.len,
+            source.edges.len,
+            source.nodes.len,
+            source.leaves.len,
+        )
+        .and_then(|graph| {
+            graph.checked_add(levels_bytes(
+                source.vertices.len,
+                source.edges.len,
+                source.nodes.len,
+                u64::from(source.depth) + 1,
+                bounds,
+            )?)
+        })
+        .ok_or_else(overflow)?;
+        drop(building);
+        let lease = ledger.admit(Self::COMPONENT, need)?;
         let mut borders = Self {
             maps: Disk::new(scratch, "border-maps")?,
             segments: Disk::new(scratch, "border-segments")?,
@@ -291,6 +481,8 @@ impl Borders {
             edge_finer: Disk::new(scratch, "border-relief-finer")?,
             edge_level: Disk::new(scratch, "border-relief-level")?,
             relief: vec![ReliefLevel::default(); source.depth as usize + 1],
+            #[cfg(test)]
+            bounds,
             source,
         };
         if borders.source.edges.len > 0 {
@@ -300,15 +492,22 @@ impl Borders {
         }
         // Source arcs are traversed one level at a time; their temporary ordered points
         // are discarded after certificates and source-vertex maps have been materialized.
-        for depth in (0..=borders.source.depth).rev() {
-            check()?;
+        let levels = u64::from(borders.source.depth) + 1;
+        progress.begin(Step::BordersLevels, levels)?;
+        for (done, depth) in (0..=borders.source.depth).rev().enumerate() {
+            progress.advance(done as u64)?;
             borders.level(scratch, depth, check)?;
             lease.charge(borders.bytes())?;
         }
+        progress.end()?;
         #[cfg(test)]
         borders.check_retention()?;
         let mut ancestors = [(0u64, 0u64, 0u32); 32];
+        progress.begin(Step::BordersPublish, borders.source.nodes.len)?;
         for id in 0..borders.source.nodes.len {
+            if id.is_multiple_of(4096) {
+                progress.advance(id)?;
+            }
             let mut node = borders.source.nodes.get(id)?;
             let depth = node[2] as u32;
             let mut published = depth;
@@ -329,7 +528,8 @@ impl Borders {
         borders.segments.flush()?;
         borders.refs.flush()?;
         lease.charge(borders.bytes())?;
-        Ok(borders)
+        progress.end()?;
+        Ok((borders, lease))
     }
     /// Test builds: an external vertex retained at a depth is retained one level finer
     /// (nested endpoints), and face retention keeps its vertex at and below its depth.
@@ -361,16 +561,15 @@ impl Borders {
         super::audit::bound(self.refs.len, self.source.nodes.len, source_triangle_depths)
     }
     fn bytes(&self) -> u64 {
-        self.source.vertices.len * 64
-            + self.source.edges.len * 56
-            + self.source.owners.len * 8
-            + self.source.nodes.len * 64
-            + self.source.leaves.len * 264
-            + self.source.leaf_rows.len() * 36
-            + self.maps.len * 24
-            + self.segments.len * 96
-            + self.refs.len * 16
-            + self.source.edges.len * 40
+        self.source.vertices.len * VERTEX
+            + self.source.edges.len * EDGE
+            + self.source.owners.len * OWNER
+            + self.source.nodes.len * NODE
+            + self.source.leaves.len * LEAF
+            + self.source.leaf_rows.len() * LEAF_ROW
+            + self.maps.len * MAP
+            + self.segments.len * SEGMENT
+            + self.refs.len * REF
     }
     pub(super) fn leaf_rows(&self) -> &Sequence<InterfaceRow> {
         &self.source.leaf_rows
@@ -391,10 +590,10 @@ impl Borders {
             leaf_begin: 0,
             leaf_end: 0,
         };
-        let Some(a) = self.own_contract(key(depth), 6 * cap)? else {
+        let Some(a) = self.own_contract(key(depth), 6 * cap, &Overlay::default())? else {
             return Ok(false);
         };
-        let Some(b) = self.own_contract(key(depth + 1), 6 * cap)? else {
+        let Some(b) = self.own_contract(key(depth + 1), 6 * cap, &Overlay::default())? else {
             return Ok(false);
         };
         Ok(a.interface
@@ -431,7 +630,7 @@ impl Borders {
         &mut self,
         scratch: &Scratch,
         depth: u32,
-        check: &(dyn Fn() -> Result<(), JobError> + Sync),
+        check: &dyn Fn() -> Result<(), JobError>,
     ) -> Result<(), JobError> {
         let mark = (self.segments.len, self.refs.len);
         self.walk(scratch, depth, &mut Mode::Emit(&BTreeMap::new()), check)?;
@@ -508,7 +707,7 @@ impl Borders {
         scratch: &Scratch,
         depth: u32,
         mode: &mut Mode<'_>,
-        check: &(dyn Fn() -> Result<(), JobError> + Sync),
+        check: &dyn Fn() -> Result<(), JobError>,
     ) -> Result<(), JobError> {
         let emits = matches!(mode, Mode::Emit(_));
         let mut active = Disk::<1>::new(scratch, "border-live-edges")?;
@@ -608,7 +807,10 @@ impl Borders {
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+    )]
     fn chain(
         &mut self,
         start: u64,
@@ -618,7 +820,7 @@ impl Borders {
         active: &mut Disk<1>,
         arc: &mut Disk<3>,
         mode: &mut Mode<'_>,
-        check: &(dyn Fn() -> Result<(), JobError> + Sync),
+        check: &dyn Fn() -> Result<(), JobError>,
     ) -> Result<(), JobError> {
         let mut begin = arc.len;
         let retained = |v| -> Result<u64, JobError> {
@@ -842,7 +1044,10 @@ impl Borders {
         Ok(n)
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+    )]
     fn shortcuts(
         &mut self,
         arc: &Disk<3>,
@@ -1017,7 +1222,18 @@ impl Borders {
         key: TileKey,
         limit: usize,
     ) -> Result<Option<Contract>, JobError> {
-        let Some(mut contract) = self.own_contract(key, limit)? else {
+        self.contract_with(key, limit, &Overlay::default())
+    }
+
+    /// `contract` with the kept vertices of `overlay` (D): a split segment is published as
+    /// its pieces. A chain member's segments are never split (`Refused::Chain`).
+    pub(super) fn contract_with(
+        &self,
+        key: TileKey,
+        limit: usize,
+        overlay: &Overlay,
+    ) -> Result<Option<Contract>, JobError> {
+        let Some(mut contract) = self.own_contract(key, limit, overlay)? else {
             return Ok(None);
         };
         // Chain members are consecutive in the frozen tree's preorder.
@@ -1032,7 +1248,7 @@ impl Borders {
                 break;
             }
             if depth != key.depth {
-                contract.relief_floor = contract.relief_floor.max(self.relief_floor(n)?);
+                contract.relief_floor = contract.relief_floor.max(self.relief_floor(n, overlay)?);
             }
         }
         Ok(Some(contract))
@@ -1040,27 +1256,58 @@ impl Borders {
 
     /// One node's relief floor (A1): 8 x its largest relieved certificate's own plus finer
     /// certified displacement.
-    fn relief_floor(&self, n: [u64; 8]) -> Result<f64, JobError> {
+    fn relief_floor(&self, n: [u64; 8], overlay: &Overlay) -> Result<f64, JobError> {
         let (mut at, mut floor) = (n[6], 0f64);
         while at != NONE {
             let link = self.refs.get(at)?;
             let s = self.segments.get(link[1])?;
             if s[0] != s[1] && s[11] > 0 {
-                floor = floor.max(8. * (f64::from_bits(s[6]) + f64::from_bits(s[10])));
+                let finer = f64::from_bits(s[10]).max(overlay.finer(
+                    u32::try_from(n[2]).map_err(|_| state("a border depth exceeds u32"))?,
+                    s[0],
+                    s[1],
+                ));
+                floor = floor.max(8. * (f64::from_bits(s[6]) + finer));
             }
             at = link[0];
         }
         Ok(floor)
     }
 
-    /// The contract of `key`'s own node.
-    fn own_contract(&self, key: TileKey, limit: usize) -> Result<Option<Contract>, JobError> {
+    /// The number of linked contract items of `key`'s own node, read without materializing
+    /// them: what `contract` compares against its limit (`mesh-inspect` reports it for a
+    /// contract past the limit).
+    pub(super) fn contract_items(&self, key: TileKey) -> Result<u64, JobError> {
+        Ok(self.source.nodes.get(self.source.node(key)?)?[7])
+    }
+
+    /// The contract of `key`'s own node, with `overlay`'s splits of its segments (D). The
+    /// relief floor also covers every piece of a split segment, relieved or not, and a
+    /// relieved chord's finer displacement includes every finer split on its arc.
+    fn own_contract(
+        &self,
+        key: TileKey,
+        limit: usize,
+        overlay: &Overlay,
+    ) -> Result<Option<Contract>, JobError> {
         let n = self.source.nodes.get(self.source.node(key)?)?;
-        if n[7] > limit as u64 {
+        // Each split adds its extra pieces to the linked items.
+        let mut extra = 0u64;
+        if !overlay.is_empty() {
+            let mut at = n[6];
+            while at != NONE {
+                let link = self.refs.get(at)?;
+                if let Some(pieces) = overlay.pieces(key.depth, link[1]) {
+                    extra += pieces.len() as u64 - 1;
+                }
+                at = link[0];
+            }
+        }
+        if n[7] + extra > limit as u64 {
             return Ok(None);
         }
         let mut at = n[6];
-        let count = n[7] as usize;
+        let count = (n[7] + extra) as usize;
         let mut interface = Vec::with_capacity(3 * count);
         let mut certificates = Vec::with_capacity(count);
         let mut terminal_vertices = Vec::with_capacity(2 * count);
@@ -1068,48 +1315,55 @@ impl Borders {
         let mut relief_floor = 0f64;
         while at != NONE {
             let link = self.refs.get(at)?;
-            let s = self.segments.get(link[1])?;
-            let va = self.source.vertices.get(s[0])?;
-            let vb = self.source.vertices.get(s[1])?;
-            let a = [va[0] as u32, va[1] as u32, va[2] as u32];
-            let b = [vb[0] as u32, vb[1] as u32, vb[2] as u32];
-            for (p, v) in [(a, va), (b, vb)] {
-                if v[7] as u32 <= key.depth {
-                    terminal_vertices.push(p);
+            let stored = self.segments.get(link[1])?;
+            let split = overlay.pieces(key.depth, link[1]);
+            for &s in split.unwrap_or(std::slice::from_ref(&stored)) {
+                let va = self.source.vertices.get(s[0])?;
+                let vb = self.source.vertices.get(s[1])?;
+                let a = [va[0] as u32, va[1] as u32, va[2] as u32];
+                let b = [vb[0] as u32, vb[1] as u32, vb[2] as u32];
+                for (p, v) in [(a, va), (b, vb)] {
+                    if v[7] as u32 <= key.depth {
+                        terminal_vertices.push(p);
+                    }
+                    holders.push(Holders {
+                        key: p,
+                        lo: self.source.owners.get(v[3])?[0] as u32,
+                        hi: self.source.owners.get(v[4] - 1)?[0] as u32,
+                    });
                 }
-                holders.push(Holders {
-                    key: p,
-                    lo: self.source.owners.get(v[3])?[0] as u32,
-                    hi: self.source.owners.get(v[4] - 1)?[0] as u32,
-                });
-            }
-            let lo = self.source.owners.get(s[8])?[0] as u32;
-            let hi = self.source.owners.get(s[9] - 1)?[0] as u32;
-            for p in [a, b] {
-                interface.push(InterfaceRow::new(key.leaf_begin, p, p, lo, hi));
-            }
-            if a != b {
-                interface.push(InterfaceRow::new(
-                    key.leaf_begin,
-                    a.min(b),
-                    a.max(b),
-                    lo,
-                    hi,
-                ));
-                let edge = self.source.edges.get(s[2])?;
-                certificates.push(Certificate {
-                    endpoints: [a, b],
-                    chain: [self.source.key(edge[0])?, self.source.key(edge[1])?],
-                    origin: self.source.key(s[3])?,
-                    first: s[4],
-                    end: s[5],
-                    epsilon: f64::from_bits(s[6]),
-                    terminal_lock: edge[6] <= u64::from(key.depth),
-                    step: s[11] as u32,
-                });
-                if s[11] > 0 {
-                    relief_floor =
-                        relief_floor.max(8. * (f64::from_bits(s[6]) + f64::from_bits(s[10])));
+                let lo = self.source.owners.get(s[8])?[0] as u32;
+                let hi = self.source.owners.get(s[9] - 1)?[0] as u32;
+                for p in [a, b] {
+                    interface.push(InterfaceRow::new(key.leaf_begin, p, p, lo, hi));
+                }
+                if a != b {
+                    interface.push(InterfaceRow::new(
+                        key.leaf_begin,
+                        a.min(b),
+                        a.max(b),
+                        lo,
+                        hi,
+                    ));
+                    let edge = self.source.edges.get(s[2])?;
+                    certificates.push(Certificate {
+                        endpoints: [a, b],
+                        chain: [self.source.key(edge[0])?, self.source.key(edge[1])?],
+                        origin: self.source.key(s[3])?,
+                        first: s[4],
+                        end: s[5],
+                        epsilon: f64::from_bits(s[6]),
+                        terminal_lock: edge[6] <= u64::from(key.depth),
+                        step: s[11] as u32,
+                    });
+                    // A split piece always floors G (its bound may pass the stored chord's); a
+                    // relieved chord's finer displacement includes finer splits on its arc.
+                    if s[11] > 0 || split.is_some() {
+                        // Finer displacement is recorded by the stored chord's endpoints.
+                        let finer = f64::from_bits(s[10])
+                            .max(overlay.finer(key.depth, stored[0], stored[1]));
+                        relief_floor = relief_floor.max(8. * (f64::from_bits(s[6]) + finer));
+                    }
                 }
             }
             at = link[0];
@@ -1130,17 +1384,164 @@ impl Borders {
             relief_floor,
         }))
     }
+    /// The tree node of `key` (its index in the frozen tree's preorder).
+    pub(super) fn node_id(&self, key: TileKey) -> Result<u64, JobError> {
+        self.source.node(key)
+    }
+
+    /// The linked items of every node whose own contract list holds at most `limit` items.
+    pub(super) fn listed_item_count(&self, limit: usize) -> Result<u64, JobError> {
+        let mut total = 0u64;
+        for id in 0..self.source.nodes.len {
+            let n = self.source.nodes.get(id)?[7];
+            if n <= limit as u64 {
+                total = total.saturating_add(n);
+            }
+        }
+        Ok(total)
+    }
+
+    /// Every linked item of the nodes whose own contract list holds at most `limit` items,
+    /// as `[node, first endpoint, second endpoint, chain source edge]` sorted by node, in
+    /// one pass (`mesh-inspect`'s forecast). A list links each reference to a strictly
+    /// smaller index, and every reference belongs to exactly one list, so taking the
+    /// greatest unread reference of all lists at a time reads the reference store once in
+    /// descending order; segments are emitted just before their references, so they are
+    /// read in nearly the same order. Following one list at a time instead reads a page
+    /// per item, each page about once per list that crosses it. `progress` advances by
+    /// item; the caller begins its step with [`Self::listed_item_count`].
+    pub(super) fn listed_items<'s, 'p>(
+        &self,
+        scratch: &'s Scratch,
+        sorter: SortConfig,
+        limit: usize,
+        progress: &'s StepProgress<'p>,
+    ) -> Result<ListedItems<'s, 'p>, JobError> {
+        let mut sorted = ExternalSorter::<disk::Words<4>>::new(scratch, sorter)?.observed(progress);
+        // At most one head per node, as `listed_items_memory` charges; a head is popped
+        // before its successor is pushed, so the heap never grows past it.
+        let mut heads: Vec<ListHead> = Vec::new();
+        heads
+            .try_reserve_exact(usize::try_from(self.source.nodes.len).unwrap_or(usize::MAX))
+            .map_err(|_| {
+                JobError::new(
+                    crate::JobErrorKind::ResourceLimit,
+                    "contract list heads allocation failed",
+                )
+            })?;
+        for id in 0..self.source.nodes.len {
+            if id.is_multiple_of(4096) {
+                progress.check()?;
+            }
+            let n = self.source.nodes.get(id)?;
+            if n[7] <= limit as u64 && n[6] != NONE {
+                heads.push((n[6], id, n[7]));
+            }
+        }
+        let mut heads = std::collections::BinaryHeap::from(heads);
+        let mut done = 0u64;
+        while let Some((at, node, left)) = heads.pop() {
+            if done.is_multiple_of(4096) {
+                progress.advance(done)?;
+            }
+            done += 1;
+            let link = self.refs.get(at)?;
+            let s = self.segments.get(link[1])?;
+            sorted.push(disk::Words([node, s[0], s[1], s[2]]))?;
+            match (link[0], left) {
+                (NONE, 1) => {}
+                (NONE, _) | (_, 0 | 1) => {
+                    return Err(state("a contract list differs from its item count"))
+                }
+                (next, _) => heads.push((next, node, left - 1)),
+            }
+        }
+        Ok(ListedItems {
+            stream: sorted.finish()?.peekable(),
+            progress,
+        })
+    }
+
+    /// What `mesh-inspect`'s forecast reads of a contract at `depth` with these linked
+    /// items (`[first endpoint, second endpoint, chain source edge]`), equal to the
+    /// corresponding values of [`Self::contract`]; its rows, certificates and holders are
+    /// not built.
+    pub(super) fn contract_counts(
+        &self,
+        depth: u32,
+        items: &[[u64; 3]],
+    ) -> Result<ContractCounts, JobError> {
+        let points = Self::contract_points(items);
+        // Edge rows: one per distinct endpoint pair (ids order as keys do).
+        let mut edges: Vec<[u64; 2]> = items
+            .iter()
+            .filter(|[a, b, _]| a != b)
+            .map(|&[a, b, _]| [a.min(b), a.max(b)])
+            .collect();
+        edges.sort_unstable();
+        edges.dedup();
+        let depth = u64::from(depth);
+        let mut terminal_locks = 0u64;
+        for &p in &points {
+            // The low half holds the minimum terminal leaf depth (as `own_contract` reads it).
+            if self.source.vertices.get(p)?[7] & u64::from(u32::MAX) <= depth {
+                terminal_locks += 1;
+            }
+        }
+        // One certificate per linked chord, locked when its source edge is terminal.
+        let mut chains: Vec<u64> = items
+            .iter()
+            .filter(|[a, b, _]| a != b)
+            .map(|&[_, _, edge]| edge)
+            .collect();
+        chains.sort_unstable();
+        for edge in chains {
+            if self.source.edges.get(edge)?[6] <= depth {
+                terminal_locks += 1;
+            }
+        }
+        Ok(ContractCounts {
+            segments: edges.len() as u64,
+            points,
+            terminal_locks,
+        })
+    }
+
+    /// The points of a contract with these linked items, as sorted, distinct source vertex
+    /// ids. Vertex ids follow key order, so they count and compare as the contract's point
+    /// keys do.
+    pub(super) fn contract_points(items: &[[u64; 3]]) -> Vec<u64> {
+        let mut points: Vec<u64> = items.iter().flat_map(|&[a, b, _]| [a, b]).collect();
+        points.sort_unstable();
+        points.dedup();
+        points
+    }
+
     pub(super) fn mapping(
         &self,
         depth: u32,
         key: Key,
     ) -> Result<Option<(Key, Key, f64, u8)>, JobError> {
+        self.mapping_with(depth, key, &Overlay::default())
+    }
+
+    /// `mapping` with the kept vertices of `overlay` (D): a vertex on a split arc maps to
+    /// its piece.
+    pub(super) fn mapping_with(
+        &self,
+        depth: u32,
+        key: Key,
+        overlay: &Overlay,
+    ) -> Result<Option<(Key, Key, f64, u8)>, JobError> {
         let Some(vertex) = self.source.vertex(key)? else {
             return Ok(None);
         };
-        let m = self
-            .maps
-            .get(u64::from(depth) * self.source.vertices.len + vertex)?;
+        let m = match overlay.map(depth, vertex) {
+            Some(m) => m,
+            None => self
+                .maps
+                .get(u64::from(depth) * self.source.vertices.len + vertex)?,
+        };
         Ok(Some((
             self.source.key(m[0])?,
             self.source.key(m[1])?,
@@ -1210,6 +1611,39 @@ mod tests {
         eprintln!("CONTRACT CONSTRUCTION: links={limit}, peak={peak}, charge={charge}");
         assert!(peak as u64 <= charge);
     }
+    /// The borders' scratch, temporaries included, never passes what they were admitted.
+    /// The emission stays within its bounds, and the borders' scratch, temporaries
+    /// included, within their admission.
+    fn within_admission(
+        scratch: &Scratch,
+        before: u64,
+        lease: &ComponentLease<'_, '_>,
+        borders: &Borders,
+    ) {
+        let peak = scratch.stage_peak_bytes().saturating_sub(before);
+        assert!(peak <= lease.bytes(), "{peak} past {}", lease.bytes());
+        assert!(
+            borders.segments.len <= borders.bounds.segments
+                && borders.refs.len <= borders.bounds.refs,
+            "{} segments and {} references past {:?}",
+            borders.segments.len,
+            borders.refs.len,
+            borders.bounds
+        );
+    }
+
+    /// Counts for the build admission of small test graphs (the test ledger admits all).
+    fn test_counts() -> ScratchCounts {
+        ScratchCounts {
+            rows: 1 << 20,
+            points: 1 << 20,
+            segments: 1 << 20,
+            nodes: 1 << 10,
+            leaves: 1 << 10,
+            height: 31,
+        }
+    }
+
     #[test]
     fn large_source_scratch_admission_is_checked_and_incidence_bounded() {
         let sorter = SortConfig {
@@ -1222,17 +1656,32 @@ mod tests {
         for n in [500_000_000u64, 1_000_000_000] {
             // The production caller's worst-case interface counts, with a full-height
             // tree. The envelope covers all persistent levels and the external sort.
-            let need =
-                scratch_need(6 * n, 3 * n, 3 * n, 2 * n / 8192, n / 8192, 31, sorter).unwrap();
+            let need = scratch_need(
+                ScratchCounts {
+                    rows: 6 * n,
+                    points: 3 * n,
+                    segments: 3 * n,
+                    nodes: 2 * n / 8192,
+                    leaves: n / 8192,
+                    height: 31,
+                },
+                sorter,
+            )
+            .unwrap();
             assert!((20_000 * n..=32_768 * n).contains(&need));
         }
         for field in 0..5 {
             let mut counts = [1; 5];
             counts[field] = u64::MAX;
-            assert!(scratch_need(
-                counts[0], counts[1], counts[2], counts[3], counts[4], 31, sorter,
-            )
-            .is_none());
+            let counts = ScratchCounts {
+                rows: counts[0],
+                points: counts[1],
+                segments: counts[2],
+                nodes: counts[3],
+                leaves: counts[4],
+                height: 31,
+            };
+            assert!(scratch_need(counts, sorter).is_none());
         }
     }
 
@@ -1301,21 +1750,22 @@ mod tests {
             let row_count = rows.len() as u64;
             let height = exponent + 1;
             let ledger = ScratchLedger::new(&scratch, scratch.live_bytes(), &|_| Ok(()));
-            let need = scratch_need(row_count, r + 1, r, 4 * r - 1, 2 * r, height, sorter).unwrap();
-            let lease = ledger.admit(Borders::COMPONENT, need).unwrap();
-            let borders = Borders::build(
+            scratch.begin_stage();
+            let before = scratch.live_bytes();
+            let (borders, lease) = Borders::build(
                 &scratch,
                 sorter,
                 &tree,
                 rows.into_iter().map(Ok),
                 std::iter::empty(),
                 std::iter::empty(),
-                4096.,
-                super::super::TRIANGLE_CAP,
-                &lease,
-                &|| Ok(()),
+                0,
+                (4096., super::super::TRIANGLE_CAP, test_counts()),
+                &ledger,
+                crate::mesh_large::phases::StepProgress::silent(),
             )
             .unwrap();
+            within_admission(&scratch, before, &lease, &borders);
             let node = borders
                 .source
                 .node(TileKey {
@@ -1460,20 +1910,23 @@ mod tests {
         rows.sort_unstable();
         let faces: Vec<[Key; 3]> = leaves.iter().flatten().copied().collect();
         let ledger = ScratchLedger::new(&scratch, scratch.live_bytes(), &|_| Ok(()));
-        let lease = ledger.admit(Borders::COMPONENT, 8 << 20).unwrap();
-        let borders = Borders::build(
+        scratch.begin_stage();
+        let before = scratch.live_bytes();
+        let (borders, lease) = Borders::build(
             &scratch,
             sorter,
             &tree,
-            rows.into_iter().map(Ok),
+            rows.clone().into_iter().map(Ok),
             std::iter::empty(),
-            faces.into_iter().map(Ok),
-            4096.,
-            super::super::TRIANGLE_CAP,
-            &lease,
-            &|| Ok(()),
+            faces.clone().into_iter().map(Ok),
+            0,
+            (4096., super::super::TRIANGLE_CAP, test_counts()),
+            &ledger,
+            crate::mesh_large::phases::StepProgress::silent(),
         )
         .unwrap();
+        within_admission(&scratch, before, &lease, &borders);
+        assert_counts_match_contracts(&borders, &scratch, sorter);
         let cell_a = borders
             .contract(
                 TileKey {
@@ -1493,6 +1946,41 @@ mod tests {
         for v in [&l[1], &l[3]] {
             assert!(points.contains(v), "{v:?} contracted away: {points:?}");
         }
+        drop((borders, lease));
+        // Too little space once the graph is built: refused at that admission, the second
+        // and last, before any level runs; the build's admission is released.
+        let admissions = std::sync::atomic::AtomicU64::new(0);
+        let refuse_second = |_: u64| {
+            use std::sync::atomic::Ordering::Relaxed;
+            if admissions.fetch_add(1, Relaxed) + 1 == 2 {
+                return Err(JobError::new(
+                    crate::JobErrorKind::ResourceLimit,
+                    "no space",
+                ));
+            }
+            Ok(())
+        };
+        let base = scratch.live_bytes();
+        let ledger = ScratchLedger::new(&scratch, base, &refuse_second);
+        let error = Borders::build(
+            &scratch,
+            sorter,
+            &tree,
+            rows.into_iter().map(Ok),
+            std::iter::empty(),
+            faces.into_iter().map(Ok),
+            0,
+            (4096., super::super::TRIANGLE_CAP, test_counts()),
+            &ledger,
+            crate::mesh_large::phases::StepProgress::silent(),
+        )
+        .err()
+        .expect("the post-graph admission is refused");
+        assert_eq!(error.kind(), crate::JobErrorKind::ResourceLimit);
+        assert!(error.to_string().contains("no space"), "{error}");
+        assert_eq!(admissions.load(std::sync::atomic::Ordering::Relaxed), 2);
+        // Nothing stays admitted: the build's lease was released before the refused one.
+        assert_eq!(ledger.bound(), base);
     }
     #[test]
     fn all_owners_share_certified_chords_and_terminal_leaves_stay_exact() {
@@ -1552,20 +2040,23 @@ mod tests {
         }
         rows.sort_unstable();
         let ledger = ScratchLedger::new(&scratch, scratch.live_bytes(), &|_| Ok(()));
-        let lease = ledger.admit(Borders::COMPONENT, 8 << 20).unwrap();
-        let borders = Borders::build(
+        scratch.begin_stage();
+        let before = scratch.live_bytes();
+        let (borders, lease) = Borders::build(
             &scratch,
             sorter,
             &tree,
             rows.iter().copied().map(Ok),
             std::iter::empty(),
             std::iter::empty(),
-            4096.,
-            super::super::TRIANGLE_CAP,
-            &lease,
-            &|| Ok(()),
+            0,
+            (4096., super::super::TRIANGLE_CAP, test_counts()),
+            &ledger,
+            crate::mesh_large::phases::StepProgress::silent(),
         )
         .unwrap();
+        within_admission(&scratch, before, &lease, &borders);
+        assert_counts_match_contracts(&borders, &scratch, sorter);
         let tile = |first, end, depth, leaf_begin, leaf_end| TileKey {
             first,
             end,
@@ -1591,6 +2082,68 @@ mod tests {
         let middle = borders.mapping(1, points[3]).unwrap().unwrap();
         assert_eq!((middle.0, middle.1), (points[2], points[4]));
         assert_eq!(middle.2, 0.5);
+        // D: keeping the tail's middle vertex splits that chord, the same for both owners.
+        let (left_key, right_key) = (tile(0, 2, 1, 0, 2), tile(2, 4, 1, 2, 4));
+        let site = borders.locate(left_key, &[points[3]]).unwrap()[0]
+            .1
+            .unwrap();
+        assert_eq!(
+            borders.locate(right_key, &[points[3]]).unwrap()[0].1,
+            Ok(site)
+        );
+        assert_eq!(
+            borders.locate(left_key, &[points[2]]).unwrap()[0].1,
+            Err(Refused::NotOnChord),
+            "a retained endpoint is no stuck vertex"
+        );
+        let sites = BTreeMap::from([(1, std::collections::BTreeSet::from([site]))]);
+        let (overlay, dropped) = borders.split(&sites, Overlay::default()).unwrap();
+        assert!(dropped.is_empty());
+        assert_eq!(overlay.kept().collect::<Vec<_>>(), vec![(1, points[3])]);
+        let left_kept = borders
+            .contract_with(left_key, 100, &overlay)
+            .unwrap()
+            .unwrap();
+        let right_kept = borders
+            .contract_with(right_key, 100, &overlay)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(&left_kept.certificates).unwrap(),
+            serde_json::to_value(&right_kept.certificates).unwrap()
+        );
+        assert_eq!(left_kept.certificates.len(), left.certificates.len() + 1);
+        assert!(left_kept
+            .interface
+            .iter()
+            .any(|r| r.is_vertex() && r.a == points[3]));
+        // Both pieces are single source edges, certified exactly.
+        assert!(left_kept
+            .certificates
+            .iter()
+            .filter(|c| c.endpoints.contains(&points[3]))
+            .all(|c| c.epsilon == 0. && c.end - c.first == 1));
+        let kept = borders
+            .mapping_with(1, points[3], &overlay)
+            .unwrap()
+            .unwrap();
+        assert_eq!((kept.0, kept.1), (points[3], points[3]));
+        assert_eq!(
+            borders.co_owners(left_key).unwrap(),
+            vec![borders.node_id(right_key).unwrap()]
+        );
+        // Without the overlay nothing changes.
+        assert_eq!(
+            serde_json::to_value(
+                &borders
+                    .contract_with(left_key, 100, &Overlay::default())
+                    .unwrap()
+                    .unwrap()
+                    .certificates
+            )
+            .unwrap(),
+            serde_json::to_value(&left.certificates).unwrap()
+        );
         let leaf = borders.contract(tile(1, 2, 2, 1, 2), 100).unwrap().unwrap();
         assert_eq!(leaf.certificates.len(), 2);
         assert_eq!(leaf.terminal_vertices.len(), 4);
@@ -1607,22 +2160,26 @@ mod tests {
             .unwrap()
             .interface
             .is_empty());
-        drop(borders);
+        drop((borders, lease));
         // A nonshared source boundary meeting point 2 can complete a hole through
         // the straight tail. Its separate open chain retains an interior witness.
-        let pinned = Borders::build(
+        scratch.begin_stage();
+        let before = scratch.live_bytes();
+        let (pinned, lease) = Borders::build(
             &scratch,
             sorter,
             &tree,
             rows.into_iter().map(Ok),
             [Ok(super::super::interfaces::KeyRecord(points[2]))].into_iter(),
             std::iter::empty(),
-            4096.,
-            super::super::TRIANGLE_CAP,
-            &lease,
-            &|| Ok(()),
+            0,
+            (4096., super::super::TRIANGLE_CAP, test_counts()),
+            &ledger,
+            crate::mesh_large::phases::StepProgress::silent(),
         )
         .unwrap();
+        within_admission(&scratch, before, &lease, &pinned);
+        assert_counts_match_contracts(&pinned, &scratch, sorter);
         let middle = pinned.mapping(1, points[3]).unwrap().unwrap();
         assert_eq!((middle.0, middle.1), (points[3], points[3]));
         assert_eq!(
@@ -1695,21 +2252,106 @@ mod tests {
         }
         rows.sort_unstable();
         let ledger = ScratchLedger::new(&scratch, scratch.live_bytes(), &|_| Ok(()));
-        let lease = ledger.admit(Borders::COMPONENT, 8 << 20).unwrap();
-        let borders = Borders::build(
+        scratch.begin_stage();
+        let before = scratch.live_bytes();
+        let (borders, lease) = Borders::build(
             &scratch,
             sorter,
             &tree,
             rows.into_iter().map(Ok),
             std::iter::empty(),
             std::iter::empty(),
-            4096.,
-            cap,
-            &lease,
-            &|| Ok(()),
+            0,
+            (4096., cap, test_counts()),
+            &ledger,
+            crate::mesh_large::phases::StepProgress::silent(),
         )
         .unwrap();
+        within_admission(&scratch, before, &lease, &borders);
+        assert_counts_match_contracts(&borders, &scratch, sorter);
         read(&borders)
+    }
+
+    /// The gathered items give every node exactly what its full contract gives
+    /// `mesh-inspect`'s forecast, with every list or only the shorter ones listed.
+    fn assert_counts_match_contracts(borders: &Borders, scratch: &Scratch, sorter: SortConfig) {
+        let lengths: Vec<u64> = (0..borders.source.nodes.len)
+            .map(|id| borders.source.nodes.get(id).unwrap()[7])
+            .collect();
+        let mut sorted = lengths.clone();
+        sorted.sort_unstable();
+        let median = sorted[sorted.len() / 2] as usize;
+        // A cancelled run stops before it reads a list.
+        let stop = || Err(JobError::new(crate::JobErrorKind::Cancelled, "stopped"));
+        let cancelled = crate::mesh_large::phases::StepProgress::new(&stop, None);
+        let refs = borders.refs.read_count();
+        assert!(borders
+            .listed_items(scratch, sorter, 6 * super::super::TRIANGLE_CAP, &cancelled)
+            .is_err());
+        assert_eq!(
+            borders.refs.read_count(),
+            refs,
+            "no list read once cancelled"
+        );
+        for limit in [6 * super::super::TRIANGLE_CAP, median] {
+            let listed: u64 = lengths.iter().filter(|&&n| n <= limit as u64).sum();
+            assert_eq!(borders.listed_item_count(limit).unwrap(), listed);
+            let progress = crate::mesh_large::phases::StepProgress::silent();
+            let mut items = borders
+                .listed_items(scratch, sorter, limit, progress)
+                .unwrap();
+            for (id, &n) in lengths.iter().enumerate() {
+                let id = id as u64;
+                let r = borders.source.nodes.get(id).unwrap();
+                let key = tile(r[0], r[1], r[2] as u32, r[3] as u32, r[4] as u32);
+                assert_eq!(borders.node_id(key).unwrap(), id);
+                let full = borders
+                    .own_contract(key, limit, &Overlay::default())
+                    .unwrap();
+                let Some(full) = full else {
+                    assert!(
+                        n > limit as u64,
+                        "node {id}: only a list past its limit is absent"
+                    );
+                    continue;
+                };
+                let taken = items.take(id).unwrap();
+                assert_eq!(taken.len() as u64, n, "node {id} items");
+                let counts = borders.contract_counts(key.depth, &taken).unwrap();
+                let mut keys: Vec<Key> = full
+                    .interface
+                    .iter()
+                    .filter(|r| r.is_vertex())
+                    .map(|r| r.a)
+                    .collect();
+                keys.sort_unstable();
+                keys.dedup();
+                let ids = |p: &[u64]| -> Vec<Key> {
+                    p.iter().map(|&v| borders.source.key(v).unwrap()).collect()
+                };
+                assert_eq!(
+                    ids(&Borders::contract_points(&taken)),
+                    keys,
+                    "node {id} points"
+                );
+                assert_eq!(ids(&counts.points), keys, "node {id} counted points");
+                assert_eq!(
+                    counts.segments,
+                    (full.interface.len() - keys.len()) as u64,
+                    "node {id} segments"
+                );
+                assert_eq!(
+                    counts.terminal_locks,
+                    full.terminal_locks(),
+                    "node {id} locks"
+                );
+                assert_eq!(
+                    counts.minimum_triangles(),
+                    full.minimum_triangles() as u64,
+                    "node {id} minimum"
+                );
+            }
+        }
     }
 
     fn tile(first: u64, end: u64, depth: u32, leaf_begin: u32, leaf_end: u32) -> TileKey {

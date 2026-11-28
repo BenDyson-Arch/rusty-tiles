@@ -6,7 +6,7 @@ Every value here comes from `rusty-tiles <command> --help` for version 0.4.0. Ru
 
 ## Build availability
 
-Release downloads and the default Cargo build are the standard CLI. It runs `mesh`, `point-cloud`, `vector` (GeoJSON and GeoPackage), the packaging commands, `validate`, `preview` and `doctor` without system geospatial libraries, and covers CRS operations in the verified grid-free tier.
+Release downloads and the default Cargo build are the standard CLI. It runs `mesh`, `mesh-inspect`, `point-cloud`, `vector` (GeoJSON and GeoPackage), the packaging commands, `validate`, `preview` and `doctor` without system geospatial libraries, and covers CRS operations in the verified grid-free tier.
 
 These need the [native-geospatial build](INSTALL.md#native-geospatial-cli) (GDAL, PROJ and GEOS):
 
@@ -63,7 +63,7 @@ To move an existing explicit archive to implicit tiling, re-run its converter on
 
 ### mesh
 
-Tiles one static glTF/GLB scene into a 3D Tiles 1.1 implicit `.3tz`. The scene is local (metres, Y-up) or in a declared source CRS. Leaves keep full detail. Each parent tile is built from its children: its outer seams match its neighbours exactly, its geometric error is sampled and measured rather than certified, it keeps a representative source-primitive identity, and its textures are baked fresh. The [mesh guide](MESH.md) covers admitted sources, placement, resources and a known Cesium KTX2 colour-filtering limitation.
+Tiles one static glTF/GLB scene into a 3D Tiles 1.1 implicit `.3tz`. The scene is local (metres, Y-up) or in a declared source CRS. Leaves keep full detail. Each parent tile is built from its children: its outer seams match its neighbours exactly, its geometric error bounds the continuous two-sided distance between its captured source and decoded surface, it keeps a representative source-primitive identity, and its textures are baked fresh. The [mesh guide](MESH.md) covers admitted sources, placement, resources and a known Cesium KTX2 colour-filtering limitation.
 
 | Option | Alias | Default | Meaning |
 | --- | --- | --- | --- |
@@ -71,6 +71,7 @@ Tiles one static glTF/GLB scene into a 3D Tiles 1.1 implicit `.3tz`. The scene i
 | `--jobs` | | `auto` | A positive maximum worker count, or `auto`. Each stage caps workers by cores and memory; `auto` uses one worker when memory is unknown. |
 | `--scratchDir` | `--scratch-dir` | platform scratch directory | Parent directory for working data. Archive staging stays beside the output. |
 | `--memory-budget BYTES` | `--memoryBudget` | lesser of 4 GiB and half the detected headroom (2 GiB if undetected) | Memory ceiling for every stage, never raised. A positive byte count with an optional `B`, `KiB`, `MiB`, `GiB` or `TiB` suffix, such as `2GiB`. A run that cannot fit is refused as `resource_limit` before it allocates. The archive does not depend on the budget. Invalid values are usage errors (exit 2). See [memory budget](MESH.md#memory-budget). |
+| `--report-path FILE` | `--reportPath` | none | Write a JSON [run report](MESH.md#run-report) here, rewritten atomically after each stage (timing, CPU, scratch peaks, HLOD omissions, last resorts and worker use), so a stopped run leaves a valid partial report. Never part of the archive. |
 | `--anchor LON LAT HEIGHT` | | none | Place a local scene on the globe: WGS84 longitude and latitude in degrees, ellipsoidal height in metres. Without it, output stays local. |
 | `--orientationXyzw X Y Z W` | `--orientation-xyzw` | identity with `--anchor` | Rotation in the anchor's east-north-up frame, as a near-unit quaternion with W last. Requires `--anchor`. |
 | `--sceneOffset X Y Z` | `--scene-offset` | zero with `--anchor` | Translation in source Y-up metres, applied after node transforms and before the orientation. Requires `--anchor`. |
@@ -79,6 +80,10 @@ Tiles one static glTF/GLB scene into a 3D Tiles 1.1 implicit `.3tz`. The scene i
 | `--sourceOffset E N [A]` | `--source-offset` | `0 0 0` | Shift added in double precision: E and N in CRS units, A in metres. |
 | `--sourceOffsetFile` | `--source-offset-file` | none | Offset file you write, with exactly the lines `E: <n>`, `N: <n>` and `A: <n>` (Metashape does not export one). Cannot be combined with `--sourceOffset`. |
 | `--heightOffset` | `--height-offset` | `0` with a source CRS | Metres added to source height plus A to give ellipsoidal height. |
+| `--bbox MINX MINY MAXX MAXY` | | none | Bake only the triangles whose centroid lies in the box (west and south edges inside, east and north edges outside): post-node glTF X and −Z in source metres, or WGS84 longitude and latitude in degrees with a source CRS. Placement, the CRS frame and the tile grid stay the whole source's. See [part of the source](MESH.md#bake-part-of-the-source). |
+| `--polygon FILE` | | none | As `--bbox`, with a GeoJSON Polygon or MultiPolygon (holes allowed, even-odd rule) in the same coordinates. Cannot be combined with `--bbox`. |
+| `--weld-epsilon METRES` | `--weldEpsilon` | none | Weld source vertices within this distance before capture (`0`: exact repeats only), each primitive's own. A merged vertex takes its class's lowest-index position and keeps its own normal, UVs and colour. `tilerReport.weld` gives the merged count, the largest displacement and the faces it collapsed or duplicated. Geometric error is certified against the original, unwelded faces. A weld that isolates a collapsed face is refused. Output tile seams keep the exact-seam rule. See [weld the source](MESH.md#weld-the-source). |
+| `--join-primitives same-material` | `--joinPrimitives` | none | Also weld across primitives with the same material, so their coincident boundaries become interior edges; each triangle keeps its `source_primitive`. Alone, it welds exact repeats only. |
 
 The shared `-i`, `-o` and `--force` options apply. Output is `.3tz` only.
 
@@ -87,7 +92,7 @@ With a [source CRS](MESH.md#source-crs), positions, normals and tangents are map
 `--json` returns:
 
 - `tilerReport`: the conversion report, in snake_case, identical to the archive's `conversion.json`;
-- `diagnostics`: requested and actual workers, the resolved `memory` budget and stage plan, the coarse stage's `hlod` facts and `phase_seconds` (not stored in the archive);
+- `diagnostics`: requested and actual workers, the resolved `memory` budget and stage plan, the coarse stage's `hlod` facts and `phase_seconds`, plus `stage_timing` when `RUSTY_TILES_STAGE_TIMING` is set (not stored in the archive);
 - `cleanupDiagnostics`;
 - the resolved `output`.
 
@@ -274,6 +279,41 @@ Failures use `invalid_input` (exit 3), `unsupported` (exit 2), `resource_limit` 
 
 The bundled JSON schemas come from the Cesium 3D Tiles specification at commit `4d781014b52294759834018a931223b98ac1ce47`, with relative references rewritten to local `$defs`. Attribution and the CC BY 4.0 notice are in [`docs/schema/LICENSE.adoc`](schema/LICENSE.adoc). Schema loading makes no network or file lookups.
 
+### mesh-inspect
+
+```sh
+rusty-tiles mesh-inspect -i site.glb --source-crs EPSG:3857 --source-offset-file site_offset.txt \
+  --geojson site-check.geojson
+```
+
+Checks a `mesh` source before a bake and writes no archive. It reads the source once, without capture, and reports exact counts of:
+
+- open edges and loops by length class;
+- edges on primitive boundaries, and how many coincide with another primitive's edge;
+- repeated positions, and the edges welding them would close;
+- connected components.
+
+It checks topology and payload with `mesh`'s checks and errors, but not the checks only a bake needs (image preflight, attribute layout, tile member gate, triangle record limit, and with a source CRS the per-vertex Jacobian for normals and tangents), so `mesh` can still refuse a source it passed. With `--forecast` it also gives an estimated coarse-omission risk per cell over the cells the bake would build. That captures the source as `mesh` does and builds the bake's border contracts, so it costs most of a bake. See [check a source before baking](MESH.md#check-a-source-before-baking).
+
+It takes `mesh`'s `-i`, `--profile`, `--jobs`, `--scratchDir`, `--memory-budget`, placement, source CRS and weld (`--weld-epsilon`, `--join-primitives`) options, with the same meaning. With a weld it reports the welded source, plus `inspectReport.weld`, so it previews the open edges a weld closes. With `--forecast`, give the options you will bake with, so the cells line up. It also takes:
+
+| Option | Alias | Default | Meaning |
+| --- | --- | --- | --- |
+| `--forecast` | | off | Also estimate coarse omissions per cell (`hlod_view`, `tree` and `forecast` in the report, and the cells at risk in the GeoJSON). Costs most of a bake. |
+| `--geojson PATH` | | none | Also write a `.geojson` of open loops and seams at least `--minFeatureLength` long (ordered polylines) and, with `--forecast`, of the cells at risk. Coordinates are WGS84, so the source needs `--anchor` or a source CRS; otherwise the request is refused unless `--geojsonLocal` is given. Installed only after the run succeeds. |
+| `--geojsonLocal` | `--geojson-local` | off | Write the GeoJSON in local east/north metres (east = glTF +X, north = glTF −Z) instead. This is not RFC 7946; a top-level `rustyTilesFrame` member says so. |
+| `--minFeatureLength METRES` | `--min-feature-length` | `5` | Shortest open loop or seam written to the GeoJSON. |
+| `-f`, `--force` | | off | Replace an existing GeoJSON. |
+
+Without `--json` it prints five summary lines on stderr (the last saying the forecast was not run and that `--profile` applies only with it; six with `--forecast`), a weld line before them with a weld, and a last line naming the GeoJSON. `--json` returns:
+
+- `inspectReport` (`schema_version` 2): the same for every `--jobs`, budget, scratch location and GeoJSON path;
+- `geojson`: the installed path, or null;
+- `diagnostics`: workers, the memory plan and stage seconds;
+- `cleanupDiagnostics`.
+
+The omission risk is an estimate (`"estimate": true`). On four measured bakes its omitted-cell precision was 0.13–1.00 and its recall 0.33–1.00. It found only 3 of 18 actual omission sources. `certain` cells, whose border contract alone exceeds the triangle cap, follow the bake's own rule; that has been checked against a bake only on a synthetic case.
+
 ### preview
 
 ```sh
@@ -293,6 +333,8 @@ rusty-tiles preview --cesium target/preview-runtime/node_modules/cesium/Build/Ce
 | `--terrain` | none | Terrain mesh directory with `tileset.json` |
 
 Select at least one layer.
+
+The page lights the scene with a fixed sun from the north-west, 35° above the horizon at the scene's centre, so the view does not depend on the time of day.
 
 Preview is read-only and writes nothing, so stopping it needs no cleanup. It runs until signalled, for example with SIGTERM or Ctrl-C. Before binding, each selected directory and the Cesium directory are resolved to their real paths. Each must contain its manifest (`tileset.json`, `tilejson.json` or `Cesium.js`) as a regular file; otherwise the command exits 3 with `data`.
 
@@ -422,13 +464,14 @@ A failure has this shape and the matching exit code:
 | `progress` | `phase`, `done`, `total` | Work units in a phase. `total` is null when unknown. |
 | `warning` | `message`, or the structured feature report | A feature was skipped or degraded |
 | `log` | `message` | Informational lines, such as mesh timings |
-| `failed` | `phase`, `code` | The conversion failed with this error code |
+| `failed` | `phase`, `code` | The conversion failed with this error code. Problems found beside the failure (cleanup, a run report that could not record it) come first as `warning` events with `code` `secondary_diagnostic`; without `--progress json` they are printed as `warning:` lines. |
 
 Every converter emits a `conversion` phase at 0 and at 1. Completion comes only after the output is published. Other phases depend on the command.
 
 | Command | Phases |
 | --- | --- |
-| `mesh` | `capture` (its steps `capture_scan`, `capture_validate`, `capture_corners`, `capture_positions`, `capture_triangles`, `capture_sequence`, `capture_images`, `capture_tree`, `capture_corner_depths`, `capture_leaf_plans` and, when a sort needs one, `capture_merge`, each with its total and repeated at least every 250 ms), `leaf_build`, `hlod_incidence` (its steps `hlod_incidence_items`, `hlod_incidence_reduce`, `hlod_incidence_ends` and, when a sort needs one, `hlod_incidence_merge`, reported the same way), `hlod_geometry`, `leaf_payloads`, `archive`, `ready_to_publish`; required events finish before installation. See the [mesh guide](MESH.md). |
+| `mesh` | Every phase has a total. `capture` (the source's triangles; its steps `capture_scan`, with `--bbox` or `--polygon` `capture_select`, `capture_validate`, with `--weld-epsilon` or `--join-primitives` `capture_weld` and, after `capture_sequence`, `capture_weld_check`, `capture_corners`, `capture_positions`, `capture_triangles`, `capture_sequence`, `capture_images`, `capture_tree`, `capture_corner_depths`, `capture_leaf_plans` and, when a sort needs one, `capture_merge`, each with its total and repeated at least every 250 ms), `leaf_crop_plan` (with source images on disk-backed scratch) and `leaf_crop_store` (when the crop store is built), reported the same way, `leaf_build`, `hlod_incidence` (retained triangles; its steps `hlod_incidence_items`, `hlod_incidence_reduce`, `hlod_incidence_ends` and, when a sort needs one, `hlod_incidence_merge`, reported the same way), the shared-border steps `hlod_borders_rows`, `hlod_borders_graph`, `hlod_borders_faces`, `hlod_borders_levels`, `hlod_borders_publish` and, when the row sort needs one, `hlod_borders_merge`, reported the same way, `hlod_geometry` (coarse cells), `leaf_payloads`, `archive` (leaf and coarse tiles), `ready_to_publish`; required events finish before installation. See the [mesh guide](MESH.md). |
+| `mesh-inspect` | Every step has a total. By default: `inspect_scan` (triangles), `inspect_validate`, with a weld `capture_weld`, `inspect_sample`, `inspect_stream` (triangles), `inspect_vertices` (used vertices), `inspect_edges` (edges), `inspect_components` (edges between position ranges), with a weld `capture_weld_check`, `inspect_loops` (and `inspect_merge` when a sort needs one), `ready_to_publish`. With `--forecast`: `capture` and its steps (as for `mesh`), `inspect_vertices`, `inspect_edges`, `inspect_loops` (and `inspect_merge`), `hlod_incidence_items`, `hlod_incidence_reduce`, `hlod_incidence_ends`, the shared-border steps (as for `mesh`), `inspect_contracts` (linked contract items), `inspect_forecast` (tree nodes), `ready_to_publish` |
 | `point-cloud` | `ingestion`, `tiling`, `point_archive`, `ready_to_publish`; these finish before installation |
 | `vector` | `ingestion`, `encoding` |
 | `raster` | `source_cog` and `aligned_warp` report progress out of 1,000,000. `tiling` reports completed tiles on the same scale and resets for each zoom. `raster_complete` reports the actual tile count before sealing and installation. |
@@ -444,6 +487,7 @@ Events report work units, not time remaining.
 | --- | --- | --- |
 | `RUSTY_TILES_NATIVE_DIAGNOSTICS=1` | vector | Print raw GDAL and GEOS warnings |
 | `RUSTY_TILES_STORAGE_DISK=1` | mesh | Treat storage whose kind cannot be detected, such as a container's overlay root, as disk-backed, so it is not charged to the memory budget. Never overrides detected tmpfs. See [memory budget](MESH.md#memory-budget). |
+| `RUSTY_TILES_STAGE_TIMING=<file>` | mesh | Write the run's summed per-thread stage timing (the `--json` result's `diagnostics.stage_timing`, with the leaf stage's share under `run.leafStageTiming`) to this file after a successful run. Diagnostics only. |
 | `PROJ_DATA` | geospatial commands | Directories holding `proj.db` and local grids |
 | `TMPDIR` | validate | First candidate for validation scratch files |
 

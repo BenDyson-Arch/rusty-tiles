@@ -23,6 +23,7 @@ pub struct ValidationRequest {
     expected: Option<ExpectedProfile>,
     memory_budget: Option<u64>,
     jobs: Option<std::num::NonZeroUsize>,
+    coarse_crossings: bool,
 }
 impl ValidationRequest {
     pub fn new(input: impl Into<PathBuf>) -> Self {
@@ -33,6 +34,7 @@ impl ValidationRequest {
             expected: None,
             memory_budget: None,
             jobs: None,
+            coarse_crossings: false,
         }
     }
     /// Requires `profile`. An archive declaring HLOD itself (`asset.extras.rustyTiles.lod` or
@@ -67,6 +69,18 @@ impl ValidationRequest {
     pub fn jobs(mut self, jobs: std::num::NonZeroUsize) -> Self {
         self.jobs = Some(jobs);
         self
+    }
+    /// Also counts coarse self-intersections on HLOD archives
+    /// (`interfaceCensus.coarseCrossings`): pairs of faces of one coarse tile that meet
+    /// outside their common corners. A report only: no verdict, warning or exit code depends
+    /// on it. Off by default for its cost (the census reads every coarse face against its
+    /// neighbours).
+    pub fn coarse_crossings(mut self) -> Self {
+        self.coarse_crossings = true;
+        self
+    }
+    pub(crate) fn counts_coarse_crossings(&self) -> bool {
+        self.coarse_crossings
     }
     pub(crate) fn input(&self) -> &Path {
         &self.input
@@ -325,6 +339,47 @@ pub struct CoarseNormalCensus {
     pub inverted_tiles_by_depth: Vec<u64>,
     pub inverted_faces_by_depth: Vec<u64>,
 }
+/// One coarse tile listed in [`CoarseCrossingCensus`].
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoarseCrossingTile {
+    /// The tile's index in validation's preorder traversal, as validation messages name
+    /// tiles.
+    pub tile: u64,
+    /// Cell depth.
+    pub depth: u64,
+    pub faces: u64,
+    pub geometric_error: f64,
+    pub present_pairs: u64,
+    pub new_pairs: u64,
+}
+// A validated geometricError is finite, so equality is an equivalence.
+impl Eq for CoarseCrossingTile {}
+/// Coarse self-intersections (#420): pairs of faces of one coarse tile that meet outside
+/// their common corners (faces may meet only at a shared vertex or along a shared edge),
+/// decided exactly on the decoded canonical f32 positions. A pair is present when both
+/// faces are faces of the tile's immediate children together (leaf children are the source), and new
+/// otherwise. Reported only: crossings within a tile's geometricError are permitted, so the
+/// census never fails validation.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoarseCrossingCensus {
+    /// Coarse tiles checked in full, and their distinct faces (by corner set).
+    pub tiles: u64,
+    pub faces: u64,
+    /// Coarse tiles whose check exceeded its own work or workspace bound, not counted
+    /// otherwise (`notInspected` names `coarseCrossings.workBudget`).
+    pub incomplete_tiles: u64,
+    /// Tiles with an improper pair, and those with a new one.
+    pub crossing_tiles: u64,
+    pub new_tiles: u64,
+    pub present_pairs: u64,
+    pub new_pairs: u64,
+    pub present_pairs_by_depth: Vec<u64>,
+    pub new_pairs_by_depth: Vec<u64>,
+    /// At most 16 tiles: the most new pairs first, then present pairs, then lowest tile.
+    pub listed_tiles: Vec<CoarseCrossingTile>,
+}
 /// Archive-only incidence, cap and omission observations; no producer counters are used.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -357,8 +412,13 @@ pub struct InterfaceCensus {
     /// D5 amendment A3 (declared `textureError`): content tiles refinable to finer
     /// texels, and those whose geometricError is within 1% of the texture-implied error.
     pub texture_refinable_tiles: u64,
+    /// Coarse contents checked against all six extrema of their decoded leaf union.
+    pub surface_error_extent_tiles: u64,
     pub texture_bound_tiles: u64,
     pub coarse_normals: CoarseNormalCensus,
+    /// Present only when requested ([`ValidationRequest::coarse_crossings`]).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub coarse_crossings: Option<CoarseCrossingCensus>,
 }
 /// The validation's scratch use, reported whenever any spill file was written.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]

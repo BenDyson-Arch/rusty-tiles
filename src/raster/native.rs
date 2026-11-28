@@ -1,4 +1,8 @@
 //! Narrow synchronous native owners. Explicit close precedes root publication.
+#![expect(
+    clippy::undocumented_unsafe_blocks,
+    reason = "GDAL FFI written before SAFETY comments were required; new modules document each block"
+)]
 use super::{
     display,
     grid::{GridPlan, StaticCrs},

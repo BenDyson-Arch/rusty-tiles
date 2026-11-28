@@ -20,18 +20,18 @@
     },
     "mesh": {
       "#order": "b4a31f26344da2d224b707fa34c3666cae34c1fed5951021a25c9bf4b8050879",
-      "@3dtilesIndex1@": "f1726a7521c4be79b1b663faa390a47b012eb0871c1abfead5237dd3b4b48327",
+      "@3dtilesIndex1@": "36cc58487038cc91b490bfd5dd2b62f0bc23cb808804be57911e54b29d8a7418",
       "content/f0-d0.glb": "8df395ba1d20627992b050ee913ef6d3c825f4b3e7cd92ad68f7893eb5083842",
       "conversion.json": "18f947989f35453d0757e5b7d91ef369740c301844954067f2ff09e25fae6866",
-      "tileset.json": "7bd0b91303ba0449bbb9c4fa4acc0ee69a557e286782f83eda17ab7ed9cc394a"
+      "tileset.json": "f98f0dc07bed4c2f07bf99988629b999c30b3a48c2b34296d3238fae498b5491"
     },
     "mesh-balanced": {
-      "#archive": "e035266d6c29fac2364c50825385f77707d0cee7d644cf5991e8376b5f37bc94",
+      "#archive": "ed41fca799f75824f85fa98c81ef78421b35953ac031a25dad03fa73a1e8efc5",
       "#order": "b4a31f26344da2d224b707fa34c3666cae34c1fed5951021a25c9bf4b8050879",
-      "@3dtilesIndex1@": "7abe3fdd2ae264d1a3a55a99454dc30ba6c9663fe183f426a4094b92f0ea27ff",
-      "content/f0-d0.glb": "12bffb3527fc8e1df310dfc001bc1ed2dcd46f45bb01112ec8662bd8aca0d289",
-      "conversion.json": "d4d419fde8cffcb2768970f743aeaf99758766479f6f6c035b248cec255f98a9",
-      "tileset.json": "e9d977b3b4918e49de0027827f08eeca4296e8f2df8aa011ac23fc4770b1e5ea"
+      "@3dtilesIndex1@": "7d93f2c8528537dd7afd9a7ef03bc52e4e899ec340b14e4342ee75ca3b084964",
+      "content/f0-d0.glb": "49096afc734719931080771664654ad115b12a49102750db3300ea62da615eef",
+      "conversion.json": "f0445dbfc737ac55f171d457ef5a331bc00dc836e6ee70b47827081dcf0fb139",
+      "tileset.json": "25c4cdf1b78ee8ff749394c5bf260b5a0eaa429d650ade86878e35739661efdd"
     }
   }
 }

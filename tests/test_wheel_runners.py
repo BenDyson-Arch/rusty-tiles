@@ -170,23 +170,36 @@ class WheelRunnerEvidence(unittest.TestCase):
                         self.assertIn(expected, evidence["runner_error"])
 
     @unittest.skipIf(os.name == "nt", "The test launcher uses a POSIX executable script")
-    def test_required_gltf_import_must_not_be_skipped(self):
+    def test_required_gltf_import_must_be_reported_as_passed(self):
         launcher = self.root / "blender"
-        skip = ("__main__.WheelAPI.test_blender_imports_decoded_plain_glb: "
-                "this Blender's Python lacks numpy, which its glTF importer needs")
-        for skips, required, expected in (
-            ([skip], True, "glTF import of decoded tiles did not run"),
-            ([skip], False, None),
-            (["__main__.WheelAPI.test_other: reason"], True, None),
+        test = "__main__.WheelAPI.test_blender_imports_decoded_plain_glb"
+        skip = f"{test}: this Blender's Python lacks numpy, which its glTF importer needs"
+        other = "__main__.WheelAPI.test_other"
+        absent = object()
+        not_passed = "glTF import of decoded tiles was not reported as passed"
+        for skips, passed, required, expected in (
+            ([skip], [other], True, "glTF import of decoded tiles did not run"),
+            ([skip], [other], False, None),
+            ([], [other, test], True, None),
+            # Renamed or removed: the other tests pass and nothing names the import test.
+            ([], [other, "__main__.WheelAPI.test_blender_imports_decoded_glb"], True, not_passed),
+            (["__main__.WheelAPI.test_other: reason"], [], True, not_passed),
+            # An older report without a list of passed tests, or a malformed one.
+            ([], absent, True, not_passed),
+            ([], absent, False, None),
+            ([], f"[{test}]", True, not_passed),
         ):
-            with self.subTest(skips=skips, required=required):
+            with self.subTest(skips=skips, passed=passed, required=required):
+                fields = {"ok": True, "tests_run": 12, "blender": "test-launcher", "skipped": len(skips),
+                          "skips": skips}
+                if passed is not absent:
+                    fields["passed"] = passed
                 launcher.write_text(
                     f"#!{sys.executable}\n"
                     "import json, os\nfrom pathlib import Path\n"
-                    "Path(os.environ['RUSTY_TILES_ACCEPTANCE_REPORT']).write_text("
-                    "json.dumps({'ok': True, 'tests_run': 12, 'blender': 'test-launcher', "
-                    f"'skipped': 1, 'skips': {skips!r}, "
-                    "'wheel_sha256': os.environ['RUSTY_TILES_ACCEPTANCE_WHEEL_SHA256']}))\n"
+                    f"fields = {fields!r}\n"
+                    "fields['wheel_sha256'] = os.environ['RUSTY_TILES_ACCEPTANCE_WHEEL_SHA256']\n"
+                    "Path(os.environ['RUSTY_TILES_ACCEPTANCE_REPORT']).write_text(json.dumps(fields))\n"
                 )
                 launcher.chmod(0o755)
                 flags = ["--require-gltf-import"] if required else []
@@ -199,6 +212,14 @@ class WheelRunnerEvidence(unittest.TestCase):
                     self.assertNotEqual(result.returncode, 0)
                     self.assertIs(evidence["ok"], False)
                     self.assertIn(expected, evidence["runner_error"])
+
+    def test_the_api_suite_reports_the_import_test_it_names(self):
+        # The name the runner requires is a test of the installed-wheel suite, which records
+        # the tests that passed.
+        import test_blender_wheel
+        suite = (ROOT / "bindings" / "python" / "tests" / "test_api.py").read_text()
+        self.assertIn(f"    def {test_blender_wheel.GLTF_IMPORT_TEST}(self):", suite)
+        self.assertIn('"passed": result.passed,', suite)
 
 
 class OfficialBlenderIntegrity(unittest.TestCase):

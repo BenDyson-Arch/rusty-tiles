@@ -54,13 +54,25 @@ families, even when CI does not run them; later slices extend them. Bulk
 evidence (raw runs, review transcripts, candidate and precode corpora,
 preparation output) goes to `~/.cache/rusty-tiles-evidence/` and is referenced
 from a tracked README by SHA-256 and the last commit that held it.
+Test inputs that a tracked generator reproduces byte for byte (stdlib Python,
+the same bytes on Linux, macOS and Windows) are not committed either: commit the
+generator and add its outputs to `bench/architecture_audit/generated-corpora.sha256`
+and a job in `scripts/test_corpora.py`, which tests and CI run before reading them;
+a missing or different file fails. Keep a file committed only when it cannot be
+regenerated exactly, and list it with its reason in
+`bench/architecture_audit/README.md`.
 `scripts/check_tree_budget.py` runs in CI and fails when any tracked file
 exceeds 1 MB or the tree, `bench/` or `vendor/` exceeds its total budget; raise a
 budget only with a stated reason. On 2026-10-14, after
 trimming generated result files (listed in `bench/MOVED_EVIDENCE.md`), the tree
 budget went from 21.6 to 24.0 MB and `bench/` from 11.8 to 12.5 MB, because real
-code grew with the large-mesh tiler and validator-scale work. Trim before raising
-again. `vendor/` holds only third-party source vendored
+code grew with the large-mesh tiler and validator-scale work. On 2026-11-13, once
+the validator corpora were generated at test time, they were lowered to 21.0 MB
+and 8.5 MB. On 2026-11-20 the tree budget was re-based to 23.1 MB, about 1.1x the
+tree, after about 1.4 MB of real code (the capture rework, mesh-inspect, the
+source weld, subset bakes, the run report and the texture crop store and sparse
+chains); a `bench/` trim of generated results follows separately. Trim before
+raising again. `vendor/` holds only third-party source vendored
 for a shipped feature, one pinned version per component, replaced rather than
 accumulated, with its own budget and an exact-path list of upstream files allowed
 over 1 MB. The guard sees only the final tree, so a PR that adds
@@ -82,6 +94,14 @@ Pass explicit two-worker options for operation-owned pools (for example vector
 that infer hardware concurrency, use a two-CPU process affinity where supported
 or another actual worker cap. Keep these local execution limits distinct from
 the product's supported configuration and resource acceptance claims.
+
+## Lint rules
+
+Encode a correction as a check, not as more text here: a ban in `clippy.toml` with
+a reason that says what to do instead, a lint in `Cargo.toml` `[lints]`, or a lint in
+the `scripts/lint_debt.py` ratchet ([CONTRIBUTING.md](CONTRIBUTING.md#lint-rules)).
+Do not add `#[expect]` exemptions or use `lint_debt.py --allow-growth` to make a check
+pass; fix the code, or ask.
 
 ## Changelog
 

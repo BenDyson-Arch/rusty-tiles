@@ -595,23 +595,45 @@ const WITNESS_BLOCKS: usize = 16;
 pub(in crate::mesh_large) fn scalar_occlusion(slot: TextureSlot, profile: Profile) -> bool {
     slot == TextureSlot::Occlusion && profile != Profile::Quality
 }
+/// ETC1 hint search of every leaf UASTC encode, each profile and ladder step.
+/// The hints only matter when a viewer transcodes UASTC to ETC1, which CesiumJS
+/// does only on a GPU with none of ASTC, BC7 and BC1/3; every other decode, and
+/// so every decoded-image gate here, is unchanged, at about half the leaf UASTC
+/// encode CPU. Coarse pages, and MASK pages on either tier (which `escalate`
+/// encodes with the coarse policy), keep [`codec::Etc1Hints::Full`].
+pub(in crate::mesh_large) const LEAF_UASTC_ETC1_HINTS: codec::Etc1Hints = codec::Etc1Hints::Fastest;
+
+fn leaf_settings((mode, params): (codec::Mode, codec::Params)) -> (codec::Mode, codec::Params) {
+    match mode {
+        codec::Mode::Uastc { .. } => (
+            mode,
+            codec::Params {
+                etc1_hints: LEAF_UASTC_ETC1_HINTS,
+                ..params
+            },
+        ),
+        codec::Mode::Etc1s { .. } => (mode, params),
+    }
+}
 /// Encoder mode and parameters of one slot and lossy profile.
 pub(in crate::mesh_large) fn codec_settings(
     slot: TextureSlot,
     profile: Profile,
 ) -> (codec::Mode, codec::Params) {
     let (mode, params) = coarse_codec_settings(slot, profile);
-    if class(slot) == Class::Colour && profile == Profile::Balanced {
-        (
-            codec::Mode::Uastc { zstd: true },
-            codec::Params {
-                effort: 0,
-                ..params
-            },
-        )
-    } else {
-        (mode, params)
-    }
+    leaf_settings(
+        if class(slot) == Class::Colour && profile == Profile::Balanced {
+            (
+                codec::Mode::Uastc { zstd: true },
+                codec::Params {
+                    effort: 0,
+                    ..params
+                },
+            )
+        } else {
+            (mode, params)
+        },
+    )
 }
 /// Retained HLOD policy; also used for MASK pages, outside the colour measurement.
 fn coarse_codec_settings(slot: TextureSlot, profile: Profile) -> (codec::Mode, codec::Params) {
@@ -648,10 +670,12 @@ fn coarse_codec_settings(slot: TextureSlot, profile: Profile) -> (codec::Mode, c
                 codec::Transfer::Linear
             },
             mipmaps: false,
+            etc1_hints: codec::Etc1Hints::Full,
         },
     )
 }
-/// Encoder mode and parameters of one lossy ladder step.
+/// Encoder mode and parameters of one lossy leaf ladder step.
+#[cfg(test)]
 pub(super) fn step_settings(
     slot: TextureSlot,
     profile: Profile,
@@ -680,10 +704,14 @@ fn step_settings_for(
             ))
         }
     };
-    Ok((
+    let settings = (
         codec::Mode::Uastc { zstd: true },
         codec::Params { effort, ..params },
-    ))
+    );
+    Ok(match tier {
+        Tier::Leaf => leaf_settings(settings),
+        Tier::Coarse => settings,
+    })
 }
 
 pub(in crate::mesh_large) fn workspace_charge(
@@ -724,8 +752,17 @@ pub(in crate::mesh_large) fn workspace_charge(
     Ok(charge)
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
-#[allow(clippy::too_many_arguments)]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 pub(in crate::mesh_large) fn encode(
     dimensions: [u32; 2],
     rgba: &[u8],
@@ -767,7 +804,10 @@ enum Levels<'a> {
 /// [`encode`] for a packed island page: a complete chain whose islands (`labels`, one
 /// per texel, 0 outside every allocation) stay isolated through level `isolated`
 /// ([`sparse_mips::build_islands`]); dimensions may be any multiple of four.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 pub(in crate::mesh_large) fn encode_islands(
     dimensions: [u32; 2],
     rgba: &[u8],
@@ -796,7 +836,10 @@ pub(in crate::mesh_large) fn encode_islands(
 /// [`encode`] for a page whose sampler has no mipmap minification filter: level 0 alone,
 /// since such a sampler never reads a reduced level (S3 review P3-2). Lossless pages are
 /// the same exact PNG as [`encode_islands`] delivers.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 pub(in crate::mesh_large) fn encode_base(
     dimensions: [u32; 2],
     rgba: &[u8],
@@ -820,7 +863,10 @@ pub(in crate::mesh_large) fn encode_base(
     )
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn encode_levels(
     dimensions: [u32; 2],
     rgba: &[u8],
@@ -1001,7 +1047,10 @@ fn mask_gate(
     }))
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn escalate(
     chain: &sparse_mips::Chain,
     slot: TextureSlot,
@@ -1064,7 +1113,7 @@ fn escalate(
         }
         let rrr = scalar && step == Step::Profile;
         let earlier = (&misses[..], &witnesses[..]);
-        if let Some(miss) = probe(chain, &prepared, (slot, profile, step), earlier)? {
+        if let Some(miss) = probe(chain, &prepared, (tier, slot, profile, step), earlier)? {
             misses.push(miss);
             continue;
         }
@@ -1226,7 +1275,10 @@ fn prepare_levels(
 
 /// One KTX2 step: encode the prepared chain, then gate every decoded level.
 /// `Ok(Err(miss))` is a gate miss the ladder may climb past.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn lossy_step(
     chain: &sparse_mips::Chain,
     prepared: &Prepared,
@@ -1381,13 +1433,14 @@ fn block_row(rgba: &[u8], width: usize, blocks: &[u32]) -> Vec<u8> {
 fn probe(
     chain: &sparse_mips::Chain,
     prepared: &Prepared,
-    (slot, profile, step): (TextureSlot, Profile, Step),
+    (tier, slot, profile, step): (Tier, TextureSlot, Profile, Step),
     (misses, witnesses): (&[GateMiss], &[(usize, Vec<u32>)]),
 ) -> Result<Option<GateMiss>, JobError> {
     if step == Step::Profile {
         return Ok(None);
     }
-    let (mode, params) = step_settings(slot, profile, step)?;
+    // The page's own tier, so the probe encodes exactly as the step would.
+    let (mode, params) = step_settings_for(tier, slot, profile, step)?;
     for (index, blocks) in witnesses {
         let level = &chain.levels[*index];
         let w = level.width as usize;
@@ -1447,7 +1500,10 @@ fn probe(
 /// The last step: exact PNG of the prepared level 0 (MASK-adjusted and
 /// guarded like every KTX2 step), decoded independently and checked by the
 /// same level-0 gates. A PNG that changes its input is a hard failure.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 fn png_step(
     chain: &sparse_mips::Chain,
     prepared: &Prepared,
@@ -1521,7 +1577,13 @@ fn png_step(
     }))
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 /// One exact PNG per authored ID level. Level 0 is the delivered texture
 /// (sampled NEAREST, no runtime mips); coarser levels are ID-safe pages for
 /// coarse proxies. Every level is decoded independently and must equal the
@@ -1532,7 +1594,13 @@ pub(in crate::mesh_large) struct IdDelivery {
     pub levels: Vec<Vec<u8>>,
     pub receipts: Vec<Value>,
 }
-#[cfg_attr(not(test), allow(dead_code))] // Retained for bounded unit-test fixtures; production uses the streamed facade.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Retained for bounded unit-test fixtures; production uses the streamed facade"
+    )
+)]
 pub(in crate::mesh_large) fn encode_id_chain(
     chain: &sparse_mips::Chain,
     memory_limit: u64,
@@ -2192,6 +2260,78 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    #[test]
+    fn leaf_uastc_encodes_use_fastest_etc1_hints() {
+        assert_eq!(LEAF_UASTC_ETC1_HINTS, codec::Etc1Hints::Fastest);
+        let slots = [
+            TextureSlot::BaseColor,
+            TextureSlot::Emissive,
+            TextureSlot::MetallicRoughness,
+            TextureSlot::Occlusion,
+            TextureSlot::Normal,
+        ];
+        for profile in [Profile::Fast, Profile::Balanced, Profile::Quality] {
+            for slot in slots {
+                let leaf = codec_settings(slot, profile);
+                let leaf_steps = Step::LOSSY
+                    .map(|step| step_settings_for(Tier::Leaf, slot, profile, step).unwrap());
+                for (mode, params) in std::iter::once(leaf).chain(leaf_steps) {
+                    let expected = match mode {
+                        codec::Mode::Uastc { .. } => codec::Etc1Hints::Fastest,
+                        codec::Mode::Etc1s { .. } => codec::Etc1Hints::Full,
+                    };
+                    assert_eq!(params.etc1_hints, expected, "{slot:?}/{profile:?}/{mode:?}");
+                }
+                for step in Step::LOSSY {
+                    let (_, params) = step_settings_for(Tier::Coarse, slot, profile, step).unwrap();
+                    assert_eq!(
+                        params.etc1_hints,
+                        codec::Etc1Hints::Full,
+                        "{slot:?}/{profile:?}"
+                    );
+                }
+            }
+        }
+        // Quality colour is UASTC effort 2 on both tiers: the published pages
+        // differ only in their ETC1 hints, so every decoded level is identical.
+        let edge = 64;
+        let rgba = photo_page(edge);
+        let support = vec![1; edge * edge];
+        let deliver = |ladder| {
+            encode(
+                [edge as u32; 2],
+                &rgba,
+                &support,
+                TextureSlot::BaseColor,
+                Profile::Quality,
+                MEMORY,
+                None,
+                ladder,
+            )
+            .unwrap()
+        };
+        let leaf = deliver(LADDER);
+        let coarse = deliver(Ladder {
+            tier: Tier::Coarse,
+            check: &no_check,
+        });
+        assert_eq!(leaf.escalation, coarse.escalation);
+        assert_eq!(leaf.mip_count, coarse.mip_count);
+        assert!(
+            leaf.bytes != coarse.bytes,
+            "leaf page kept the full ETC1 hints"
+        );
+        let mut size = edge as u32;
+        for level in 0..leaf.mip_count {
+            assert!(
+                codec::decode_level_rgba(&leaf.bytes, level, size, size).unwrap()
+                    == codec::decode_level_rgba(&coarse.bytes, level, size, size).unwrap(),
+                "level {level}"
+            );
+            size = (size / 2).max(1);
         }
     }
 
@@ -2909,6 +3049,7 @@ mod tests {
             effort: 1,
             transfer: codec::Transfer::Srgb,
             mipmaps: false,
+            etc1_hints: codec::Etc1Hints::Full,
         };
         let refused = codec::encode_ktx2_mips_decoded(&levels, mode, params).unwrap_err();
         assert_eq!(refused.kind(), JobErrorKind::InvalidState);
@@ -3041,7 +3182,7 @@ mod tests {
                 let skip = probe(
                     &chain,
                     &prepared,
-                    (slot, profile, step),
+                    (Tier::Leaf, slot, profile, step),
                     (&misses[..], &witnesses[..]),
                 )
                 .unwrap();

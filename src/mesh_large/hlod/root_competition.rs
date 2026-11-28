@@ -45,7 +45,10 @@ fn improves(old: Option<f64>, new: f64) -> bool {
     new.is_finite() && old.is_none_or(|g| new < g && new <= 0.99 * g)
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "predates the lint policy; scripts/lint_debt.py keeps the count from growing"
+)]
 pub(super) fn select(
     job: &Job<'_, '_>,
     key: TileKey,
@@ -119,6 +122,18 @@ pub(super) fn select(
             }
             if receipt.accepted {
                 *prepared = Some(measured);
+                // The candidate is a last resort (`root_candidate`): record what it replaced.
+                outcome.retry = Some(match outcome.retry {
+                    Some(r) => geometry::Retry {
+                        resort: "rootCandidate",
+                        ..r
+                    },
+                    None => geometry::Retry {
+                        resort: "rootCandidate",
+                        primary_contraction_failed: false,
+                        root_competition: true,
+                    },
+                });
                 outcome.built = Some(built);
                 *published_attempt = index;
             }

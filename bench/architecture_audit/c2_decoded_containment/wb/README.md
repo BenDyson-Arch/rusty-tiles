@@ -3,7 +3,8 @@
 This directory is O-WB's part of the C2-WB work-bound correction (contract draft v2.1,
 `/tmp/rusty-tiles-c2wb-contract-20261012/`, sections 3.1, 3.2, 3.6, 5, 5.1 and 9.A1/9.B):
 
-- one or more fixtures per class of the calibration matrix, at a CI size (committed)
+- one or more fixtures per class of the calibration matrix, at a CI size ([generated](../README.md#generated-test-corpora),
+  not committed, except `nodes-rotated.3tz`)
   and at the matrix size (`--large`, generated into `large/`, not committed);
 - one identity fixture per C2-WB weight;
 - the phase-1 chain-bit controls;

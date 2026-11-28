@@ -16,6 +16,21 @@ type Result<T> = std::result::Result<T, JobError>;
 fn invalid(message: impl Into<String>) -> JobError {
     JobError::new(JobErrorKind::InvalidInput, message)
 }
+/// One range of the parallel payload validation.
+enum ValidationTask<'v> {
+    Extrema(usize, AccessorView<'v>, std::ops::Range<usize>),
+    Role(source::VertexRole, AccessorView<'v>, std::ops::Range<usize>),
+    Index(AccessorView<'v>, usize, std::ops::Range<usize>),
+    Tangent(
+        AccessorView<'v>,
+        Option<AccessorView<'v>>,
+        std::ops::Range<usize>,
+    ),
+}
+
+/// Elements one parallel validation task checks (whole triangles for tangent checks).
+const VALIDATE_TASK_ELEMENTS: usize = 1 << 16;
+
 fn unsupported(message: impl Into<String>) -> JobError {
     JobError::new(JobErrorKind::Unsupported, message)
 }
@@ -420,6 +435,177 @@ impl StreamSource {
         }
         Ok(())
     }
+    /// At most the bytes of [`Self::validate_payload_parallel`]'s task list and results: one
+    /// task per range of every accessor's elements (extrema), and of every authored
+    /// primitive's attributes, indices and tangent corners (counted per primitive, so an
+    /// accessor shared or reused with different position counts is counted each time).
+    pub(crate) fn validation_task_bytes(&self) -> u64 {
+        let ranges = |count: usize| count.div_ceil(VALIDATE_TASK_ELEMENTS - 2) as u64;
+        let views: u64 = self
+            .document
+            .accessor_views()
+            .map(|v| ranges(v.count))
+            .sum();
+        let primitives: u64 = self
+            .document
+            .payload_primitives()
+            .map(|p| {
+                let attributes: u64 = p.attributes().map(|(_, v)| ranges(v.count)).sum();
+                attributes + p.indices.map_or(0, |v| ranges(v.count)) + ranges(p.count)
+            })
+            .sum();
+        let each = (std::mem::size_of::<ValidationTask<'_>>()
+            + std::mem::size_of::<std::sync::Mutex<Option<Option<source::Extrema>>>>())
+            as u64;
+        views.saturating_add(primitives).saturating_mul(each)
+    }
+
+    /// [`Self::validate_payload`] on up to `workers` threads: every accessor's elements and
+    /// every authored primitive's attribute, index and tangent checks run in ranges of
+    /// [`VALIDATE_TASK_ELEMENTS`]. Each accessor's extrema are combined from its ranges and
+    /// verified in accessor order. On any failure the serial pass runs instead and reports
+    /// exactly its verdict: the first failure in accessor, then primitive, then element order.
+    /// `check` runs on the calling thread.
+    pub(crate) fn validate_payload_parallel(
+        &self,
+        buffer_bytes: usize,
+        workers: usize,
+        check: &mut dyn FnMut() -> Result<()>,
+    ) -> Result<()> {
+        use super::tasks::{run, Ran};
+        use std::sync::atomic::Ordering::Relaxed;
+        let ranges = |count: usize, step: usize| {
+            (0..count)
+                .step_by(VALIDATE_TASK_ELEMENTS - VALIDATE_TASK_ELEMENTS % step)
+                .map(move |start| {
+                    start
+                        ..(start + VALIDATE_TASK_ELEMENTS - VALIDATE_TASK_ELEMENTS % step)
+                            .min(count)
+                })
+        };
+        let views: Vec<AccessorView<'_>> = self.document.accessor_views().collect();
+        let mut tasks = Vec::new();
+        for (i, view) in views.iter().enumerate() {
+            tasks.extend(ranges(view.count, 1).map(|r| ValidationTask::Extrema(i, *view, r)));
+        }
+        // The serial pass's de-duplication, in its order.
+        let mut attributes = HashSet::new();
+        let mut indices = HashSet::new();
+        for p in self.document.payload_primitives() {
+            for (role, view) in p.attributes() {
+                let cached_role = match role {
+                    source::VertexRole::Texcoord(_) => source::VertexRole::Texcoord(0),
+                    role => role,
+                };
+                if attributes.insert((cached_role, view.index)) {
+                    tasks
+                        .extend(ranges(view.count, 1).map(|r| ValidationTask::Role(role, view, r)));
+                }
+            }
+            if let Some(view) = p
+                .indices
+                .filter(|v| indices.insert((v.index, p.position.count)))
+            {
+                tasks.extend(
+                    ranges(view.count, 1).map(|r| ValidationTask::Index(view, p.position.count, r)),
+                );
+            }
+            if let Some(tangent) = p.tangent {
+                tasks.extend(
+                    ranges(p.count, 3).map(|r| ValidationTask::Tangent(tangent, p.indices, r)),
+                );
+            }
+        }
+        let ran = run(tasks.len(), workers, check, |i, stop| {
+            let stopped = || JobError::new(JobErrorKind::Cancelled, "validation stopped");
+            match &tasks[i] {
+                ValidationTask::Extrema(_, view, range) => {
+                    let mut reader = self.reader(view, buffer_bytes);
+                    let mut extrema = source::Extrema::new();
+                    for i in range.clone() {
+                        if i.is_multiple_of(4096) && stop.load(Relaxed) {
+                            return Err(stopped());
+                        }
+                        let values = reader.raw_values(i)?;
+                        for (c, value) in values[..view.width].iter().enumerate() {
+                            extrema.observe(c, *value)?;
+                        }
+                    }
+                    Ok(Some(extrema))
+                }
+                ValidationTask::Role(role, view, range) => {
+                    let mut reader = self.reader(view, buffer_bytes);
+                    for i in range.clone() {
+                        if i.is_multiple_of(4096) && stop.load(Relaxed) {
+                            return Err(stopped());
+                        }
+                        let values = reader.values(i)?;
+                        role.check_payload(&values[..view.width])?;
+                    }
+                    Ok(None)
+                }
+                ValidationTask::Index(view, vertices, range) => {
+                    let mut reader = self.reader(view, buffer_bytes);
+                    for i in range.clone() {
+                        if i.is_multiple_of(4096) && stop.load(Relaxed) {
+                            return Err(stopped());
+                        }
+                        source::check_index(reader.scalar(i)? as usize, *vertices, view.component)?;
+                    }
+                    Ok(None)
+                }
+                ValidationTask::Tangent(tangent, indices, range) => {
+                    let mut tangent = self.reader(tangent, buffer_bytes);
+                    let mut indices = indices.map(|v| self.reader(&v, buffer_bytes));
+                    for start in range.clone().step_by(3) {
+                        if start.is_multiple_of(3072) && stop.load(Relaxed) {
+                            return Err(stopped());
+                        }
+                        let mut signs = [0.; 3];
+                        for (corner, sign) in signs.iter_mut().enumerate() {
+                            let vertex = if let Some(indices) = &mut indices {
+                                indices.scalar(start + corner)? as usize
+                            } else {
+                                start + corner
+                            };
+                            *sign = tangent.raw_values(vertex)?[3];
+                        }
+                        if signs[1..].iter().any(|s| *s != signs[0]) {
+                            return Err(unsupported(
+                                "mixed triangle TANGENT W has undefined tangent space",
+                            ));
+                        }
+                    }
+                    Ok(None)
+                }
+            }
+        })?;
+        let found = match ran {
+            Ran::All(found) => found,
+            // The serial pass reports the first failure in order. Should it pass where a range
+            // failed (a transient read error), that failure stands.
+            Ran::Failed(failure) => {
+                self.validate_payload(buffer_bytes, check)?;
+                return Err(failure);
+            }
+        };
+        let mut extrema: Vec<source::Extrema> =
+            views.iter().map(|_| source::Extrema::new()).collect();
+        for (task, found) in tasks.iter().zip(&found) {
+            if let (ValidationTask::Extrema(view, ..), Some(found)) = (task, found) {
+                extrema[*view].merge(found);
+            }
+        }
+        if views
+            .iter()
+            .zip(&extrema)
+            .any(|(view, e)| e.verify(view).is_err())
+        {
+            return self.validate_payload(buffer_bytes, check);
+        }
+        Ok(())
+    }
+
     /// Retain F1a's declared-accessor and authored-primitive payload checks even for metadata
     /// in an unselected mesh. Images are confined dependencies, with decoding deferred.
     pub(crate) fn validate_payload(
@@ -646,6 +832,117 @@ mod tests {
         symlink("moved", dir.path().join("nested")).unwrap();
         let error = source.verify_unchanged().unwrap_err();
         assert!(error.message().contains("source changed during capture"));
+    }
+
+    /// Parallel validation reports exactly the serial pass's error, kind and message, when
+    /// checks fail inside workers (beyond the first task's range) and when several fail in
+    /// different phases or orders; a valid source passes on any worker count.
+    #[test]
+    fn parallel_validation_reports_the_serial_verdict() {
+        const V: usize = 3 * 70_000;
+        /// Changes to the positions, normals, indices and tangents of a valid source.
+        type EditFn = dyn Fn(&mut [[f32; 3]], &mut [[f32; 3]], &mut [u32], &mut [[f32; 4]]);
+        let write = |dir: &Path, edit: &EditFn, max_x: f32| {
+            let mut positions: Vec<[f32; 3]> = (0..V)
+                .map(|i| [(i % 1000) as f32, (i / 1000) as f32, 0.])
+                .collect();
+            let mut normals = vec![[0f32, 0., 1.]; V];
+            let mut indices: Vec<u32> = (0..V as u32).collect();
+            let mut tangents = vec![[1f32, 0., 0., 1.]; V];
+            edit(&mut positions, &mut normals, &mut indices, &mut tangents);
+            let mut bytes = Vec::new();
+            for v in positions.iter().chain(&normals).flatten() {
+                bytes.extend(v.to_le_bytes());
+            }
+            for i in &indices {
+                bytes.extend(i.to_le_bytes());
+            }
+            for v in tangents.iter().flatten() {
+                bytes.extend(v.to_le_bytes());
+            }
+            fs::write(dir.join("data.bin"), &bytes).unwrap();
+            let doc = json!({
+                "asset":{"version":"2.0"},"buffers":[{"uri":"data.bin","byteLength":bytes.len()}],
+                "bufferViews":[
+                    {"buffer":0,"byteOffset":0,"byteLength":V * 12},
+                    {"buffer":0,"byteOffset":V * 12,"byteLength":V * 12},
+                    {"buffer":0,"byteOffset":V * 24,"byteLength":V * 4},
+                    {"buffer":0,"byteOffset":V * 28,"byteLength":V * 16}],
+                "accessors":[
+                    {"bufferView":0,"componentType":5126,"count":V,"type":"VEC3",
+                        "min":[0,0,0],"max":[max_x,(V / 1000 - 1) as f32,0]},
+                    {"bufferView":1,"componentType":5126,"count":V,"type":"VEC3"},
+                    {"bufferView":2,"componentType":5125,"count":V,"type":"SCALAR"},
+                    {"bufferView":3,"componentType":5126,"count":V,"type":"VEC4"}],
+                "meshes":[{"primitives":[{"attributes":{"POSITION":0,"NORMAL":1,"TANGENT":3},
+                    "indices":2}]}],
+                "nodes":[{"mesh":0}],"scenes":[{"nodes":[0]}]
+            });
+            let input = dir.join("source.gltf");
+            fs::write(&input, serde_json::to_vec(&doc).unwrap()).unwrap();
+            input
+        };
+        type Edit = Box<EditFn>;
+        let cases: Vec<(&str, Edit, f32)> = vec![
+            ("valid", Box::new(|_, _, _, _| {}), 999.),
+            ("index", Box::new(|_, _, i, _| i[150_000] = V as u32), 999.),
+            // A triangle whose TANGENT W signs differ (indexed corners), past the first range.
+            (
+                "tangent sign",
+                Box::new(|_, _, _, t| t[190_001][3] = -1.),
+                999.,
+            ),
+            // A W that is not ±1 fails the role check before any sign comparison.
+            (
+                "tangent role before sign",
+                Box::new(|_, _, _, t| {
+                    t[100_002][3] = -1.;
+                    t[150_000][3] = 0.5;
+                }),
+                999.,
+            ),
+            (
+                "normal before index",
+                Box::new(|_, n, i, _| {
+                    i[70_000] = V as u32;
+                    n[100_000] = [0., 0., 2.];
+                }),
+                999.,
+            ),
+            (
+                "nonfinite before normal",
+                Box::new(|p, n, _, _| {
+                    n[5] = [0., 0., 2.];
+                    p[170_000] = [f32::NAN, 0., 0.];
+                }),
+                999.,
+            ),
+            ("extrema", Box::new(|_, _, _, _| {}), 998.),
+        ];
+        for (name, edit, max_x) in cases {
+            let dir = tempfile::tempdir().unwrap();
+            let input = write(dir.path(), &edit, max_x);
+            let source = StreamSource::open(&input, &mut || Ok(())).unwrap();
+            let serial = source.validate_payload(1 << 12, &mut || Ok(()));
+            assert_eq!(serial.is_ok(), name == "valid", "{name}: {serial:?}");
+            for workers in [1, 3, 8] {
+                let parallel = source.validate_payload_parallel(1 << 12, workers, &mut || Ok(()));
+                match (&serial, parallel) {
+                    (Ok(()), Ok(())) => {}
+                    (Err(expected), Err(found)) => {
+                        assert_eq!(found.kind(), expected.kind(), "{name}, {workers} workers");
+                        assert_eq!(
+                            found.to_string(),
+                            expected.to_string(),
+                            "{name}, {workers} workers"
+                        );
+                    }
+                    (expected, found) => {
+                        panic!("{name}, {workers} workers: {expected:?} vs {found:?}")
+                    }
+                }
+            }
+        }
     }
 
     #[test]

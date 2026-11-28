@@ -8,7 +8,10 @@ use super::{
     leaves::producer,
     phases::{Phase, PhaseSeconds, Phases, StepProgress},
     resources::MemoryBudget,
+    run_report::RunReport,
     source_crs::{MeshSourceCrs, MeshSourceCrsReport},
+    subset::{MeshSubset, MeshSubsetReport},
+    weld::{MeshWeld, MeshWeldReport},
 };
 use crate::{
     mesh_archive::ResolvedPlacement, runtime::Staging, CleanupDiagnostic, JobError, JobErrorKind,
@@ -77,8 +80,12 @@ pub struct TilerRequest {
     scratch_dir: Option<PathBuf>,
     placement: MeshPlacement,
     source_crs: Option<MeshSourceCrs>,
+    subset: Option<MeshSubset>,
+    weld: Option<MeshWeld>,
     policy: OutputPolicy,
     memory_budget: Option<u64>,
+    report_path: Option<PathBuf>,
+    stage_timing: bool,
     #[cfg(test)]
     hlod: super::hlod::Settings,
     /// Test seam: smaller leaves, so small inputs get coarse levels.
@@ -106,8 +113,12 @@ impl TilerRequest {
             scratch_dir: None,
             placement: MeshPlacement::Local,
             source_crs: None,
+            subset: None,
+            weld: None,
             policy: OutputPolicy::CreateNew,
             memory_budget: None,
+            report_path: None,
+            stage_timing: false,
             #[cfg(test)]
             hlod: super::hlod::Settings::default(),
             #[cfg(test)]
@@ -166,6 +177,20 @@ impl TilerRequest {
         self.scratch_dir = Some(path.into());
         self
     }
+    /// Write the run report (`docs/MESH.md`, "Run report") to `path`: a JSON summary
+    /// rewritten atomically as each stage finishes, so a stopped run leaves a valid partial
+    /// report. It is first written once the request is accepted, before the source is read
+    /// (a report that cannot be written refuses the run), and never enters the archive.
+    pub fn with_report_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.report_path = Some(path.into());
+        self
+    }
+    /// Report the whole run's stage timing as `TilerDiagnostics::stage_timing` (the CLI
+    /// asks for it when `RUSTY_TILES_STAGE_TIMING` names a file). Diagnostics only.
+    pub fn with_stage_timing(mut self, stage_timing: bool) -> Self {
+        self.stage_timing = stage_timing;
+        self
+    }
     pub fn with_placement(mut self, placement: MeshPlacement) -> Self {
         self.placement = placement;
         self
@@ -174,6 +199,19 @@ impl TilerRequest {
     /// rigid placement: the root transform is derived from the source.
     pub fn with_source_crs(mut self, source_crs: MeshSourceCrs) -> Self {
         self.source_crs = Some(source_crs);
+        self
+    }
+    /// Bake only the source triangles whose centroid lies in `subset`'s region: post-node
+    /// glTF x and -z for a local source, WGS84 longitude and latitude with a source CRS.
+    /// Placement, the source CRS frame and the tile grid stay those of the whole source.
+    pub fn with_subset(mut self, subset: MeshSubset) -> Self {
+        self.subset = Some(subset);
+        self
+    }
+    /// Weld source vertex positions before capture (opt-in, reported): see [`MeshWeld`]. The
+    /// original positions are retained for geometric-error certification.
+    pub fn with_weld(mut self, weld: MeshWeld) -> Self {
+        self.weld = Some(weld);
         self
     }
     pub fn with_output_policy(mut self, policy: OutputPolicy) -> Self {
@@ -236,6 +274,13 @@ pub struct TilerReport {
     /// The resolved source CRS; omitted for local sources.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_crs: Option<MeshSourceCrsReport>,
+    /// A subset bake's region, kept count and extent; omitted for a whole-source bake.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subset: Option<MeshSubsetReport>,
+    /// An opt-in weld's tolerance, merged count and largest displacement; omitted without
+    /// one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub weld: Option<MeshWeldReport>,
 }
 impl TilerReport {
     fn new(
@@ -292,6 +337,8 @@ impl TilerReport {
             root_transform: facts.root_transform,
             texel_ownership: leaf.texel_ownership.clone(),
             source_crs: capture.source_crs.clone(),
+            subset: capture.subset.clone(),
+            weld: capture.weld.clone(),
         }
     }
 }
@@ -301,6 +348,8 @@ pub struct CaptureDiagnostics {
     pub jobs_limited_by: &'static str,
     /// The sorts inside capture as planned under the memory budget.
     pub sort: super::capture_sort::SortPlan,
+    /// The direct assembly: its plan, vertex stores (resident, spilled, routed) and buckets.
+    pub assembly: super::assembly::AssemblyReport,
     pub available_memory_bytes: Option<u64>,
     pub memory_bound_bytes: u64,
     pub scratch_need_bytes: u64,
@@ -318,7 +367,10 @@ pub struct CaptureDiagnostics {
     pub run_scratch_peak_bytes: u64,
     pub run_scratch_bound_bytes: u64,
 }
+/// Run diagnostics. Fields are added as runs report more, so it is `non_exhaustive`: read
+/// it, do not build it.
 #[derive(Clone, Debug, Serialize)]
+#[non_exhaustive]
 pub struct TilerDiagnostics {
     pub requested_jobs: String,
     pub capture: CaptureDiagnostics,
@@ -333,6 +385,12 @@ pub struct TilerDiagnostics {
     pub memory: MemoryDiagnostics,
     /// HLOD stage run facts.
     pub hlod: HlodDiagnostics,
+    /// The whole run's summed per-thread stage timing (`schema`
+    /// `rusty_tiles_stage_timing_v1`; the leaf stage's share is `leaf_delivery.timing`),
+    /// when the request asked for it ([`TilerRequest::with_stage_timing`]); omitted
+    /// otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stage_timing: Option<serde_json::Value>,
 }
 
 /// D8: the resolved budget and what each stage planned and needed under it.
@@ -344,6 +402,17 @@ pub struct MemoryDiagnostics {
     pub minimum_bytes: u64,
     pub capture_minimum_bytes: u64,
     pub capture_bound_bytes: u64,
+    /// The direct assembly's working set within `capture_bound_bytes` (it runs before
+    /// capture's sorts; the bound charges the larger).
+    pub capture_assembly_bytes: u64,
+    /// A subset bake's selection within `capture_bound_bytes`: kept-triangle and
+    /// kept-vertex ranks and the polygon index. Absent without a subset.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub capture_subset_bytes: u64,
+    /// An opt-in weld's union-find, bitmaps, sort, window and move readers within
+    /// `capture_bound_bytes`. Absent without a weld.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub capture_weld_bytes: u64,
     pub leaf_minimum_bytes: u64,
     pub leaf_bound_bytes: u64,
     pub hlod: HlodMemoryPlan,
@@ -510,6 +579,9 @@ pub struct TilerResult {
 fn invalid(message: &str) -> JobError {
     JobError::new(JobErrorKind::InvalidRequest, message)
 }
+fn is_zero(n: &u64) -> bool {
+    *n == 0
+}
 
 /// Budget request rules, checked before any filesystem access.
 fn check_memory_budget(request: &TilerRequest) -> Result<(), JobError> {
@@ -535,6 +607,9 @@ fn preflight(request: &TilerRequest) -> Result<(PathBuf, ResolvedPlacement), Job
             ));
         }
         source_crs.check()?;
+        if let Some(subset) = &request.subset {
+            subset.check_geographic()?;
+        }
     }
     match std::fs::symlink_metadata(&request.output) {
         Ok(m) if !m.is_file() => return Err(invalid("mesh output must be a regular file path")),
@@ -558,6 +633,24 @@ fn preflight(request: &TilerRequest) -> Result<(PathBuf, ResolvedPlacement), Job
             io::ErrorKind::AlreadyExists.into(),
         ));
     }
+    if let Some(path) = &request.report_path {
+        let report = crate::output_path::resolve(path)?;
+        let aliases = |other: &Path| -> Result<bool, JobError> {
+            Ok(report == other
+                || (report.exists()
+                    && other.exists()
+                    && same_file::is_same_file(&report, other)
+                        .map_err(|e| JobError::io("inspect run report alias", &report, e))?))
+        };
+        if aliases(&input)? || aliases(&output)? {
+            return Err(invalid(
+                "the run report path aliases the mesh source or output",
+            ));
+        }
+        if report.is_dir() {
+            return Err(invalid("the run report path must be a file path"));
+        }
+    }
     Ok((output, placement))
 }
 fn add_cleanup(failure: &mut JobFailure, path: PathBuf, result: Result<(), JobError>) {
@@ -575,14 +668,50 @@ pub fn mesh_to_tileset(
     request: TilerRequest,
     control: &RunControl,
 ) -> Result<TilerResult, JobFailure> {
+    let run_report = RunReport::new(request.report_path.clone());
+    let mut result = run(request, control, &run_report);
+    // A started report records the failure (cancellation included) with the stages that
+    // finished; installation failing after `succeeded` was written is recorded too. If
+    // that write fails, the failure says so beside its own cause: the report on disk
+    // would otherwise go on saying `running`.
+    if let Err(failure) = &mut result {
+        if let Some(error) = run_report.failed(failure) {
+            failure.secondary.push(error);
+        }
+    }
+    result
+}
+
+fn run(
+    request: TilerRequest,
+    control: &RunControl,
+    run_report: &RunReport,
+) -> Result<TilerResult, JobFailure> {
     let attempt = control.begin()?;
     attempt.check().map_err(|e| attempt.fail(e))?;
+    // Stage timing totals are process-wide: the run reports their change over its interval.
+    let timing_mark = crate::stage_timing::mark();
     // Request intent is refused first: no path, source or output is touched for a bad budget.
     check_memory_budget(&request).map_err(|e| attempt.fail(e))?;
     let (output, placement) = preflight(&request).map_err(|e| attempt.fail(e))?;
+    // An unwritable report path refuses the run here; a report held open elsewhere that
+    // cannot be replaced yet is only stale, and the run goes on with a warning.
+    let stale = run_report
+        .start(&request.input, &output)
+        .map_err(|e| attempt.fail(e))?;
+    if let Some(message) = stale {
+        attempt
+            .emit(&RunEvent::Warning {
+                code: "run_report",
+                message: &message,
+            })
+            .map_err(|e| attempt.fail(e))?;
+    }
     let mut config = TreeConfig::new(request.profile.into());
     config.jobs = request.jobs.into();
     config.source_crs = request.source_crs.clone();
+    config.subset = request.subset.clone();
+    config.weld = request.weld;
     config.stop = Some(attempt.probe());
     let budget = MemoryBudget::resolve(request.memory_budget).map_err(|e| attempt.fail(e))?;
     config.memory_budget = Some(budget);
@@ -625,15 +754,18 @@ pub fn mesh_to_tileset(
     // Capture admission also reserves output-side space where leaves and the archive stage.
     config.output_parents = Some((work_parent.to_owned(), parent.to_owned()));
     let emit = |event: &RunEvent<'_>| attempt.emit(event);
-    let phases = Phases::new(&emit);
+    let phases = Phases::new(&emit).reporting(run_report);
     let capture_check = || attempt.check();
     let capture_progress = StepProgress::new(&capture_check, Some(&emit));
     let capture_started = std::time::Instant::now();
+    // Capture's total is the source's instanced triangles (records), known before any
+    // geometry is read.
+    let source_triangles = u64::try_from(source.document.triangle_count()).unwrap_or(u64::MAX);
     let captured = match attempt
         .emit(&RunEvent::Progress {
             phase: "capture",
             done: 0,
-            total: None,
+            total: Some(source_triangles),
         })
         .map_err(super::failure)
         .and_then(|_| full::capture_admitted(source, &config, &capture_progress))
@@ -654,15 +786,47 @@ pub fn mesh_to_tileset(
     };
     let capture_path = captured.scratch.path().to_owned();
     let result = (|| {
+        // Preserve the source weld’s topology rule for isolated collapses.
+        if let Some(weld) = captured
+            .report
+            .weld
+            .as_ref()
+            .filter(|weld| weld.isolated_collapses > 0)
+        {
+            return Err(JobError::new(
+                JobErrorKind::InvalidRequest,
+                format!(
+                    "the weld collapses {} triangles onto no surviving face; use a smaller --weld-epsilon (mesh-inspect reports \
+                     them as isolated_collapses)",
+                    weld.isolated_collapses
+                ),
+            ));
+        }
         attempt.emit(&RunEvent::Progress {
             phase: "capture",
-            done: 1,
-            total: Some(1),
+            done: source_triangles,
+            total: Some(source_triangles),
         })?;
-        phases.finished(Phase::Capture, capture_started.elapsed().as_secs_f64())?;
+        let c = &captured.report;
+        phases.finished_with(
+            Phase::Capture,
+            capture_started.elapsed().as_secs_f64(),
+            serde_json::json!({
+                "triangles": c.scan.triangles,
+                "jobs": c.jobs.jobs,
+                "scratch_need_bytes": c.scratch.need_bytes,
+                "scratch_logical_need_bytes": c.scratch.logical_need_bytes,
+                "scratch_logical_peak_bytes": c.scratch_logical_peak_bytes,
+                "scratch_stage_peak_bytes": c.scratch_stage_peaks,
+                "scratch_memory_backed": c.scratch_memory_backed,
+            }),
+        )?;
         // D8: memory-backed storage written from here on is charged before any later stage
         // plans, so every stage (leaf, HLOD, archive) sees the budget it leaves.
-        #[allow(unused_mut)]
+        #[cfg_attr(
+            not(test),
+            expect(unused_mut, reason = "test builds replace the work charge below")
+        )]
         let (mut charges, [work_volume, archive_volume]) =
             storage_charges(work.path(), parent, &captured.report.scratch)?;
         let (work_storage, archive_storage) = (work_volume.class(), archive_volume.class());
@@ -703,13 +867,19 @@ pub fn mesh_to_tileset(
         let mut config = config.clone();
         config.memory_budget = Some(budget);
         let config = &config;
-        let plan = producer::stage_plan(config, &captured)?;
-        // HLOD admits its own stage against the declared budget before any leaf is built.
+        // Every leaf's source crops, planned before the stage's memory plan, which holds
+        // the crop store's index when the store is used.
+        let crop_check = || attempt.check();
+        let crop_progress = super::phases::StepProgress::new(&crop_check, phases.emitter());
+        let crops = producer::crop_plan(config, &captured, &crop_progress)?;
+        // HLOD admits its own stage against the declared budget before any leaf is built,
+        // with the sparse chains the crop store cuts for it when they fit.
         #[cfg(test)]
         let settings = &request.hlod;
         #[cfg(not(test))]
         let settings = &super::hlod::Settings::default();
-        let hlod = super::hlod::plan(&captured, config, &budget, settings)?;
+        let hlod_plan = |coarse| super::hlod::plan(&captured, config, &budget, settings, coarse);
+        let (plan, crops, hlod) = producer::settle(config, &captured, crops, &hlod_plan)?;
         let c = &captured.report;
         let capture_minimum = c
             .jobs
@@ -721,10 +891,8 @@ pub fn mesh_to_tileset(
         } else {
             0
         };
-        let archive_minimum = c
-            .memory
-            .owned_metadata_bytes
-            .saturating_add(c.memory.geometry.document_bytes)
+        let archive_minimum = captured
+            .resident_bytes()
             .saturating_add(256 << 20)
             .saturating_add(tmpfs)
             .saturating_add(delivery::resident_bound(
@@ -752,6 +920,9 @@ pub fn mesh_to_tileset(
             archive_minimum_bytes: archive_minimum,
             capture_minimum_bytes: capture_minimum,
             capture_bound_bytes: c.memory.bound_bytes,
+            capture_assembly_bytes: c.memory.assembly_bytes,
+            capture_subset_bytes: c.memory.subset_bytes,
+            capture_weld_bytes: c.memory.weld_bytes,
             leaf_minimum_bytes: plan.minimum_bytes(),
             leaf_bound_bytes: plan.bound_bytes(),
             hlod: hlod.clone(),
@@ -781,6 +952,7 @@ pub fn mesh_to_tileset(
                 settings,
             },
             &phases,
+            crops,
             &|| attempt.check(),
         )
         .map_err(refused)?;
@@ -795,7 +967,9 @@ pub fn mesh_to_tileset(
         // A source CRS derives the root placement from the captured origin.
         let placement = captured.placement.clone().unwrap_or(placement);
         let archive_started = std::time::Instant::now();
-        phases.progress(Phase::Archive, 0, Some(1))?;
+        // The archive's total is its tiles (leaves and coarse tiles), known before it starts.
+        let archive_tiles = leaf.report.leaves.saturating_add(leaf.report.proxies);
+        phases.progress(Phase::Archive, 0, Some(archive_tiles))?;
         let prepared = delivery::prepare_tiler(
             &delivery_request,
             placement,
@@ -822,8 +996,8 @@ pub fn mesh_to_tileset(
         storage_diagnostics.work_admitted_bytes = charges.work.as_ref().map(|m| m.used());
         storage_diagnostics.archive_admitted_bytes = charges.archive.as_ref().map(|m| m.used());
         storage_diagnostics.archive_bytes = charges.archive.as_ref().map(|_| archive_bytes);
-        phases.progress(Phase::Archive, 1, Some(1))?;
-        phases.finished(Phase::Archive, archive_started.elapsed().as_secs_f64())?;
+        phases.progress(Phase::Archive, archive_tiles, Some(archive_tiles))?;
+        let archive_seconds = archive_started.elapsed().as_secs_f64();
         let c = &captured.report;
         // Every spill stage shares the admitted scratch: the whole-run peak must stay within
         // what was declared and admitted before it was written. Capture declares its stages
@@ -836,6 +1010,17 @@ pub fn mesh_to_tileset(
             .logical_need_bytes
             .max(leaf.hlod.stage_scratch_bound_bytes)
             .max(leaf.diagnostics.image_scratch_bound_bytes);
+        phases.finished_with(
+            Phase::Archive,
+            archive_seconds,
+            serde_json::json!({
+                "tiles": archive_tiles,
+                "archive_bytes": archive_bytes,
+                "peak_held_records": delivered.peak_held_records,
+                "run_scratch_peak_bytes": run_scratch_peak_bytes,
+                "run_scratch_bound_bytes": declared,
+            }),
+        )?;
         if run_scratch_peak_bytes > declared {
             return Err(JobError::new(
                 JobErrorKind::ResourceLimit,
@@ -852,6 +1037,7 @@ pub fn mesh_to_tileset(
                 jobs: c.jobs.jobs,
                 jobs_limited_by: c.jobs.limited_by,
                 sort: c.sort,
+                assembly: c.assembly.clone(),
                 available_memory_bytes: c.jobs.available_memory_bytes,
                 memory_bound_bytes: c.memory.bound_bytes,
                 scratch_need_bytes: c.scratch.need_bytes,
@@ -871,6 +1057,15 @@ pub fn mesh_to_tileset(
             phase_cpu_seconds: phases.cpu_seconds(),
             memory,
             hlod: leaf.hlod,
+            stage_timing: request
+                .stage_timing
+                .then(|| {
+                    crate::stage_timing::since_with(
+                        &timing_mark,
+                        serde_json::json!({"lod": "hlod"}),
+                    )
+                })
+                .flatten(),
         };
         Ok::<_, JobError>((report, diagnostics))
     })();
@@ -904,6 +1099,16 @@ pub fn mesh_to_tileset(
             result
         }
     };
+    // The report's final document, written before installation (a failed installation
+    // rewrites it as failed).
+    if let Some(message) = run_report.succeeded(&report, &diagnostics) {
+        if let Err(error) = attempt.emit(&RunEvent::Warning {
+            code: "run_report",
+            message: &message,
+        }) {
+            return Err(staging.fail(error));
+        }
+    }
     if let Err(error) = attempt
         .emit(&RunEvent::Progress {
             phase: "ready_to_publish",

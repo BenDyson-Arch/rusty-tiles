@@ -18,7 +18,13 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 
 mod allowlist;
-#[cfg_attr(feature = "native-geospatial", allow(unused_imports))]
+#[cfg_attr(
+    feature = "native-geospatial",
+    expect(
+        unused_imports,
+        reason = "native builds resolve codes with PROJ, not this table"
+    )
+)]
 pub(crate) use allowlist::TABLE as ALLOWLIST_TABLE;
 pub use allowlist::{CrsOperation, OperationKind};
 
@@ -149,6 +155,7 @@ fn horizontal_required() -> Error {
     Error::Data("use a 2D horizontal CRS and explicit ellipsoidal height offset; compound/geocentric CRS is unsupported".into())
 }
 
+#[derive(Clone)]
 pub(crate) struct PureTransform {
     source: Proj,
     target: Proj,
@@ -493,8 +500,13 @@ pub fn crs_table_info() -> CrsTableInfo {
 
 enum Epsg {
     Builtin(String),
-    // The standard build only: native builds resolve other codes with strict PROJ.
-    #[cfg_attr(feature = "native-geospatial", allow(dead_code))]
+    #[cfg_attr(
+        feature = "native-geospatial",
+        expect(
+            dead_code,
+            reason = "native builds resolve other codes with strict PROJ"
+        )
+    )]
     Listed(&'static allowlist::Entry, &'static allowlist::Table),
 }
 
